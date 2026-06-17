@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Route the app's /api/claude call to the function. Must come BEFORE the SPA fallback.
+[[redirects]]
+  from = "/api/claude"
+  to = "/.netlify/functions/claude"
+  status = 200
+
+# Single-page app: send everything else to index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
