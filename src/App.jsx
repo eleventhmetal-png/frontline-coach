@@ -1311,7 +1311,7 @@ export default function FrontlineCoach() {
         <input type="text" name="timestamp" />
       </form>
 
-      <div className="w-full max-w-md flex flex-col h-screen">
+      <div className="w-full max-w-md flex flex-col h-screen overflow-hidden">
         <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
           {tab !== "home" ? (
             <button onClick={() => go("home")} className="flex items-center gap-1 text-neutral-400 hover:text-neutral-100 text-sm">
