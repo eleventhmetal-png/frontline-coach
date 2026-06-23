@@ -1232,7 +1232,9 @@ const FOCUS_ROTATION = [
 ];
 
 function getTodayFocus() {
-  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const dayOfYear = Math.ceil((now - start) / 86400000);
   return FOCUS_ROTATION[dayOfYear % FOCUS_ROTATION.length];
 }
 
