@@ -3,14 +3,16 @@ import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X
+  Share2, Download, X, ThumbsUp, ThumbsDown
 } from "lucide-react";
+
 // ---------- Claude API helpers ----------
+// All calls go through the Netlify proxy function — API key never touches the browser.
 async function rawClaude(messages) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages }),
+    body: JSON.stringify({ messages }),
   });
   const data = await res.json();
   return (data.content || [])
@@ -18,6 +20,7 @@ async function rawClaude(messages) {
     .map((b) => b.text)
     .join("\n");
 }
+
 // single-shot, returns parsed JSON
 async function callClaude(system, user) {
   const text = await rawClaude([
@@ -29,14 +32,36 @@ async function callClaude(system, user) {
   const slice = start >= 0 && end >= 0 ? clean.slice(start, end + 1) : clean;
   return JSON.parse(slice);
 }
+
 // multi-turn chat, returns plain text reply
 async function callChat(system, history) {
   const msgs = [{ role: "user", content: system }, { role: "assistant", content: "Understood. I'm in character." }, ...history];
   return (await rawClaude(msgs)).trim();
 }
+
+// ---------- Netlify Forms feedback ----------
+async function submitFeedback(tool, rating, inputSummary) {
+  try {
+    const body = new URLSearchParams({
+      "form-name": "tool-feedback",
+      tool,
+      rating,
+      input: inputSummary?.slice(0, 200) || "",
+      timestamp: new Date().toISOString(),
+    });
+    await fetch("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+  } catch (e) {
+    // fail silently
+  }
+}
+
 // ---------- shared UI bits ----------
 const ACCENT = "#E8923C";
-// One voice spine injected into every AI tool. Tune here, it propagates everywhere.
+
 const VOICE = `VOICE — follow this exactly:
 You are a frontline operator who has run real shifts and held real people accountable. Not a consultant, not HR, not a life coach. You're standing next to this manager on the floor, not presenting to them.
 How you write:
@@ -49,6 +74,46 @@ How you write:
 - Vary the rhythm. Some sentences short. Punch.
 Banned phrases (they read as fake): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
 The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.`;
+
+// ---------- Feedback widget ----------
+function FeedbackRow({ tool, inputSummary }) {
+  const [vote, setVote] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  async function handleVote(rating) {
+    setVote(rating);
+    setSubmitted(true);
+    await submitFeedback(tool, rating, inputSummary);
+  }
+
+  if (submitted) {
+    return (
+      <div className="flex items-center gap-2 pt-3 border-t border-neutral-800 mt-2 text-xs text-neutral-500">
+        <Check size={13} style={{ color: ACCENT }} />
+        <span>Thanks — that helps.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 pt-3 border-t border-neutral-800 mt-2">
+      <span className="text-xs text-neutral-500 flex-1">Did this help?</span>
+      <button
+        onClick={() => handleVote("up")}
+        className="flex items-center gap-1 text-xs text-neutral-400 hover:text-green-400 transition-colors"
+      >
+        <ThumbsUp size={14} />
+      </button>
+      <button
+        onClick={() => handleVote("down")}
+        className="flex items-center gap-1 text-xs text-neutral-400 hover:text-red-400 transition-colors"
+      >
+        <ThumbsDown size={14} />
+      </button>
+    </div>
+  );
+}
+
 function CopyBtn({ getText }) {
   const [done, setDone] = useState(false);
   return (
@@ -67,6 +132,7 @@ function CopyBtn({ getText }) {
     </button>
   );
 }
+
 function Section({ label, children, accent }) {
   return (
     <div className="border-b border-neutral-800 last:border-0 py-4">
@@ -82,6 +148,7 @@ function Section({ label, children, accent }) {
     </div>
   );
 }
+
 function BulletList({ items }) {
   return (
     <ul className="space-y-1.5">
@@ -96,6 +163,7 @@ function BulletList({ items }) {
     </ul>
   );
 }
+
 function Quote({ children }) {
   return (
     <div
@@ -106,7 +174,27 @@ function Quote({ children }) {
     </div>
   );
 }
-function GenerateButton({ onClick, loading, label, disabled }) {
+
+// ---------- Loading messages ----------
+const LOADING_LINES = [
+  "Reading the situation…",
+  "Finding the right move…",
+  "Cutting through the noise…",
+  "Calling it straight…",
+  "Building the plan…",
+  "Getting to the point…",
+];
+
+function LoadingLine() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % LOADING_LINES.length), 1800);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{LOADING_LINES[idx]}</span>;
+}
+
+function SmartGenerateButton({ onClick, loading, label, disabled }) {
   return (
     <button
       onClick={onClick}
@@ -114,11 +202,21 @@ function GenerateButton({ onClick, loading, label, disabled }) {
       className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 transition-opacity disabled:opacity-40"
       style={{ backgroundColor: ACCENT }}
     >
-      {loading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
-      {loading ? "Working…" : label}
+      {loading ? (
+        <>
+          <Loader2 size={18} className="animate-spin shrink-0" />
+          <LoadingLine />
+        </>
+      ) : (
+        <>
+          <Zap size={18} />
+          {label}
+        </>
+      )}
     </button>
   );
 }
+
 function ErrorNote({ msg }) {
   if (!msg) return null;
   return (
@@ -128,6 +226,7 @@ function ErrorNote({ msg }) {
     </div>
   );
 }
+
 function ResultCard({ children }) {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 sm:p-5 mt-4">
@@ -135,6 +234,7 @@ function ResultCard({ children }) {
     </div>
   );
 }
+
 // ---------- share card ----------
 function wrapLines(ctx, text, maxW) {
   const words = (text || "").split(/\s+/);
@@ -152,7 +252,7 @@ function wrapLines(ctx, text, maxW) {
   if (line) lines.push(line);
   return lines;
 }
-// draws the card and returns a data URL; runs twice internally (measure, then draw)
+
 function buildShareImage(card) {
   const W = 1080;
   const PAD = 84;
@@ -160,13 +260,11 @@ function buildShareImage(card) {
   const C = { bg: "#161616", text: "#f4f4f4", accent: "#E8923C", muted: "#8b8b8b" };
   function layout(ctx, draw) {
     let y = PAD;
-    // top accent bar
     if (draw) {
       ctx.fillStyle = C.accent;
       ctx.fillRect(PAD, y, 64, 8);
     }
     y += 8 + 44;
-    // category
     ctx.font = "600 30px sans-serif";
     const catLines = wrapLines(ctx, (card.category || "").toUpperCase(), contentW);
     if (draw) {
@@ -174,7 +272,6 @@ function buildShareImage(card) {
       catLines.forEach((l) => { ctx.fillText(l, PAD, y); y += 40; });
     } else y += catLines.length * 40;
     y += 24;
-    // headline (hero)
     ctx.font = "800 66px sans-serif";
     const headLines = wrapLines(ctx, card.headline || "", contentW);
     if (draw) {
@@ -182,7 +279,6 @@ function buildShareImage(card) {
       headLines.forEach((l) => { ctx.fillText(l, PAD, y); y += 80; });
     } else y += headLines.length * 80;
     y += 36;
-    // sections
     (card.sections || []).forEach((s) => {
       ctx.font = "700 28px sans-serif";
       if (draw) {
@@ -198,7 +294,6 @@ function buildShareImage(card) {
       } else y += bodyLines.length * 52;
       y += 34;
     });
-    // footer
     y += 20;
     if (draw) {
       ctx.strokeStyle = "#2a2a2a";
@@ -223,10 +318,8 @@ function buildShareImage(card) {
     y += PAD;
     return y;
   }
-  // pass 1: measure
   const measure = document.createElement("canvas").getContext("2d");
   const H = Math.ceil(layout(measure, false));
-  // pass 2: draw at 2x for crisp output
   const scale = 2;
   const canvas = document.createElement("canvas");
   canvas.width = W * scale;
@@ -239,6 +332,7 @@ function buildShareImage(card) {
   layout(ctx, true);
   return canvas.toDataURL("image/png");
 }
+
 function ShareButton({ onClick }) {
   return (
     <button
@@ -250,6 +344,7 @@ function ShareButton({ onClick }) {
     </button>
   );
 }
+
 function ShareSheet({ card, textVersion, onClose }) {
   const [img, setImg] = useState("");
   const [copied, setCopied] = useState(false);
@@ -304,6 +399,7 @@ function ShareSheet({ card, textVersion, onClose }) {
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 1 — AI COACH
 // =====================================================
@@ -317,6 +413,7 @@ const COACH_SITUATIONS = [
   "Shift performance is declining",
   "Employee has potential but no confidence",
 ];
+
 const COACH_SYSTEM = `${VOICE}
 You are the AI Coach inside Frontline Coach. A manager describes a people problem on their shift. You diagnose it, tell them what they own, and hand them a plan they can run today. You challenge them when they're avoiding the conversation, being vague, overreacting, or blaming the team for a gap they created. You separate skill from will.
 Hard rules for this output:
@@ -338,12 +435,14 @@ Return ONLY valid JSON, no markdown, no preamble. Every field tight. Scripts 2-4
  "followUp": "exact timing and what you're checking for",
  "leadershipPrinciple": "one blunt line"
 }`;
+
 function AICoach() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
+
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
@@ -356,6 +455,7 @@ function AICoach() {
       setLoading(false);
     }
   }
+
   const copyAll = () => result ? [
     `WHAT MAY BE HAPPENING\n${result.whatMayBeHappening}`,
     `WHAT YOU OWN\n${result.whatYouOwn}`,
@@ -369,12 +469,10 @@ function AICoach() {
     `FOLLOW-UP\n${result.followUp}`,
     `PRINCIPLE: ${result.leadershipPrinciple}`,
   ].join("\n\n") : "";
+
   return (
     <div>
-      <ToolHeader
-        title="AI Coach"
-        sub="Describe the situation. Get a plan you can run on this shift."
-      />
+      <ToolHeader title="AI Coach" sub="Describe the situation. Get a plan you can run on this shift." />
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -384,16 +482,13 @@ function AICoach() {
       />
       <div className="flex flex-wrap gap-2 my-3">
         {COACH_SITUATIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setInput(s)}
-            className="text-xs rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
-          >
+          <button key={s} onClick={() => setInput(s)}
+            className="text-xs rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors">
             {s}
           </button>
         ))}
       </div>
-      <GenerateButton onClick={run} loading={loading} label="Coach me through it" />
+      <SmartGenerateButton onClick={run} loading={loading} label="Coach me through it" />
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
@@ -419,19 +514,18 @@ function AICoach() {
           <Section label="Document this">{result.documentThis}</Section>
           <Section label="Follow-up">{result.followUp}</Section>
           <div className="pt-4">
-            <div
-              className="rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-950"
-              style={{ backgroundColor: ACCENT }}
-            >
+            <div className="rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-950" style={{ backgroundColor: ACCENT }}>
               {result.leadershipPrinciple}
             </div>
           </div>
+          <FeedbackRow tool="AI Coach" inputSummary={input} />
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 2 — PUSHBACK COACH
 // =====================================================
@@ -444,8 +538,14 @@ const PUSHBACK_COMMON = [
   "The other shift left it like this",
   "That rule makes no sense",
   "I'm not signing that",
+  "I forgot",
+  "I didn't know that was a rule",
+  "You never told me that",
+  "That's not fair",
 ];
+
 const TONES = ["Calm", "Firm", "Coaching", "Formal", "Supportive", "Direct"];
+
 const PUSHBACK_SYSTEM = `${VOICE}
 A manager just got pushback from an employee, live, and needs the words right now. Give them a response that holds the standard without escalating and without groveling. The "immediateResponse" is the whole game — it has to be something a real manager would actually say standing there, not a scripted HR line.
 Match the requested TONE and make it actually change the words:
@@ -464,6 +564,7 @@ Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
  "escalationOption": "what to do if it keeps happening",
  "documentationNote": "one factual line for the file"
 }`;
+
 function PushbackCoach() {
   const [input, setInput] = useState("");
   const [tone, setTone] = useState("Firm");
@@ -471,6 +572,7 @@ function PushbackCoach() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
+
   const copyAll = () => result ? [
     `WHEN THEY SAY: "${input}"`,
     `SAY THIS: ${result.immediateResponse}`,
@@ -479,6 +581,7 @@ function PushbackCoach() {
     `BOUNDARY: ${result.boundaryStatement}`,
     `IF IT CONTINUES: ${result.escalationOption}`,
   ].join("\n\n") : "";
+
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
@@ -491,12 +594,10 @@ function PushbackCoach() {
       setLoading(false);
     }
   }
+
   return (
     <div>
-      <ToolHeader
-        title="What do I say when they say…?"
-        sub="Paste the pushback. Get a response that holds the line."
-      />
+      <ToolHeader title="What do I say when they say…?" sub="Paste the pushback. Get a response that holds the line." />
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -505,11 +606,8 @@ function PushbackCoach() {
       />
       <div className="flex flex-wrap gap-2 my-3">
         {PUSHBACK_COMMON.map((s) => (
-          <button
-            key={s}
-            onClick={() => setInput(s)}
-            className="text-xs rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
-          >
+          <button key={s} onClick={() => setInput(s)}
+            className="text-xs rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors">
             "{s}"
           </button>
         ))}
@@ -518,22 +616,15 @@ function PushbackCoach() {
         <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Tone</div>
         <div className="flex flex-wrap gap-2">
           {TONES.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTone(t)}
+            <button key={t} onClick={() => setTone(t)}
               className="text-sm rounded-lg px-3.5 py-1.5 font-medium transition-colors border"
-              style={
-                tone === t
-                  ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT }
-                  : {}
-              }
-            >
+              style={tone === t ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
               <span className={tone === t ? "" : "text-neutral-400"}>{t}</span>
             </button>
           ))}
         </div>
       </div>
-      <GenerateButton onClick={run} loading={loading} label="Give me the words" />
+      <SmartGenerateButton onClick={run} loading={loading} label="Give me the words" />
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
@@ -541,9 +632,7 @@ function PushbackCoach() {
             <ShareButton onClick={() => setShare({
               category: `When they say "${input}"`,
               headline: result.immediateResponse,
-              sections: [
-                { label: "Hold the line", text: result.boundaryStatement },
-              ],
+              sections: [{ label: "Hold the line", text: result.boundaryStatement }],
             })} />
             <CopyBtn getText={copyAll} />
           </div>
@@ -553,12 +642,14 @@ function PushbackCoach() {
           <Section label="Hold the boundary">{result.boundaryStatement}</Section>
           <Section label="If it continues">{result.escalationOption}</Section>
           <Section label="Note for the file">{result.documentationNote}</Section>
+          <FeedbackRow tool="Pushback Coach" inputSummary={input} />
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 3 — DOCUMENTATION ASSISTANT
 // =====================================================
@@ -575,11 +666,13 @@ Return ONLY valid JSON, no markdown. Schema:
  "followUpDate": "suggested follow-up",
  "cleanedNote": "a single tight paragraph combining the above into a record ready to file"
 }`;
+
 function DocAssistant() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
@@ -592,12 +685,10 @@ function DocAssistant() {
       setLoading(false);
     }
   }
+
   return (
     <div>
-      <ToolHeader
-        title="Documentation Assistant"
-        sub="Dump your rough notes. Get a factual record, emotion stripped out."
-      />
+      <ToolHeader title="Documentation Assistant" sub="Dump your rough notes. Get a factual record, emotion stripped out." />
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -609,7 +700,7 @@ function DocAssistant() {
         <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
         <span>Supports documentation quality. Does not replace company policy, HR guidance, or legal advice, and does not make employment decisions.</span>
       </div>
-      <GenerateButton onClick={run} loading={loading} label="Clean it up" />
+      <SmartGenerateButton onClick={run} loading={loading} label="Clean it up" />
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
@@ -629,15 +720,18 @@ function DocAssistant() {
               {result.cleanedNote}
             </div>
           </Section>
+          <FeedbackRow tool="Documentation Assistant" inputSummary={input} />
         </ResultCard>
       )}
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 4 — CONVERSATION BUILDER
 // =====================================================
 const CONVO_TYPES = ["Coaching", "Corrective", "Attendance", "Attitude", "Recognition", "Resetting expectations", "Final warning prep", "Trust repair"];
+
 const CONVO_SYSTEM = `${VOICE}
 You build a manager a plan for a real conversation. Every script line is spoken, in their voice. Keep it to a few sentences each.
 Return ONLY valid JSON, no markdown. Schema:
@@ -653,6 +747,7 @@ Return ONLY valid JSON, no markdown. Schema:
  "followUpPlan": "when and what to check",
  "documentationNote": "one-line factual note"
 }`;
+
 function ConvoBuilder() {
   const [type, setType] = useState("Coaching");
   const [name, setName] = useState("");
@@ -661,6 +756,7 @@ function ConvoBuilder() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
   async function run() {
     if (!situation.trim()) return;
     setLoading(true); setError(""); setResult(null);
@@ -674,6 +770,7 @@ function ConvoBuilder() {
       setLoading(false);
     }
   }
+
   const copyAll = () => result ? [
     `OPEN\n${result.opening}`,
     `MESSAGE\n${result.mainMessage}`,
@@ -684,47 +781,30 @@ function ConvoBuilder() {
     `CLOSE\n${result.closing}`,
     `FOLLOW-UP\n${result.followUpPlan}`,
   ].join("\n\n") : "";
+
   return (
     <div>
-      <ToolHeader
-        title="Conversation Builder"
-        sub="Walk in with a plan instead of winging it."
-      />
+      <ToolHeader title="Conversation Builder" sub="Walk in with a plan instead of winging it." />
       <div className="mb-3">
         <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Type</div>
         <div className="flex flex-wrap gap-2">
           {CONVO_TYPES.map((t) => (
-            <button
-              key={t}
-              onClick={() => setType(t)}
+            <button key={t} onClick={() => setType(t)}
               className="text-sm rounded-lg px-3 py-1.5 font-medium transition-colors border border-neutral-800"
-              style={type === t ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}
-            >
+              style={type === t ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
               <span className={type === t ? "" : "text-neutral-400"}>{t}</span>
             </button>
           ))}
         </div>
       </div>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Employee name (optional)"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-3"
-      />
-      <textarea
-        value={situation}
-        onChange={(e) => setSituation(e.target.value)}
-        rows={3}
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Employee name (optional)"
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-3" />
+      <textarea value={situation} onChange={(e) => setSituation(e.target.value)} rows={3}
         placeholder="What's the situation? The facts."
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3"
-      />
-      <input
-        value={outcome}
-        onChange={(e) => setOutcome(e.target.value)}
-        placeholder="What outcome do you want? (optional)"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-3"
-      />
-      <GenerateButton onClick={run} loading={loading} label="Build the conversation" />
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3" />
+      <input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="What outcome do you want? (optional)"
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-3" />
+      <SmartGenerateButton onClick={run} loading={loading} label="Build the conversation" />
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
@@ -740,11 +820,13 @@ function ConvoBuilder() {
           <Section label="Land on">{result.agreement}</Section>
           <Section label="Close">{result.closing}</Section>
           <Section label="Follow-up">{result.followUpPlan}</Section>
+          <FeedbackRow tool="Conversation Builder" inputSummary={situation} />
         </ResultCard>
       )}
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 5 — SKILL VS WILL DIAGNOSTIC
 // =====================================================
@@ -759,6 +841,7 @@ const DIAG_QUESTIONS = [
   { key: "committed", q: "Have they committed to improving?", opts: ["Yes", "No"] },
   { key: "consequences", q: "Are the consequences clear to them?", opts: ["Yes", "No"] },
 ];
+
 const DIAG_SYSTEM = `${VOICE}
 You diagnose whether a performance issue is primarily Skill, Will, Clarity, Capacity, Confidence, Accountability, Process failure, or Leadership failure. Land on "Leadership failure" or "Clarity" when the answers point there. Do not default to blaming the employee.
 Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
@@ -772,6 +855,7 @@ Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
  "accountabilityAction": "the accountability move",
  "followUpInterval": "when to check"
 }`;
+
 function SkillWill() {
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState("");
@@ -780,6 +864,7 @@ function SkillWill() {
   const [error, setError] = useState("");
   const answered = Object.keys(answers).length;
   const ready = answered === DIAG_QUESTIONS.length;
+
   async function run() {
     setLoading(true); setError(""); setResult(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
@@ -792,6 +877,7 @@ function SkillWill() {
       setLoading(false);
     }
   }
+
   return (
     <div>
       <ToolHeader title="Skill vs. Will" sub="Answer 9 questions. Find out if it's a skill problem, a will problem — or yours." />
@@ -805,12 +891,9 @@ function SkillWill() {
               {d.opts.map((o) => {
                 const active = answers[d.key] === o;
                 return (
-                  <button
-                    key={o}
-                    onClick={() => setAnswers((a) => ({ ...a, [d.key]: o }))}
+                  <button key={o} onClick={() => setAnswers((a) => ({ ...a, [d.key]: o }))}
                     className="text-sm rounded-lg px-3 py-1.5 font-medium border border-neutral-700 transition-colors"
-                    style={active ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}
-                  >
+                    style={active ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
                     <span className={active ? "" : "text-neutral-400"}>{o}</span>
                   </button>
                 );
@@ -819,14 +902,10 @@ function SkillWill() {
           </div>
         ))}
       </div>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        rows={2}
+      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
         placeholder="Anything else worth knowing? (optional)"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none my-3"
-      />
-      <GenerateButton onClick={run} loading={loading} label={ready ? "Diagnose it" : `Answer all 9 (${answered}/9)`} disabled={!ready} />
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none my-3" />
+      <SmartGenerateButton onClick={run} loading={loading} label={ready ? "Diagnose it" : `Answer all 9 (${answered}/9)`} disabled={!ready} />
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
@@ -841,11 +920,13 @@ function SkillWill() {
           <Section label="Training action">{result.trainingAction}</Section>
           <Section label="Accountability action">{result.accountabilityAction}</Section>
           <Section label="Follow-up">{result.followUpInterval}</Section>
+          <FeedbackRow tool="Skill vs Will" inputSummary={notes} />
         </ResultCard>
       )}
     </div>
   );
 }
+
 // =====================================================
 // FEATURE 6 — AI ROLEPLAY
 // =====================================================
@@ -858,8 +939,14 @@ const RP_SCENARIOS = [
   "Employee asking for promotion",
   "Employee upset about feedback",
   "Employee threatening to quit",
+  "New hire who's already checked out",
+  "Employee who cries when corrected",
+  "Employee who undermines you to peers",
+  "Employee who argues every direction",
 ];
+
 const RP_DIFFICULTY = ["Easy", "Realistic", "Hard"];
+
 function rpSystem(scenario, difficulty) {
   return `You are playing an EMPLOYEE in a roleplay so a frontline manager can practice a hard conversation. Scenario: "${scenario}". Difficulty: ${difficulty}.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
@@ -875,6 +962,7 @@ ${difficulty === "Hard"
     : "Realistically guarded. Some pushback, some openness. Normal person having a normal hard conversation."}
 Open the scene with one believable line as the employee reacting to being pulled aside. Don't narrate. Just talk.`;
 }
+
 const RP_SCORE_SYSTEM = `${VOICE}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly. If they nailed something, say that too, specifically.
 Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Schema:
@@ -887,20 +975,30 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change"
 }`;
+
 function Roleplay() {
   const [scenario, setScenario] = useState(RP_SCENARIOS[0]);
   const [difficulty, setDifficulty] = useState("Realistic");
   const [started, setStarted] = useState(false);
-  const [history, setHistory] = useState([]); // {role:'assistant'(employee)|'user'(manager), content}
+  const [history, setHistory] = useState([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [score, setScore] = useState(null);
   const [error, setError] = useState("");
   const endRef = useRef(null);
+  const inputRef = useRef(null);
   const sys = rpSystem(scenario, difficulty);
+
   function scrollDown() {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
+
+  function handleFocus() {
+    setTimeout(() => {
+      inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+  }
+
   async function start() {
     setLoading(true); setError(""); setScore(null);
     try {
@@ -914,6 +1012,7 @@ function Roleplay() {
       setLoading(false);
     }
   }
+
   async function send() {
     if (!draft.trim()) return;
     const next = [...history, { role: "user", content: draft.trim() }];
@@ -928,6 +1027,7 @@ function Roleplay() {
       setLoading(false);
     }
   }
+
   async function endAndScore() {
     setLoading(true); setError("");
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
@@ -941,9 +1041,11 @@ function Roleplay() {
       setLoading(false);
     }
   }
+
   function reset() {
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError("");
   }
+
   if (!started) {
     return (
       <div>
@@ -952,12 +1054,9 @@ function Roleplay() {
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Scenario</div>
           <div className="flex flex-wrap gap-2">
             {RP_SCENARIOS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setScenario(s)}
+              <button key={s} onClick={() => setScenario(s)}
                 className="text-sm rounded-lg px-3 py-1.5 font-medium border border-neutral-800 transition-colors"
-                style={scenario === s ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}
-              >
+                style={scenario === s ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
                 <span className={scenario === s ? "" : "text-neutral-400"}>{s}</span>
               </button>
             ))}
@@ -967,22 +1066,20 @@ function Roleplay() {
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Difficulty</div>
           <div className="flex gap-2">
             {RP_DIFFICULTY.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDifficulty(d)}
+              <button key={d} onClick={() => setDifficulty(d)}
                 className="flex-1 text-sm rounded-lg px-3 py-2 font-medium border border-neutral-800 transition-colors"
-                style={difficulty === d ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}
-              >
+                style={difficulty === d ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
                 <span className={difficulty === d ? "" : "text-neutral-400"}>{d}</span>
               </button>
             ))}
           </div>
         </div>
-        <GenerateButton onClick={start} loading={loading} label="Start the roleplay" />
+        <SmartGenerateButton onClick={start} loading={loading} label="Start the roleplay" />
         <ErrorNote msg={error} />
       </div>
     );
   }
+
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between mb-3">
@@ -997,12 +1094,10 @@ function Roleplay() {
       <div className="space-y-3 mb-3">
         {history.map((m, i) => (
           <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <div
-              className="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug"
+            <div className="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug"
               style={m.role === "user"
                 ? { backgroundColor: ACCENT, color: "#0a0a0a", borderBottomRightRadius: 4 }
-                : { backgroundColor: "#1c1c1c", color: "#e8e8e8", borderBottomLeftRadius: 4 }}
-            >
+                : { backgroundColor: "#1c1c1c", color: "#e8e8e8", borderBottomLeftRadius: 4 }}>
               {m.content}
             </div>
           </div>
@@ -1029,33 +1124,29 @@ function Roleplay() {
           <Section label="Accountability">{score.accountability}</Section>
           <Section label="Biggest miss" accent>{score.missedOpportunity}</Section>
           <Section label="Do this next time">{score.doThisNextTime}</Section>
+          <FeedbackRow tool="Roleplay" inputSummary={scenario} />
         </ResultCard>
       )}
       {!score && (
-        <div className="sticky bottom-0 bg-neutral-950 pt-2">
-          <div className="flex gap-2 mb-2">
+        <div className="sticky bottom-0 bg-neutral-950 pt-2 pb-1">
+          <div className="flex gap-2 mb-2" ref={inputRef}>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") send(); }}
+              onFocus={handleFocus}
               placeholder="Your response…"
               className="flex-1 rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
             />
-            <button
-              onClick={send}
-              disabled={loading || !draft.trim()}
+            <button onClick={send} disabled={loading || !draft.trim()}
               className="rounded-lg px-4 flex items-center justify-center text-neutral-950 disabled:opacity-40"
-              style={{ backgroundColor: ACCENT }}
-            >
+              style={{ backgroundColor: ACCENT }}>
               <Send size={18} />
             </button>
           </div>
           {history.length >= 3 && (
-            <button
-              onClick={endAndScore}
-              disabled={loading}
-              className="w-full text-sm font-semibold text-neutral-300 border border-neutral-700 rounded-lg py-2.5 hover:bg-neutral-900 disabled:opacity-40"
-            >
+            <button onClick={endAndScore} disabled={loading}
+              className="w-full text-sm font-semibold text-neutral-300 border border-neutral-700 rounded-lg py-2.5 hover:bg-neutral-900 disabled:opacity-40">
               End &amp; score this conversation
             </button>
           )}
@@ -1065,6 +1156,7 @@ function Roleplay() {
     </div>
   );
 }
+
 // =====================================================
 // MORE — tools menu
 // =====================================================
@@ -1079,11 +1171,8 @@ function MoreView({ go }) {
       <ToolHeader title="Tools" sub="The rest of the kit." />
       <div className="space-y-3">
         {tools.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => go(t.id)}
-            className="w-full flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors"
-          >
+          <button key={t.id} onClick={() => go(t.id)}
+            className="w-full flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors">
             <t.icon size={22} style={{ color: ACCENT }} />
             <div>
               <div className="font-semibold text-neutral-100">{t.label}</div>
@@ -1096,7 +1185,7 @@ function MoreView({ go }) {
     </div>
   );
 }
-// ---------- shared tool header ----------
+
 function ToolHeader({ title, sub }) {
   return (
     <div className="mb-4">
@@ -1105,6 +1194,48 @@ function ToolHeader({ title, sub }) {
     </div>
   );
 }
+
+// =====================================================
+// SUGGESTED FOCUS — 30-day rotation
+// =====================================================
+const FOCUS_ROTATION = [
+  "Pick one standard you set this week and verify it got followed — in person, on the floor, today.",
+  "Find the person on your team who's been coasting. Have the conversation you've been avoiding.",
+  "Inspect your opening. How the shift starts is how it runs. Walk the floor in the first 10 minutes.",
+  "Identify who's carrying the team and make sure they know you see it. Specifics. Not generic praise.",
+  "Pick one thing your team does inconsistently. Set the standard out loud today, then follow up tomorrow.",
+  "Watch for the gap between what you say and what you allow. What you tolerate becomes the standard.",
+  "Ask one of your people what's getting in their way. Then actually remove it.",
+  "Run your pre-shift with intention. They're watching how you show up before the doors open.",
+  "Find the team member who's been quiet. Check in directly — not in front of the group.",
+  "Look at your last coaching conversation. Did you get a commitment with a date, or just a nod?",
+  "Identify a behavior you've corrected more than once without follow-up. That's the pattern to break today.",
+  "Run the hardest conversation you've been putting off. Delay makes it worse.",
+  "Check your own consistency. Are you holding everyone to the same standard or making exceptions?",
+  "Catch someone doing it right and say exactly what they did and why it mattered.",
+  "Audit your follow-up. How many commitments from last week did you actually check on?",
+  "Ask yourself: what would my team say my standard is? Is that the standard you want?",
+  "Find the new person. Are they set up to succeed or just surviving the learning curve?",
+  "Look at your busiest hour. Is the team executing or just reacting? The difference is your preparation.",
+  "Pick one process that's broken and own fixing it — don't wait for someone else to raise it.",
+  "Review who's getting your time. Are you spending it on the people who need development or just the fires?",
+  "Name one thing that's slipped in the last two weeks. Reset the expectation clearly today.",
+  "Watch body language during your next direction. Are they engaged or just tolerating you?",
+  "Identify your most influential team member. Are they pulling the culture up or dragging it sideways?",
+  "Think about the last time someone failed. Did they lack the skill, the will, or the clarity? Act on that.",
+  "One thing: be where the work is. Not in the office. On the floor.",
+  "Before you correct someone, ask: did I set the expectation clearly? Honestly.",
+  "Recognize one person in front of the team. Be specific about the behavior, not just the outcome.",
+  "Look at your schedule this week. Block time to develop someone — not just manage the operation.",
+  "Identify the gap between your top performer and your average one. What's creating that distance?",
+  "Ask: what does the team believe I actually care about, based on what I inspect and what I let slide?",
+];
+
+function getTodayFocus() {
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  return FOCUS_ROTATION[dayOfYear % FOCUS_ROTATION.length];
+}
+
 // =====================================================
 // HOME
 // =====================================================
@@ -1125,11 +1256,9 @@ function HomeView({ go }) {
         </div>
         <div className="text-xl font-bold text-neutral-50 mt-1">{today}</div>
       </div>
-      <button
-        onClick={() => go("coach")}
+      <button onClick={() => go("coach")}
         className="w-full flex items-center justify-between rounded-xl p-5 mb-4 text-left text-neutral-950"
-        style={{ backgroundColor: ACCENT }}
-      >
+        style={{ backgroundColor: ACCENT }}>
         <div>
           <div className="text-lg font-extrabold uppercase tracking-tight">Coach me through a situation</div>
           <div className="text-sm font-medium opacity-80">Messy situation in, clear plan out.</div>
@@ -1138,11 +1267,8 @@ function HomeView({ go }) {
       </button>
       <div className="grid grid-cols-1 gap-3">
         {quick.map((q) => (
-          <button
-            key={q.id}
-            onClick={() => go(q.id)}
-            className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors"
-          >
+          <button key={q.id} onClick={() => go(q.id)}
+            className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors">
             <q.icon size={20} style={{ color: ACCENT }} />
             <span className="font-semibold text-neutral-100">{q.label}</span>
             <ArrowRight size={18} className="ml-auto text-neutral-600" />
@@ -1150,14 +1276,13 @@ function HomeView({ go }) {
         ))}
       </div>
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Suggested focus</div>
-        <p className="text-[15px] text-neutral-200 leading-relaxed">
-          Inspect what you expect. Pick one standard you set this week and verify it got followed — in person, on the floor, today.
-        </p>
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Today's focus</div>
+        <p className="text-[15px] text-neutral-200 leading-relaxed">{getTodayFocus()}</p>
       </div>
     </div>
   );
 }
+
 // =====================================================
 // APP SHELL
 // =====================================================
@@ -1168,6 +1293,7 @@ const NAV = [
   { id: "practice", label: "Practice", icon: Play },
   { id: "more", label: "More", icon: MoreHorizontal },
 ];
+
 export default function FrontlineCoach() {
   const [tab, setTab] = useState("home");
   const scrollRef = useRef(null);
@@ -1177,8 +1303,15 @@ export default function FrontlineCoach() {
   };
   return (
     <div className="min-h-screen w-full bg-neutral-950 text-neutral-100 flex justify-center">
+      {/* Hidden Netlify Forms registration — required for submissions to be captured */}
+      <form name="tool-feedback" data-netlify="true" hidden>
+        <input type="text" name="tool" />
+        <input type="text" name="rating" />
+        <input type="text" name="input" />
+        <input type="text" name="timestamp" />
+      </form>
+
       <div className="w-full max-w-md flex flex-col h-screen">
-        {/* top bar */}
         <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
           {tab !== "home" ? (
             <button onClick={() => go("home")} className="flex items-center gap-1 text-neutral-400 hover:text-neutral-100 text-sm">
@@ -1194,7 +1327,7 @@ export default function FrontlineCoach() {
           )}
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
-        {/* body */}
+
         <main ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
           {tab === "home" && <HomeView go={go} />}
           {tab === "coach" && <AICoach />}
@@ -1205,27 +1338,27 @@ export default function FrontlineCoach() {
           {tab === "convo" && <ConvoBuilder />}
           {tab === "more" && <MoreView go={go} />}
         </main>
-        {/* bottom nav */}
+
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
             const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo"].includes(tab));
             return (
-              <button
-                key={n.id}
-                onClick={() => go(n.id)}
-                className="flex flex-col items-center gap-1 py-2.5"
-              >
+              <button key={n.id} onClick={() => go(n.id)} className="flex flex-col items-center gap-1 py-2.5">
                 <n.icon size={20} style={{ color: active ? ACCENT : "#6b6b6b" }} />
-                <span
-                  className="text-[10px] font-semibold uppercase tracking-wide"
-                  style={{ color: active ? ACCENT : "#6b6b6b" }}
-                >
+                <span className="text-[10px] font-semibold uppercase tracking-wide"
+                  style={{ color: active ? ACCENT : "#6b6b6b" }}>
                   {n.label}
                 </span>
               </button>
             );
           })}
         </nav>
+
+        <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950">
+          <p className="text-[10px] text-neutral-700 text-center">
+            Not legal or HR advice. Always follow your company's policies.
+          </p>
+        </div>
       </div>
     </div>
   );
