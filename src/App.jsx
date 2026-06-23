@@ -613,7 +613,7 @@ function PushbackCoach() {
         ))}
       </div>
       <div className="mb-3">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Tone</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Your Tone</div>
         <div className="flex flex-wrap gap-2">
           {TONES.map((t) => (
             <button key={t} onClick={() => setTone(t)}
