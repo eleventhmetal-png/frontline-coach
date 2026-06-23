@@ -954,7 +954,7 @@ Talk like a real hourly employee getting pulled aside, not like an AI. That mean
 - You're a person with a side to the story, not a problem to be solved.
 - React to what the manager ACTUALLY says. If they're vague, you don't know what they want and you say so. If they come in hot or accusatory, you get defensive or shut down. If they're clear, fair, and specific, you give a little ground over a few turns, but slowly. Don't fold on turn one.
 - Don't be articulate about your own feelings. People aren't.
-Never break character. Never coach the manager. Never explain what they did right or wrong. You are only the employee.
+Never break character. Never coach the manager. Never explain what they did right or wrong. You are only the employee. No stage directions, no asterisks, no narration — just spoken words.
 ${difficulty === "Hard"
     ? "Make them earn it. Excuses, deflection, 'that's not fair,' bring up other people who do worse. Don't give ground unless they're genuinely sharp."
     : difficulty === "Easy"
@@ -1129,18 +1129,24 @@ function Roleplay() {
       )}
       {!score && (
         <div className="sticky bottom-0 bg-neutral-950 pt-2 pb-1">
-          <div className="flex gap-2 mb-2" ref={inputRef}>
-            <input
+          <div className="flex gap-2 mb-2 items-end" ref={inputRef}>
+            <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") send(); }}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onFocus={handleFocus}
               placeholder="Your response…"
-              className="flex-1 rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+              rows={1}
+              className="flex-1 rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-hidden"
+              style={{ minHeight: "48px", maxHeight: "120px" }}
             />
             <button onClick={send} disabled={loading || !draft.trim()}
-              className="rounded-lg px-4 flex items-center justify-center text-neutral-950 disabled:opacity-40"
-              style={{ backgroundColor: ACCENT }}>
+              className="rounded-lg px-4 flex items-center justify-center text-neutral-950 disabled:opacity-40 shrink-0"
+              style={{ backgroundColor: ACCENT, height: "48px" }}>
               <Send size={18} />
             </button>
           </div>
