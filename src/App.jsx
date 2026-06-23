@@ -1304,7 +1304,7 @@ export default function FrontlineCoach() {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   };
   return (
-    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100 flex justify-center">
+    <div className="fixed inset-0 bg-neutral-950 text-neutral-100 flex justify-center">
       {/* Hidden Netlify Forms registration — required for submissions to be captured */}
       <form name="tool-feedback" data-netlify="true" hidden>
         <input type="text" name="tool" />
@@ -1313,7 +1313,7 @@ export default function FrontlineCoach() {
         <input type="text" name="timestamp" />
       </form>
 
-      <div className="w-full max-w-md flex flex-col h-screen overflow-hidden">
+      <div className="w-full max-w-md flex flex-col h-full">
         <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
           {tab !== "home" ? (
             <button onClick={() => go("home")} className="flex items-center gap-1 text-neutral-400 hover:text-neutral-100 text-sm">
@@ -1356,7 +1356,7 @@ export default function FrontlineCoach() {
           })}
         </nav>
 
-        <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950">
+        <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950 shrink-0">
           <p className="text-[10px] text-neutral-700 text-center">
             Not legal or HR advice. Always follow your company's policies.
           </p>
