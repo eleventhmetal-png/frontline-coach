@@ -1239,9 +1239,10 @@ const FOCUS_ROTATION = [
 
 function getTodayFocus() {
   const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const dayOfYear = Math.ceil((now - start) / 86400000);
-  return FOCUS_ROTATION[dayOfYear % FOCUS_ROTATION.length];
+  // Use a fixed epoch date so the index is consistent across all timezones
+  const epoch = new Date(2026, 0, 1); // Jan 1 2026 = index 0
+  const daysSinceEpoch = Math.floor((now - epoch) / 86400000);
+  return FOCUS_ROTATION[((daysSinceEpoch % FOCUS_ROTATION.length) + FOCUS_ROTATION.length) % FOCUS_ROTATION.length];
 }
 
 // =====================================================
