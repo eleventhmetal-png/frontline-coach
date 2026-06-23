@@ -8,6 +8,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Netlify Forms detection — must exist in static HTML at build time -->
+    <form name="tool-feedback" data-netlify="true" hidden>
+      <input type="text" name="tool" />
+      <input type="text" name="rating" />
+      <input type="text" name="input" />
+      <input type="text" name="timestamp" />
+    </form>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
