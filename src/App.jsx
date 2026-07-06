@@ -28,6 +28,32 @@ async function rawClaude(messages, { model, system, max_tokens } = {}) {
     .map((b) => b.text)
     .join("\n");
 }
+// Deterministic voice scrub — removes canned AI tells the prompt sometimes lets slip.
+// Runs on every JSON tool result so these never reach the manager, whatever the model does.
+function scrubVoice(obj) {
+  if (obj == null || typeof obj !== "object") return obj;
+  const fix = (s) => {
+    if (typeof s !== "string") return s;
+    let out = s
+      .replace(/\bI hear you\b[.,!]?\s*/gi, "")
+      .replace(/\bI understand\b[.,!]?\s*/gi, "")
+      .replace(/\bI know this is hard\b[.,!]?\s*/gi, "")
+      .replace(/\bgoing forward\b/gi, "from now on")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/^\s*[,.;:!]\s*/, "")
+      .trim();
+    out = out.replace(/^([a-z])/, (m) => m.toUpperCase());
+    return out;
+  };
+  const out = Array.isArray(obj) ? [] : {};
+  for (const k in obj) {
+    const v = obj[k];
+    out[k] = Array.isArray(v)
+      ? v.map((x) => (x && typeof x === "object" ? scrubVoice(x) : fix(x)))
+      : (v && typeof v === "object" ? scrubVoice(v) : fix(v));
+  }
+  return out;
+}
 // pull the JSON object out of a model reply
 function toolJson(text) {
   const clean = (text || "").replace(/```json/gi, "").replace(/```/g, "").trim();
@@ -101,17 +127,17 @@ async function callClaude(system, user, opts = {}) {
   );
   const parsed = toolJson(text);
   if (!parsed) throw new Error("bad JSON");
-  return parsed;
+  return scrubVoice(parsed);
 }
 // single-shot JSON, streaming with progressive partials. Falls back to non-stream on any hiccup.
 async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
   try {
     const full = await streamClaude(
       [{ role: "user", content: `MANAGER INPUT:\n${user}` }],
-      { system, ...opts, onText: onPartial ? (t) => onPartial(extractPartialJson(t)) : undefined }
+      { system, ...opts, onText: onPartial ? (t) => onPartial(scrubVoice(extractPartialJson(t))) : undefined }
     );
     const parsed = toolJson(full);
-    if (parsed) return parsed;
+    if (parsed) return scrubVoice(parsed);
     throw new Error("bad JSON");
   } catch (e) {
     return await callClaude(system, user, opts);
@@ -169,7 +195,7 @@ How you write:
 - Lead with the point. No warmup sentence.
 - Vary the rhythm. Some sentences short. Punch.
 - Match depth to the problem. A simple question gets a short answer. Save the detail for genuinely complex situations or when the manager asks for more. A manager on the floor has ten seconds, not ten minutes.
-Banned phrases (they read as fake): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
+Banned phrases (they read as fake, NEVER use them): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward," "I understand," "I hear you," "I know this is hard." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
 The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.`;
 // Register logic — how warm vs. how direct. Injected into the conversation tools.
 // The standard never moves; the warmth flexes. Built for new managers learning to
