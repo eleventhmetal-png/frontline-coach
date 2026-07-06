@@ -5,14 +5,22 @@ import {
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown
 } from "lucide-react";
-
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
-async function rawClaude(messages) {
+// Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
+const MODEL_SMART = "claude-sonnet-4-6";
+const MODEL_FAST = "claude-haiku-4-5-20251001";
+
+async function rawClaude(messages, { model, system, max_tokens } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({
+      model: model || MODEL_SMART,
+      max_tokens: max_tokens || 1000,
+      ...(system ? { system } : {}),
+      messages,
+    }),
   });
   const data = await res.json();
   return (data.content || [])
@@ -20,25 +28,111 @@ async function rawClaude(messages) {
     .map((b) => b.text)
     .join("\n");
 }
-
-// single-shot, returns parsed JSON
-async function callClaude(system, user) {
-  const text = await rawClaude([
-    { role: "user", content: `${system}\n\n---\nMANAGER INPUT:\n${user}` },
-  ]);
-  const clean = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+// pull the JSON object out of a model reply
+function toolJson(text) {
+  const clean = (text || "").replace(/```json/gi, "").replace(/```/g, "").trim();
   const start = clean.indexOf("{");
   const end = clean.lastIndexOf("}");
-  const slice = start >= 0 && end >= 0 ? clean.slice(start, end + 1) : clean;
-  return JSON.parse(slice);
+  try { return JSON.parse(start >= 0 && end >= 0 ? clean.slice(start, end + 1) : clean); }
+  catch { return null; }
 }
-
+// tolerant extractor for streaming — returns only the fields that have fully arrived
+function extractPartialJson(text) {
+  const clean = (text || "").replace(/```json/gi, "").replace(/```/g, "");
+  const obj = {};
+  const unesc = (s) => s.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\\/g, "\\");
+  const strRe = /"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+  let m;
+  while ((m = strRe.exec(clean))) obj[m[1]] = unesc(m[2]);
+  const arrRe = /"(\w+)"\s*:\s*\[([^\]]*)\]/g;
+  while ((m = arrRe.exec(clean))) {
+    const items = [];
+    const itemRe = /"((?:[^"\\]|\\.)*)"/g;
+    let im;
+    while ((im = itemRe.exec(m[2]))) items.push(unesc(im[1]));
+    obj[m[1]] = items;
+  }
+  return obj;
+}
+// streaming core — reads Anthropic SSE via the proxy, calls onText(fullSoFar)
+async function streamClaude(messages, { model, system, max_tokens, onText } = {}) {
+  const res = await fetch("/api/claude", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      stream: true,
+      model: model || MODEL_SMART,
+      max_tokens: max_tokens || 1000,
+      ...(system ? { system } : {}),
+      messages,
+    }),
+  });
+  if (!res.ok || !res.body) throw new Error("stream unavailable");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "", full = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const payload = t.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const evt = JSON.parse(payload);
+        if (evt.type === "content_block_delta" && evt.delta && evt.delta.type === "text_delta") {
+          full += evt.delta.text;
+          onText && onText(full);
+        }
+      } catch (e) {}
+    }
+  }
+  return full;
+}
+// single-shot JSON, non-streaming. System sent separately so it can be cached.
+async function callClaude(system, user, opts = {}) {
+  const text = await rawClaude(
+    [{ role: "user", content: `MANAGER INPUT:\n${user}` }],
+    { system, ...opts }
+  );
+  const parsed = toolJson(text);
+  if (!parsed) throw new Error("bad JSON");
+  return parsed;
+}
+// single-shot JSON, streaming with progressive partials. Falls back to non-stream on any hiccup.
+async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
+  try {
+    const full = await streamClaude(
+      [{ role: "user", content: `MANAGER INPUT:\n${user}` }],
+      { system, ...opts, onText: onPartial ? (t) => onPartial(extractPartialJson(t)) : undefined }
+    );
+    const parsed = toolJson(full);
+    if (parsed) return parsed;
+    throw new Error("bad JSON");
+  } catch (e) {
+    return await callClaude(system, user, opts);
+  }
+}
 // multi-turn chat, returns plain text reply
-async function callChat(system, history) {
+async function callChat(system, history, opts = {}) {
   const msgs = [{ role: "user", content: system }, { role: "assistant", content: "Understood. I'm in character." }, ...history];
-  return (await rawClaude(msgs)).trim();
+  return (await rawClaude(msgs, opts)).trim();
 }
-
+// streaming multi-turn chat — onText(fullSoFar). Falls back to non-stream.
+async function streamChat(system, history, onText, opts = {}) {
+  const msgs = [{ role: "user", content: system }, { role: "assistant", content: "Understood. I'm in character." }, ...history];
+  try {
+    return await streamClaude(msgs, { ...opts, onText });
+  } catch (e) {
+    const txt = (await rawClaude(msgs, opts)).trim();
+    onText && onText(txt);
+    return txt;
+  }
+}
 // ---------- Netlify Forms feedback ----------
 async function submitFeedback(tool, rating, inputSummary) {
   try {
@@ -58,41 +152,44 @@ async function submitFeedback(tool, rating, inputSummary) {
     // fail silently
   }
 }
-
 // ---------- shared UI bits ----------
 const ACCENT = "#E8923C";
-
 // The world every AI tool lives in. Injected everywhere alongside VOICE.
 const WORLD = `WORLD — this is the setting, never deviate:
 Express car wash. The team works the tunnel, prep station, vacuum lanes, sales lanes, and pay stations. Roles: Sales Consultant (SC), Team Lead (TL), Assistant Site Manager (ASM), General Manager (GM). The business runs on speed, quality, service, labor efficiency, and converting retail customers into Club members. Busy means cars backing up in the lanes and the line wrapping the lot. Slow means an empty tunnel. Weather kills volume. Employees talk about cars, lanes, memberships, pitching, prepping, loading, towels, chemicals. Never tables, orders, tickets, kitchens, or customers waiting on food. Any reference to work activity is car wash work.`;
-
 const VOICE = `${WORLD}
-
 VOICE — follow this exactly:
 You are a frontline operator who has run real shifts and held real people accountable. Not a consultant, not HR, not a life coach. You're standing next to this manager on the floor, not presenting to them.
 How you write:
 - Any line the manager will SAY OUT LOUD must sound spoken. Contractions. Short. The way a person actually talks on a shift, not a paragraph read off a card.
 - Plain words. Shortest word that works.
 - Name the behavior and the standard. Never the employee's character, motive, or feelings.
-- No therapy voice. Do not validate feelings as a tactic. Never write "I understand," "I hear you," or "I know this is hard."
+- No hollow therapy voice. Don't validate feelings as a tactic or open with a canned "I understand" / "I hear you." Real acknowledgment tied to something specific is fine when the moment genuinely calls for it; empty reassurance is not.
 - Make the call. No "it depends," no "you might want to consider." Tell them what to do.
 - Lead with the point. No warmup sentence.
 - Vary the rhythm. Some sentences short. Punch.
 - Match depth to the problem. A simple question gets a short answer. Save the detail for genuinely complex situations or when the manager asks for more. A manager on the floor has ten seconds, not ten minutes.
 Banned phrases (they read as fake): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
 The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.`;
-
+// Register logic — how warm vs. how direct. Injected into the conversation tools.
+// The standard never moves; the warmth flexes. Built for new managers learning to
+// sound human instead of reading a card.
+const REGISTER = `REGISTER — match the emotional weight of THIS conversation:
+Two dials. The STANDARD never moves. The WARMTH flexes to fit the moment.
+- Developmental / confidence / morale / recognition: this person needs belief, not a beating. Be human. Lead with what's real and earned. It's fine to sound like you care, because you do. Then name the one concrete next step. Warmth with no standard is just a pep talk.
+- Corrective / attendance / attitude / performance / final-warning: clean, direct, low heat. Here the respect IS the warmth. Don't soften the standard, don't pile on.
+- Mixed or unclear: default direct, add warmth where the person's effort or intent is genuine.
+Never fake warmth as a tactic. If you don't mean it, don't write it. But do not strip the humanity out of a talk that needs it. A flat, clinical script on a confidence conversation does more damage than no script at all.
+When a REGISTER is given explicitly, follow it. When it says Auto, read the situation and choose.`;
 // ---------- Feedback widget ----------
 function FeedbackRow({ tool, inputSummary }) {
   const [vote, setVote] = useState(null);
   const [submitted, setSubmitted] = useState(false);
-
   async function handleVote(rating) {
     setVote(rating);
     setSubmitted(true);
     await submitFeedback(tool, rating, inputSummary);
   }
-
   if (submitted) {
     return (
       <div className="flex items-center gap-2 pt-3 border-t border-neutral-800 mt-2 text-xs text-neutral-500">
@@ -101,7 +198,6 @@ function FeedbackRow({ tool, inputSummary }) {
       </div>
     );
   }
-
   return (
     <div className="flex items-center gap-3 pt-3 border-t border-neutral-800 mt-2">
       <span className="text-xs text-neutral-500 flex-1">Did this help?</span>
@@ -120,7 +216,6 @@ function FeedbackRow({ tool, inputSummary }) {
     </div>
   );
 }
-
 function CopyBtn({ getText }) {
   const [done, setDone] = useState(false);
   return (
@@ -139,7 +234,6 @@ function CopyBtn({ getText }) {
     </button>
   );
 }
-
 function Section({ label, children, accent }) {
   return (
     <div className="border-b border-neutral-800 last:border-0 py-4">
@@ -155,7 +249,6 @@ function Section({ label, children, accent }) {
     </div>
   );
 }
-
 function BulletList({ items }) {
   return (
     <ul className="space-y-1.5">
@@ -170,7 +263,6 @@ function BulletList({ items }) {
     </ul>
   );
 }
-
 function Quote({ children }) {
   return (
     <div
@@ -181,7 +273,6 @@ function Quote({ children }) {
     </div>
   );
 }
-
 // ---------- Loading messages ----------
 const LOADING_LINES = [
   "Reading the situation…",
@@ -191,7 +282,6 @@ const LOADING_LINES = [
   "Building the plan…",
   "Getting to the point…",
 ];
-
 function LoadingLine() {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
@@ -200,7 +290,6 @@ function LoadingLine() {
   }, []);
   return <span>{LOADING_LINES[idx]}</span>;
 }
-
 function SmartGenerateButton({ onClick, loading, label, disabled }) {
   return (
     <button
@@ -223,7 +312,6 @@ function SmartGenerateButton({ onClick, loading, label, disabled }) {
     </button>
   );
 }
-
 function ErrorNote({ msg }) {
   if (!msg) return null;
   return (
@@ -233,7 +321,6 @@ function ErrorNote({ msg }) {
     </div>
   );
 }
-
 function ResultCard({ children }) {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 sm:p-5 mt-4">
@@ -241,7 +328,6 @@ function ResultCard({ children }) {
     </div>
   );
 }
-
 // ---------- share card ----------
 function wrapLines(ctx, text, maxW) {
   const words = (text || "").split(/\s+/);
@@ -259,7 +345,6 @@ function wrapLines(ctx, text, maxW) {
   if (line) lines.push(line);
   return lines;
 }
-
 function buildShareImage(card) {
   const W = 1080;
   const PAD = 84;
@@ -339,7 +424,6 @@ function buildShareImage(card) {
   layout(ctx, true);
   return canvas.toDataURL("image/png");
 }
-
 function ShareButton({ onClick }) {
   return (
     <button
@@ -351,7 +435,6 @@ function ShareButton({ onClick }) {
     </button>
   );
 }
-
 function ShareSheet({ card, textVersion, onClose }) {
   const [img, setImg] = useState("");
   const [copied, setCopied] = useState(false);
@@ -406,7 +489,6 @@ function ShareSheet({ card, textVersion, onClose }) {
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 1 — AI COACH
 // =====================================================
@@ -420,13 +502,17 @@ const COACH_SITUATIONS = [
   "Shift performance is declining",
   "Employee has potential but no confidence",
 ];
-
 const COACH_SYSTEM = `${VOICE}
+
+${REGISTER}
+
 You are the AI Coach inside Frontline Coach. A manager describes a people problem on their shift. You diagnose it, tell them what they own, and hand them a plan they can run today. You challenge them when they're avoiding the conversation, being vague, overreacting, or blaming the team for a gap they created. You separate skill from will.
 Hard rules for this output:
 - LEADER FIRST. Before you diagnose the team, diagnose the leader. When a manager asks why performance, morale, or a person is declining, your first move is what the leader did or didn't do to cause it. Only after that do you look at the team. Never hand a manager an analysis that points only outward; that builds blame, not ownership.
 - "whatYouOwn" must name a SPECIFIC likely failure on the manager's side (unclear expectation never set, a standard they enforce inconsistently, a conversation they've been ducking, no follow-up after the last talk). No generic "communication could be better." If they genuinely own nothing yet, say what they'll own if they handle it wrong.
-- "whatToSay" is the actual words, spoken. Not a description of what to say. Write what comes out of their mouth.
+- "whatToSay" is the actual words, spoken. Not a description of what to say. Write what comes out of their mouth. Match the REGISTER — a confidence talk sounds human, a corrective talk stays clean.
+- "howToDeliver" is coaching on DELIVERY, not more content. Tone, pace, where to slow down, where to hold firm, what to read on their face. This is where a new manager learns to sound human instead of reading a card off the wall. Never leave it generic.
+- "makeItYours" must push the manager to say it in their own words, and name the one thing to keep no matter how they reword it. The goal is a manager who can hold the conversation, not one who reads a script.
 - "leadershipPrinciple" is a blunt operator line, not a poster quote.
 - Never produce discriminatory, retaliatory, or humiliating tactics.
 Return ONLY valid JSON, no markdown, no preamble. Every field tight. Scripts 2-4 sentences. Lists 3-5 short items. If the problem is simple, keep every field to one sentence and lists to 3 items; do not pad a small problem into a big plan. Schema:
@@ -436,26 +522,26 @@ Return ONLY valid JSON, no markdown, no preamble. Every field tight. Scripts 2-4
  "theStandard": "what good looks like, stated flat",
  "beforeYouTalk": "what to verify or pull before the conversation",
  "questionsToAsk": ["3-5 open questions that don't lead the witness"],
- "whatToSay": "the spoken opening, in their voice",
+ "whatToSay": "the spoken opening, in their voice, matched to the register",
+ "howToDeliver": "how to carry it — tone, pace, where to slow down, where to hold firm, what to read on their face. How to say it, not what.",
+ "makeItYours": "one line: say it in your own words, and the one thing to keep no matter how you word it",
  "watchFor": ["3-4 signals to read in the moment"],
  "nextSteps": ["actions with an owner and a deadline"],
  "documentThis": "one factual paragraph, no emotion, no motive",
  "followUp": "exact timing and what you're checking for",
  "leadershipPrinciple": "one blunt line"
 }`;
-
 function AICoach() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
-
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaude(COACH_SYSTEM, input);
+      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
@@ -463,7 +549,6 @@ function AICoach() {
       setLoading(false);
     }
   }
-
   const copyAll = () => result ? [
     `WHAT MAY BE HAPPENING\n${result.whatMayBeHappening}`,
     `WHAT YOU OWN\n${result.whatYouOwn}`,
@@ -471,13 +556,14 @@ function AICoach() {
     `BEFORE YOU TALK\n${result.beforeYouTalk}`,
     `QUESTIONS TO ASK\n- ${(result.questionsToAsk||[]).join("\n- ")}`,
     `WHAT TO SAY\n${result.whatToSay}`,
+    `HOW TO DELIVER IT\n${result.howToDeliver}`,
+    `MAKE IT YOURS\n${result.makeItYours}`,
     `WATCH FOR\n- ${(result.watchFor||[]).join("\n- ")}`,
     `NEXT STEPS\n- ${(result.nextSteps||[]).join("\n- ")}`,
     `DOCUMENT THIS\n${result.documentThis}`,
     `FOLLOW-UP\n${result.followUp}`,
     `PRINCIPLE: ${result.leadershipPrinciple}`,
   ].join("\n\n") : "";
-
   return (
     <div>
       <ToolHeader title="AI Coach" sub="Describe the situation. Get a plan you can run on this shift." />
@@ -511,29 +597,32 @@ function AICoach() {
             })} />
             <CopyBtn getText={copyAll} />
           </div>
-          <Section label="What may be happening">{result.whatMayBeHappening}</Section>
-          <Section label="What you own" accent>{result.whatYouOwn}</Section>
-          <Section label="The standard">{result.theStandard}</Section>
-          <Section label="Before you talk">{result.beforeYouTalk}</Section>
-          <Section label="Questions to ask"><BulletList items={result.questionsToAsk} /></Section>
-          <Section label="What to say" accent><Quote>{result.whatToSay}</Quote></Section>
-          <Section label="Watch for"><BulletList items={result.watchFor} /></Section>
-          <Section label="Agree on next steps"><BulletList items={result.nextSteps} /></Section>
-          <Section label="Document this">{result.documentThis}</Section>
-          <Section label="Follow-up">{result.followUp}</Section>
-          <div className="pt-4">
-            <div className="rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-950" style={{ backgroundColor: ACCENT }}>
-              {result.leadershipPrinciple}
+          {result.whatMayBeHappening && <Section label="What may be happening">{result.whatMayBeHappening}</Section>}
+          {result.whatYouOwn && <Section label="What you own" accent>{result.whatYouOwn}</Section>}
+          {result.theStandard && <Section label="The standard">{result.theStandard}</Section>}
+          {result.beforeYouTalk && <Section label="Before you talk">{result.beforeYouTalk}</Section>}
+          {result.questionsToAsk?.length > 0 && <Section label="Questions to ask"><BulletList items={result.questionsToAsk} /></Section>}
+          {result.whatToSay && <Section label="What to say" accent><Quote>{result.whatToSay}</Quote></Section>}
+          {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
+          {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          {result.watchFor?.length > 0 && <Section label="Watch for"><BulletList items={result.watchFor} /></Section>}
+          {result.nextSteps?.length > 0 && <Section label="Agree on next steps"><BulletList items={result.nextSteps} /></Section>}
+          {result.documentThis && <Section label="Document this">{result.documentThis}</Section>}
+          {result.followUp && <Section label="Follow-up">{result.followUp}</Section>}
+          {result.leadershipPrinciple && (
+            <div className="pt-4">
+              <div className="rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-950" style={{ backgroundColor: ACCENT }}>
+                {result.leadershipPrinciple}
+              </div>
             </div>
-          </div>
-          <FeedbackRow tool="AI Coach" inputSummary={input} />
+          )}
+          {!loading && <FeedbackRow tool="AI Coach" inputSummary={input} />}
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 2 — PUSHBACK COACH
 // =====================================================
@@ -551,10 +640,12 @@ const PUSHBACK_COMMON = [
   "You never told me that",
   "That's not fair",
 ];
-
 const TONES = ["Calm", "Firm", "Coaching", "Formal", "Supportive", "Direct"];
-
 const PUSHBACK_SYSTEM = `${VOICE}
+
+${REGISTER}
+For this tool, the selected TONE is the register — match it exactly.
+
 A manager just got pushback from an employee, live, and needs the words right now. Give them a response that holds the standard without escalating and without groveling. The "immediateResponse" is the whole game — it has to be something a real manager would actually say standing there, not a scripted HR line.
 Situation rules:
 - If SITUATION details are provided, anchor every field to that exact situation. Do not invent facts beyond what's given.
@@ -570,13 +661,14 @@ Match the requested TONE and make it actually change the words:
 Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
 {
  "immediateResponse": "the exact words to say back, in the chosen tone",
+ "howToSayIt": "delivery cue — pace, volume, body, eye contact. How to land the line so it holds without heat. Not what to say, how to say it.",
  "followUpQuestion": "one question that opens it up instead of shutting it down",
  "standardRestatement": "restate the expectation flat",
  "boundaryStatement": "the line, calm and clear",
  "escalationOption": "what to do if it keeps happening",
- "documentationNote": "one factual line for the file"
+ "documentationNote": "one factual line for the file",
+ "makeItYours": "one line: say it in your own words, keep the standard intact"
 }`;
-
 function PushbackCoach() {
   const [input, setInput] = useState("");
   const [context, setContext] = useState("");
@@ -585,21 +677,21 @@ function PushbackCoach() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
-
   const copyAll = () => result ? [
     `WHEN THEY SAY: "${input}"`,
     `SAY THIS: ${result.immediateResponse}`,
+    `HOW TO SAY IT: ${result.howToSayIt}`,
     `THEN ASK: ${result.followUpQuestion}`,
     `STANDARD: ${result.standardRestatement}`,
     `BOUNDARY: ${result.boundaryStatement}`,
     `IF IT CONTINUES: ${result.escalationOption}`,
+    `MAKE IT YOURS: ${result.makeItYours}`,
   ].join("\n\n") : "";
-
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaude(PUSHBACK_SYSTEM, `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`);
+      const r = await callClaudeStream(PUSHBACK_SYSTEM, `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 700 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a response. Try again.");
@@ -607,7 +699,6 @@ function PushbackCoach() {
       setLoading(false);
     }
   }
-
   return (
     <div>
       <ToolHeader title="What do I say when they say…?" sub="Paste the pushback. Get a response that holds the line." />
@@ -656,25 +747,25 @@ function PushbackCoach() {
             })} />
             <CopyBtn getText={copyAll} />
           </div>
-          <Section label="Say this now" accent><Quote>{result.immediateResponse}</Quote></Section>
-          <Section label="Then ask">{result.followUpQuestion}</Section>
-          <Section label="Restate the standard">{result.standardRestatement}</Section>
-          <Section label="Hold the boundary">{result.boundaryStatement}</Section>
-          <Section label="If it continues">{result.escalationOption}</Section>
-          <Section label="Note for the file">{result.documentationNote}</Section>
-          <FeedbackRow tool="Pushback Coach" inputSummary={input} />
+          {result.immediateResponse && <Section label="Say this now" accent><Quote>{result.immediateResponse}</Quote></Section>}
+          {result.howToSayIt && <Section label="How to say it" accent>{result.howToSayIt}</Section>}
+          {result.followUpQuestion && <Section label="Then ask">{result.followUpQuestion}</Section>}
+          {result.standardRestatement && <Section label="Restate the standard">{result.standardRestatement}</Section>}
+          {result.boundaryStatement && <Section label="Hold the boundary">{result.boundaryStatement}</Section>}
+          {result.escalationOption && <Section label="If it continues">{result.escalationOption}</Section>}
+          {result.documentationNote && <Section label="Note for the file">{result.documentationNote}</Section>}
+          {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          {!loading && <FeedbackRow tool="Pushback Coach" inputSummary={input} />}
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 3 — DOCUMENTATION ASSISTANT
 // =====================================================
 const DOC_SYSTEM = `${WORLD}
-
 You are Frontline Coach's documentation assistant. Turn the manager's rough notes into a clean, factual performance record. REMOVE insults, emotionally loaded language, assumptions, unverifiable motives, diagnoses, exaggeration, and any retaliatory or discriminatory language. State only observable behavior and facts. Never state or imply whether someone should be terminated.
 Return ONLY valid JSON, no markdown. Schema:
 {
@@ -688,13 +779,11 @@ Return ONLY valid JSON, no markdown. Schema:
  "followUpDate": "suggested follow-up",
  "cleanedNote": "a single tight paragraph combining the above into a record ready to file"
 }`;
-
 function DocAssistant() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
@@ -707,7 +796,6 @@ function DocAssistant() {
       setLoading(false);
     }
   }
-
   return (
     <div>
       <ToolHeader title="Documentation Assistant" sub="Dump your rough notes. Get a factual record, emotion stripped out." />
@@ -748,28 +836,31 @@ function DocAssistant() {
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 4 — CONVERSATION BUILDER
 // =====================================================
 const CONVO_TYPES = ["Coaching", "Corrective", "Attendance", "Attitude", "Recognition", "Resetting expectations", "Final warning prep", "Trust repair"];
-
 const CONVO_SYSTEM = `${VOICE}
+
+${REGISTER}
+For this tool, the selected TYPE sets the register. Recognition, Coaching, and Trust repair carry warmth; Corrective, Attendance, Attitude, and Final warning prep stay clean and direct. The standard holds either way.
+
 You build a manager a plan for a real conversation. Every script line is spoken, in their voice. Keep it to a few sentences each.
 Return ONLY valid JSON, no markdown. Schema:
 {
- "opening": "how to open",
+ "opening": "how to open, matched to the register",
  "mainMessage": "the core message, direct",
+ "howToDeliver": "how to carry it — tone, pace, where to slow down, where to hold firm. How to say it, not what.",
  "questions": ["2-3 questions"],
  "expectedResponse": "how they may react",
  "likelyPushback": "the most likely pushback",
  "suggestedReply": "how to answer that pushback",
  "agreement": "the agreement language to land on",
  "closing": "how to close",
+ "makeItYours": "one line: say it in your own words, and the one thing to keep no matter how you word it",
  "followUpPlan": "when and what to check",
  "documentationNote": "one-line factual note"
 }`;
-
 function ConvoBuilder() {
   const [type, setType] = useState("Coaching");
   const [name, setName] = useState("");
@@ -778,13 +869,12 @@ function ConvoBuilder() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-
   async function run() {
     if (!situation.trim()) return;
     setLoading(true); setError(""); setResult(null);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
-      const r = await callClaude(CONVO_SYSTEM, user);
+      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult });
       setResult(r);
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");
@@ -792,18 +882,18 @@ function ConvoBuilder() {
       setLoading(false);
     }
   }
-
   const copyAll = () => result ? [
     `OPEN\n${result.opening}`,
     `MESSAGE\n${result.mainMessage}`,
+    `HOW TO DELIVER IT\n${result.howToDeliver}`,
     `ASK\n- ${(result.questions||[]).join("\n- ")}`,
     `LIKELY PUSHBACK\n${result.likelyPushback}`,
     `YOUR REPLY\n${result.suggestedReply}`,
     `LAND ON\n${result.agreement}`,
     `CLOSE\n${result.closing}`,
+    `MAKE IT YOURS\n${result.makeItYours}`,
     `FOLLOW-UP\n${result.followUpPlan}`,
   ].join("\n\n") : "";
-
   return (
     <div>
       <ToolHeader title="Conversation Builder" sub="Walk in with a plan instead of winging it." />
@@ -833,22 +923,23 @@ function ConvoBuilder() {
           <div className="flex justify-end mb-1">
             <CopyBtn getText={copyAll} />
           </div>
-          <Section label="Open" accent><Quote>{result.opening}</Quote></Section>
-          <Section label="Main message">{result.mainMessage}</Section>
-          <Section label="Ask"><BulletList items={result.questions} /></Section>
-          <Section label="Expect">{result.expectedResponse}</Section>
-          <Section label="Likely pushback">{result.likelyPushback}</Section>
-          <Section label="Your reply" accent><Quote>{result.suggestedReply}</Quote></Section>
-          <Section label="Land on">{result.agreement}</Section>
-          <Section label="Close">{result.closing}</Section>
-          <Section label="Follow-up">{result.followUpPlan}</Section>
-          <FeedbackRow tool="Conversation Builder" inputSummary={situation} />
+          {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
+          {result.mainMessage && <Section label="Main message">{result.mainMessage}</Section>}
+          {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
+          {result.questions?.length > 0 && <Section label="Ask"><BulletList items={result.questions} /></Section>}
+          {result.expectedResponse && <Section label="Expect">{result.expectedResponse}</Section>}
+          {result.likelyPushback && <Section label="Likely pushback">{result.likelyPushback}</Section>}
+          {result.suggestedReply && <Section label="Your reply" accent><Quote>{result.suggestedReply}</Quote></Section>}
+          {result.agreement && <Section label="Land on">{result.agreement}</Section>}
+          {result.closing && <Section label="Close">{result.closing}</Section>}
+          {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          {result.followUpPlan && <Section label="Follow-up">{result.followUpPlan}</Section>}
+          {!loading && <FeedbackRow tool="Conversation Builder" inputSummary={situation} />}
         </ResultCard>
       )}
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 5 — SKILL VS WILL DIAGNOSTIC
 // =====================================================
@@ -863,7 +954,6 @@ const DIAG_QUESTIONS = [
   { key: "committed", q: "Have they committed to improving?", opts: ["Yes", "No"] },
   { key: "consequences", q: "Are the consequences clear to them?", opts: ["Yes", "No"] },
 ];
-
 const DIAG_SYSTEM = `${VOICE}
 You diagnose whether a performance issue is primarily Skill, Will, Clarity, Capacity, Confidence, Accountability, Process failure, or Leadership failure. Land on "Leadership failure" or "Clarity" when the answers point there. Do not default to blaming the employee.
 Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
@@ -877,7 +967,6 @@ Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
  "accountabilityAction": "the accountability move",
  "followUpInterval": "when to check"
 }`;
-
 function SkillWill() {
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState("");
@@ -886,7 +975,6 @@ function SkillWill() {
   const [error, setError] = useState("");
   const answered = Object.keys(answers).length;
   const ready = answered === DIAG_QUESTIONS.length;
-
   async function run() {
     setLoading(true); setError(""); setResult(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
@@ -899,7 +987,6 @@ function SkillWill() {
       setLoading(false);
     }
   }
-
   return (
     <div>
       <ToolHeader title="Skill vs. Will" sub="Answer 9 questions. Find out if it's a skill problem, a will problem — or yours." />
@@ -948,7 +1035,6 @@ function SkillWill() {
     </div>
   );
 }
-
 // =====================================================
 // FEATURE 6 — AI ROLEPLAY
 // =====================================================
@@ -966,12 +1052,9 @@ const RP_SCENARIOS = [
   "Employee who undermines you to peers",
   "Employee who argues every direction",
 ];
-
 const RP_DIFFICULTY = ["Easy", "Realistic", "Hard"];
-
 function rpSystem(scenario, difficulty) {
   return `${WORLD}
-
 You are playing an EMPLOYEE in a roleplay so a frontline manager can practice a hard conversation. Scenario: "${scenario}". Difficulty: ${difficulty}.
 You are an hourly car wash employee. Your shift, your complaints, your excuses, and anything you mention about work happens at the car wash. If you reference being busy, it's cars in the lanes, not tables or orders.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
@@ -987,7 +1070,6 @@ ${difficulty === "Hard"
     : "Realistically guarded. Some pushback, some openness. Normal person having a normal hard conversation."}
 Open the scene with one believable line as the employee reacting to being pulled aside. Don't narrate. Just talk.`;
 }
-
 const RP_SCORE_SYSTEM = `${VOICE}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly. If they nailed something, say that too, specifically.
 Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Schema:
@@ -1000,7 +1082,6 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change"
 }`;
-
 function Roleplay() {
   const [scenario, setScenario] = useState(RP_SCENARIOS[0]);
   const [difficulty, setDifficulty] = useState("Realistic");
@@ -1013,46 +1094,44 @@ function Roleplay() {
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const sys = rpSystem(scenario, difficulty);
-
   function scrollDown() {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
-
   function handleFocus() {
     setTimeout(() => {
       inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 300);
   }
-
   async function start() {
     setLoading(true); setError(""); setScore(null);
+    setHistory([{ role: "assistant", content: "" }]);
+    setStarted(true);
+    scrollDown();
     try {
-      const opener = await callChat(sys, [{ role: "user", content: "Begin the scene. Give your first line as the employee." }]);
-      setHistory([{ role: "assistant", content: opener }]);
-      setStarted(true);
-      scrollDown();
+      await streamChat(sys, [{ role: "user", content: "Begin the scene. Give your first line as the employee." }],
+        (t) => { setHistory([{ role: "assistant", content: t }]); scrollDown(); },
+        { model: MODEL_FAST, max_tokens: 350 });
     } catch (e) {
       setError("Couldn't start the roleplay. Try again.");
     } finally {
       setLoading(false);
     }
   }
-
   async function send() {
     if (!draft.trim()) return;
     const next = [...history, { role: "user", content: draft.trim() }];
-    setHistory(next); setDraft(""); setLoading(true); scrollDown();
+    setHistory([...next, { role: "assistant", content: "" }]);
+    setDraft(""); setLoading(true); scrollDown();
     try {
-      const reply = await callChat(sys, next);
-      setHistory([...next, { role: "assistant", content: reply }]);
-      scrollDown();
+      await streamChat(sys, next,
+        (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
+        { model: MODEL_FAST, max_tokens: 350 });
     } catch (e) {
       setError("No reply came back. Try sending again.");
     } finally {
       setLoading(false);
     }
   }
-
   async function endAndScore() {
     setLoading(true); setError("");
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
@@ -1066,11 +1145,9 @@ function Roleplay() {
       setLoading(false);
     }
   }
-
   function reset() {
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError("");
   }
-
   if (!started) {
     return (
       <div>
@@ -1104,7 +1181,8 @@ function Roleplay() {
       </div>
     );
   }
-
+  const lastMsg = history[history.length - 1];
+  const waiting = loading && !score && (!lastMsg || lastMsg.role === "user" || (lastMsg.role === "assistant" && !lastMsg.content));
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between mb-3">
@@ -1117,17 +1195,20 @@ function Roleplay() {
         </button>
       </div>
       <div className="space-y-3 mb-3">
-        {history.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <div className="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug"
-              style={m.role === "user"
-                ? { backgroundColor: ACCENT, color: "#0a0a0a", borderBottomRightRadius: 4 }
-                : { backgroundColor: "#1c1c1c", color: "#e8e8e8", borderBottomLeftRadius: 4 }}>
-              {m.content}
+        {history.map((m, i) => {
+          if (m.role === "assistant" && !m.content) return null;
+          return (
+            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div className="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug"
+                style={m.role === "user"
+                  ? { backgroundColor: ACCENT, color: "#0a0a0a", borderBottomRightRadius: 4 }
+                  : { backgroundColor: "#1c1c1c", color: "#e8e8e8", borderBottomLeftRadius: 4 }}>
+                {m.content}
+              </div>
             </div>
-          </div>
-        ))}
-        {loading && !score && (
+          );
+        })}
+        {waiting && (
           <div className="flex justify-start">
             <div className="rounded-2xl px-4 py-3 bg-neutral-800">
               <Loader2 size={16} className="animate-spin text-neutral-400" />
@@ -1187,7 +1268,6 @@ function Roleplay() {
     </div>
   );
 }
-
 // =====================================================
 // MORE — tools menu
 // =====================================================
@@ -1216,7 +1296,6 @@ function MoreView({ go }) {
     </div>
   );
 }
-
 function ToolHeader({ title, sub }) {
   return (
     <div className="mb-4">
@@ -1225,7 +1304,6 @@ function ToolHeader({ title, sub }) {
     </div>
   );
 }
-
 // =====================================================
 // SUGGESTED FOCUS — 30-day rotation
 // =====================================================
@@ -1261,7 +1339,6 @@ const FOCUS_ROTATION = [
   "Identify the gap between your top performer and your average one. What's creating that distance?",
   "Ask: what does the team believe I actually care about, based on what I inspect and what I let slide?",
 ];
-
 function getTodayFocus() {
   const now = new Date();
   // Use a fixed epoch date so the index is consistent across all timezones
@@ -1269,7 +1346,6 @@ function getTodayFocus() {
   const daysSinceEpoch = Math.floor((now - epoch) / 86400000);
   return FOCUS_ROTATION[((daysSinceEpoch % FOCUS_ROTATION.length) + FOCUS_ROTATION.length) % FOCUS_ROTATION.length];
 }
-
 // =====================================================
 // HOME
 // =====================================================
@@ -1316,7 +1392,6 @@ function HomeView({ go }) {
     </div>
   );
 }
-
 // =====================================================
 // APP SHELL
 // =====================================================
@@ -1327,7 +1402,6 @@ const NAV = [
   { id: "practice", label: "Practice", icon: Play },
   { id: "more", label: "More", icon: MoreHorizontal },
 ];
-
 export default function FrontlineCoach() {
   const [tab, setTab] = useState("home");
   const scrollRef = useRef(null);
@@ -1344,7 +1418,6 @@ export default function FrontlineCoach() {
         <input type="text" name="input" />
         <input type="text" name="timestamp" />
       </form>
-
       <div className="w-full max-w-md flex flex-col h-full">
         <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
           {tab !== "home" ? (
@@ -1361,7 +1434,6 @@ export default function FrontlineCoach() {
           )}
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
-
         <main ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
           {tab === "home" && <HomeView go={go} />}
           {tab === "coach" && <AICoach />}
@@ -1372,7 +1444,6 @@ export default function FrontlineCoach() {
           {tab === "convo" && <ConvoBuilder />}
           {tab === "more" && <MoreView go={go} />}
         </main>
-
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
             const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo"].includes(tab));
@@ -1387,7 +1458,6 @@ export default function FrontlineCoach() {
             );
           })}
         </nav>
-
         <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950 shrink-0">
           <p className="text-[10px] text-neutral-700 text-center">
             Not legal or HR advice. Always follow your company's policies.
