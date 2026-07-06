@@ -32,18 +32,31 @@ async function rawClaude(messages, { model, system, max_tokens } = {}) {
 // Runs on every JSON tool result so these never reach the manager, whatever the model does.
 function scrubVoice(obj) {
   if (obj == null || typeof obj !== "object") return obj;
+  const swap = (str, word, repl) =>
+    str.replace(new RegExp(`\\b${word}\\b`, "gi"), (m) =>
+      /^[A-Z]/.test(m) ? repl[0].toUpperCase() + repl.slice(1) : repl
+    );
   const fix = (s) => {
     if (typeof s !== "string") return s;
     let out = s
       .replace(/\bI hear you\b[.,!]?\s*/gi, "")
       .replace(/\bI understand\b[.,!]?\s*/gi, "")
       .replace(/\bI know this is hard\b[.,!]?\s*/gi, "")
-      .replace(/\bgoing forward\b/gi, "from now on")
+      .replace(/\bat the end of the day,?\s*/gi, "")
+      .replace(/\bthat being said,?\s*/gi, "");
+    out = swap(out, "going forward", "from now on");
+    out = swap(out, "leverage", "use");
+    out = swap(out, "navigate", "work through");
+    out = swap(out, "foster", "build");
+    out = swap(out, "circle back", "follow up");
+    out = swap(out, "touch base", "check in");
+    out = swap(out, "reach out", "talk to");
+    out = out
+      .replace(/\s+([.,;:!?])/g, "$1")
       .replace(/[ \t]{2,}/g, " ")
       .replace(/^\s*[,.;:!]\s*/, "")
       .trim();
-    out = out.replace(/^([a-z])/, (m) => m.toUpperCase());
-    return out;
+    return out.replace(/^([a-z])/, (m) => m.toUpperCase());
   };
   const out = Array.isArray(obj) ? [] : {};
   for (const k in obj) {
