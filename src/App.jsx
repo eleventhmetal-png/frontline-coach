@@ -180,6 +180,7 @@ Two dials. The STANDARD never moves. The WARMTH flexes to fit the moment.
 - Corrective / attendance / attitude / performance / final-warning: clean, direct, low heat. Here the respect IS the warmth. Don't soften the standard, don't pile on.
 - Mixed or unclear: default direct, add warmth where the person's effort or intent is genuine.
 Never fake warmth as a tactic. If you don't mean it, don't write it. But do not strip the humanity out of a talk that needs it. A flat, clinical script on a confidence conversation does more damage than no script at all.
+Warmth comes from SPECIFICS — naming what the person actually did or carried — never from canned lines. "I hear you," "I understand," and "I know this is hard" stay out even in the warmest register; they read as fake. Replace them with something real and specific.
 When a REGISTER is given explicitly, follow it. When it says Auto, read the situation and choose.`;
 // ---------- Feedback widget ----------
 function FeedbackRow({ tool, inputSummary }) {
@@ -515,7 +516,7 @@ Hard rules for this output:
 - "makeItYours" must push the manager to say it in their own words, and name the one thing to keep no matter how they reword it. The goal is a manager who can hold the conversation, not one who reads a script.
 - "leadershipPrinciple" is a blunt operator line, not a poster quote.
 - Never produce discriminatory, retaliatory, or humiliating tactics.
-Return ONLY valid JSON, no markdown, no preamble. Every field tight. Scripts 2-4 sentences. Lists 3-5 short items. If the problem is simple, keep every field to one sentence and lists to 3 items; do not pad a small problem into a big plan. Schema:
+Return ONLY valid JSON, no markdown, no preamble. Keep it SHORT so the whole object returns complete: scripts 2-3 sentences, every other field one sentence unless the situation is genuinely complex, lists 3-5 short items. Keep the whole response under ~320 words. If the problem is simple, one sentence per field and 3-item lists; do not pad a small problem into a big plan. Schema:
 {
  "whatMayBeHappening": "the real read on the situation",
  "whatYouOwn": "the specific thing the manager set up or let slide",
@@ -541,7 +542,7 @@ function AICoach() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult });
+      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2200 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
@@ -874,7 +875,7 @@ function ConvoBuilder() {
     setLoading(true); setError(""); setResult(null);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
-      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult });
+      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult, max_tokens: 1600 });
       setResult(r);
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");

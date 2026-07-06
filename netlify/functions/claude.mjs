@@ -29,8 +29,9 @@ export default async (req) => {
 
     const body = {
       model: chosenModel,
-      // Client may request fewer; hard ceiling stays 2000 so nothing runs away.
-      max_tokens: Math.min(Number(max_tokens) || 1000, 2000),
+      // Client may request fewer; hard ceiling stays 3000 so nothing runs away
+      // but the longer tools (Coach's 13-field plan) can finish their JSON.
+      max_tokens: Math.min(Number(max_tokens) || 1000, 3000),
       messages,
     };
 
