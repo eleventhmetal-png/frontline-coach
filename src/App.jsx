@@ -10,13 +10,14 @@ import {
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
 const MODEL_SMART = "claude-sonnet-4-6";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
-async function rawClaude(messages, { model, system, max_tokens } = {}) {
+async function rawClaude(messages, { model, system, max_tokens, temperature } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: model || MODEL_SMART,
       max_tokens: max_tokens || 1000,
+      ...(temperature != null ? { temperature } : {}),
       ...(system ? { system } : {}),
       messages,
     }),
@@ -93,7 +94,7 @@ function extractPartialJson(text) {
   return obj;
 }
 // streaming core — reads Anthropic SSE via the proxy, calls onText(fullSoFar)
-async function streamClaude(messages, { model, system, max_tokens, onText } = {}) {
+async function streamClaude(messages, { model, system, max_tokens, temperature, onText } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -101,6 +102,7 @@ async function streamClaude(messages, { model, system, max_tokens, onText } = {}
       stream: true,
       model: model || MODEL_SMART,
       max_tokens: max_tokens || 1000,
+      ...(temperature != null ? { temperature } : {}),
       ...(system ? { system } : {}),
       messages,
     }),
@@ -1258,7 +1260,7 @@ ${difficulty === "Hard"
     : difficulty === "Easy"
     ? "Guarded for a second, then reasonable. You want to do better, you just got caught off guard."
     : "Realistically guarded. Some pushback, some openness. Normal person having a normal hard conversation."}
-Open the scene with one believable line as the employee reacting to being pulled aside. Don't narrate. Just talk.`;
+Open the scene with ONE believable line that fits THIS exact scenario and difficulty — not a generic greeting. BANNED openers (never use these or any variation): "what's up," "did I do something wrong," "you wanted to see me," "am I in trouble," "what's this about." Those are lazy and every version sounds the same. Instead, open from where this employee's head actually is right now: the defensive one comes in already braced or irritated; the one upset about feedback is still stung and guarded; the one threatening to quit is half out the door; the one who blames others is already lining up who's really at fault; the high performer with the attitude acts a little above it; the new hire who's checked out barely looks up. Show that posture in their own words, mid-headspace, like the conversation caught them somewhere. Make it specific and make it different every time — never repeat an opener you'd use for another scenario. Don't narrate. Just talk.`;
 }
 const rpScoreSystem = (ind) => `${voiceFor(ind)}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly. If they nailed something, say that too, specifically.
@@ -1311,7 +1313,7 @@ function Roleplay() {
     try {
       await streamChat(sys, [{ role: "user", content: "Begin the scene. Give your first line as the employee." }],
         (t) => { setHistory([{ role: "assistant", content: t }]); scrollDown(); },
-        { model: MODEL_FAST, max_tokens: 350 });
+        { model: MODEL_FAST, max_tokens: 350, temperature: 1 });
     } catch (e) {
       setError("Couldn't start the roleplay. Try again.");
     } finally {
@@ -1327,7 +1329,7 @@ function Roleplay() {
     try {
       await streamChat(sys, next,
         (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
-        { model: MODEL_FAST, max_tokens: 350 });
+        { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
     } catch (e) {
       setError("No reply came back. Try sending again.");
     } finally {
