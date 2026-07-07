@@ -22,7 +22,7 @@ export default async (req) => {
   ]);
 
   try {
-    const { messages, max_tokens, model, system, stream } = await req.json();
+    const { messages, max_tokens, model, system, stream, temperature } = await req.json();
     if (!Array.isArray(messages)) return json({ error: "messages is required" }, 400);
 
     const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL;
@@ -34,6 +34,13 @@ export default async (req) => {
       max_tokens: Math.min(Number(max_tokens) || 1000, 3000),
       messages,
     };
+
+    // Optional sampling temperature. Anthropic accepts 0–1; clamp so a bad or
+    // out-of-range client value can never break the call. Used to add variety to
+    // the roleplay employee (openers, phrasing). Omitted -> Anthropic's default.
+    if (typeof temperature === "number" && isFinite(temperature)) {
+      body.temperature = Math.min(Math.max(temperature, 0), 1);
+    }
 
     // Optional system prompt sent as a cached block. The VOICE/WORLD/schema spine
     // is large and identical on every call, so caching it cuts input reprocessing
