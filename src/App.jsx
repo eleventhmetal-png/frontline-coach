@@ -220,8 +220,8 @@ Express car wash. The team works the tunnel, prep station, vacuum lanes, sales l
   },
   restaurant: {
     label: "Restaurant",
-    world: `WORLD — this is the setting:
-Restaurant or food service. The team works front of house and back of house — servers, hosts, line cooks, prep, bar, bussers, shift leads. The business runs on speed of service, ticket times, food quality, guest experience, and labor cost. Busy means a full dining room, a wall of tickets, a wait list at the door. Slow means empty tables. Employees talk about covers, tickets, the rail, the line, sidework, tips, comps, 86'ing an item, turning tables. Match this language, not another industry's.`,
+    world: `WORLD — this is the setting, never deviate:
+Restaurant / food service. Front of house: servers, hosts, food runners, bussers, bartenders. Back of house: line cooks by station (grill, sauté, pantry), prep cooks, dish, expo. Leadership: shift lead, FOH/BOH manager, kitchen manager, GM. The business runs on speed of service, ticket times, food quality and consistency, guest experience, table turns, and food-cost and labor-cost percentages. Busy means a full dining room, a wall of tickets on the rail, expo slammed, a wait at the door, being "in the weeds." Slow means empty tables and a dead dining room. Employees talk about covers, tickets, the rail, the pass, the window, the line, sidework, turning tables, firing a table, 86'ing an item, comps, tips and tip-out. Never cars, lanes, memberships, pallets, or rooms. Any reference to work activity is restaurant work.`,
     examples: {
       coach: "e.g. My best server has started snapping at the new hosts and rolling her eyes in the pre-shift lineup. The rest of the front of house is pulling back from her.",
       pushbackContext: "What's the situation? (optional — e.g. asked him to finish his sidework before clocking out, third time this week)",
@@ -229,8 +229,8 @@ Restaurant or food service. The team works front of house and back of house — 
   },
   retail: {
     label: "Retail",
-    world: `WORLD — this is the setting:
-Retail store. The team works the sales floor, fitting rooms, stockroom, and registers — associates, key holders, shift leads, department leads. The business runs on conversion, units per transaction, customer experience, shrink, and labor. Busy means a packed floor and a line at the registers. Slow means a dead store. Employees talk about the floor, zones, go-backs, resets, planograms, the register, shrink, loss prevention. Match this language, not another industry's.`,
+    world: `WORLD — this is the setting, never deviate:
+Retail store. The team works the sales floor, fitting rooms, stockroom/back, and registers: sales associates, cashiers, stock associates, key holders, department leads, shift supervisors, assistant store manager (ASM), store manager (SM). The business runs on conversion rate, units per transaction (UPT), average transaction value (ATV), add-on/attachment, customer experience, shrink, and labor. Busy means a packed floor, a line at the registers, fitting rooms full. Slow means a dead store with no foot traffic. Employees talk about the floor, zones, coverage, go-backs, returns, resets and planograms, ringing up, the register/POS, restock, the back, foot traffic, shrink, and loss prevention. Never cars, tickets, kitchens, pallets, or rooms. Any reference to work activity is retail floor work.`,
     examples: {
       coach: "e.g. My best associate has started snapping at the new hires and rolling her eyes during the huddle. The rest of the floor is pulling back from her.",
       pushbackContext: "What's the situation? (optional — e.g. asked him to finish his zone before break, third time this week)",
@@ -238,8 +238,8 @@ Retail store. The team works the sales floor, fitting rooms, stockroom, and regi
   },
   warehouse: {
     label: "Warehouse",
-    world: `WORLD — this is the setting:
-Warehouse, distribution, or fulfillment. The team works receiving, picking, packing, loading, and shipping — associates, forklift operators, leads, supervisors. The business runs on throughput, pick rates, accuracy, safety, and labor. Busy means a heavy dock and orders backing up. Slow means an idle floor. Employees talk about picks, pallets, the dock, orders, scanners, rates, safety, PPE, forklifts. Match this language, not another industry's.`,
+    world: `WORLD — this is the setting, never deviate:
+Warehouse, distribution, or fulfillment. The team works receiving/inbound, picking, packing, staging, loading, and shipping: warehouse associates, pickers, packers, loaders, forklift operators, team leads, supervisors, ops manager. The business runs on throughput, units per hour (UPH) and pick rates, order accuracy, safety, and labor. Busy means a heavy dock, a full pick queue, orders backing up. Slow means an idle floor and an empty dock. Employees talk about picks, pick rate and UPH, pallets, the dock, receiving, staging, loading, orders, SKUs, scanners and RF guns, the pre-shift brief, stretches, PPE, and SOPs. Never cars, tables, guests, or rooms. Any reference to work activity is warehouse work.`,
     examples: {
       coach: "e.g. My fastest picker has started snapping at the new hires and rolling his eyes at stand-up. The rest of the crew is pulling back from him.",
       pushbackContext: "What's the situation? (optional — e.g. asked him to clear his pick zone before break, third time this week)",
@@ -247,8 +247,8 @@ Warehouse, distribution, or fulfillment. The team works receiving, picking, pack
   },
   hospitality: {
     label: "Hospitality",
-    world: `WORLD — this is the setting:
-Hotel or hospitality. The team works front desk, housekeeping, guest services, and back of house — agents, housekeepers, supervisors, managers. The business runs on occupancy, guest satisfaction, room readiness, service recovery, and labor. Busy means a full house and a lobby of check-ins. Slow means low occupancy. Employees talk about rooms, turns, check-ins, guests, comps, service recovery, the board. Match this language, not another industry's.`,
+    world: `WORLD — this is the setting, never deviate:
+Hotel / hospitality. The team works front desk, housekeeping, and guest services: front desk agents, night audit, bell/guest services, room attendants (housekeepers), floor/housekeeping supervisors, maintenance/engineering, front office manager, GM. The business runs on occupancy, guest satisfaction (reviews and NPS), room readiness and turns, service recovery, RevPAR, and labor. Busy means a full house, a lobby full of check-ins, a stack of dirty rooms to turn. Slow means low occupancy. Employees talk about rooms, turns, room attendants, the board, check-ins and check-outs, walk-ins, no-shows, the front desk, housekeeping, upgrades and comps, service recovery, and guest complaints. Never cars, lanes, tickets, pallets, or covers. Any reference to work activity is hotel work.`,
     examples: {
       coach: "e.g. My best front desk agent has started snapping at the new hires and rolling her eyes at the shift huddle. The rest of the team is pulling back from her.",
       pushbackContext: "What's the situation? (optional — e.g. asked her to finish her room turns before end of shift, third time this week)",
@@ -256,8 +256,8 @@ Hotel or hospitality. The team works front desk, housekeeping, guest services, a
   },
   fieldservice: {
     label: "Field Service",
-    world: `WORLD — this is the setting:
-Field service or the trades — technicians running calls in the field (HVAC, plumbing, electrical, install, repair). The team is techs, dispatchers, and leads. The business runs on jobs completed, first-time fix rate, callbacks, safety, and drive time. Busy means a stacked schedule and calls waiting. Slow means open slots. Employees talk about calls, jobs, the truck, parts, callbacks, dispatch, and the customer's home or site. Match this language, not another industry's.`,
+    world: `WORLD — this is the setting, never deviate:
+Field service / the trades — technicians running calls in the field (HVAC, plumbing, electrical, install, repair). The team is techs, apprentices/helpers, dispatchers, service/field managers, and leads. The business runs on jobs completed, first-time fix rate, callback rate, technician utilization and wrench time, drive time, CSAT, and safety. Busy means a stacked schedule, the board full, back-to-back calls. Slow means open slots and holes in the schedule. Employees talk about calls, jobs, the board, the truck, parts, the work order/ticket, callbacks, dispatch, the route, drive time, wrench time, first-time fix, and the customer's home or site. Never cars in a lane, tables, pallets, or rooms. Any reference to work activity is field service work.`,
     examples: {
       coach: "e.g. My most experienced tech has started snapping at the new hires and blowing off dispatch. The rest of the crew is pulling back from him.",
       pushbackContext: "What's the situation? (optional — e.g. asked him to log his job notes before heading home, third time this week)",
@@ -947,6 +947,7 @@ function PushbackCoach() {
 // =====================================================
 const docSystem = (ind) => `${worldFor(ind)}
 You are Frontline Coach's documentation assistant. Turn the manager's rough notes into a clean, factual performance record. REMOVE insults, emotionally loaded language, assumptions, unverifiable motives, diagnoses, exaggeration, and any retaliatory or discriminatory language. State only observable behavior and facts. Never state or imply whether someone should be terminated.
+Exclude protected-class details, medical speculation, family matters, rumor, and personal opinion. If the employee stated a fact that's directly relevant, record only the operational fact, not the diagnosis or the backstory — e.g. "arrived 25 minutes late; cited an appointment," never "has ongoing medical issues."
 Return ONLY valid JSON, no markdown. Schema:
 {
  "dateTime": "use what's given or write 'To be confirmed'",
@@ -1280,7 +1281,9 @@ function Roleplay() {
   const [error, setError] = useState("");
   const endRef = useRef(null);
   const inputRef = useRef(null);
-  const sys = rpSystem(scenario, difficulty, industry);
+  // Lock the industry the moment the roleplay starts. Changing the picker
+  // mid-session can't drift the employee's world or misscore the debrief.
+  const lockedIndustry = useRef(DEFAULT_INDUSTRY);
   function scrollDown() {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
@@ -1290,6 +1293,8 @@ function Roleplay() {
     }, 300);
   }
   async function start() {
+    lockedIndustry.current = industry; // snapshot for the whole session
+    const sys = rpSystem(scenario, difficulty, lockedIndustry.current);
     setLoading(true); setError(""); setScore(null);
     setHistory([{ role: "assistant", content: "" }]);
     setStarted(true);
@@ -1309,6 +1314,7 @@ function Roleplay() {
     const next = [...history, { role: "user", content: draft.trim() }];
     setHistory([...next, { role: "assistant", content: "" }]);
     setDraft(""); setLoading(true); scrollDown();
+    const sys = rpSystem(scenario, difficulty, lockedIndustry.current);
     try {
       await streamChat(sys, next,
         (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
@@ -1323,7 +1329,7 @@ function Roleplay() {
     setLoading(true); setError("");
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
     try {
-      const r = await callClaude(rpScoreSystem(industry), `Scenario: ${scenario}\n\n${transcript}`);
+      const r = await callClaude(rpScoreSystem(lockedIndustry.current), `Scenario: ${scenario}\n\n${transcript}`);
       setScore(r);
       scrollDown();
     } catch (e) {
@@ -1573,6 +1579,7 @@ function HomeView({ go }) {
           <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">Coaching for</span>
         </div>
         <IndustryPicker id="industry-home" />
+        <p className="text-[11px] text-neutral-500 mt-2">Pick the closest setting. General works for any frontline team.</p>
       </div>
       <button onClick={() => go("coach")}
         className="w-full flex items-center justify-between rounded-xl p-5 mb-4 text-left text-neutral-950"
