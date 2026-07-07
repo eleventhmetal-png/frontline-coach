@@ -1,16 +1,15 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, createContext, useContext } from "react";
 import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X, ThumbsUp, ThumbsDown
+  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
 const MODEL_SMART = "claude-sonnet-4-6";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
-
 async function rawClaude(messages, { model, system, max_tokens } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
@@ -193,10 +192,93 @@ async function submitFeedback(tool, rating, inputSummary) {
 }
 // ---------- shared UI bits ----------
 const ACCENT = "#E8923C";
-// The world every AI tool lives in. Injected everywhere alongside VOICE.
-const WORLD = `WORLD — this is the setting, never deviate:
-Express car wash. The team works the tunnel, prep station, vacuum lanes, sales lanes, and pay stations. Roles: Sales Consultant (SC), Team Lead (TL), Assistant Site Manager (ASM), General Manager (GM). The business runs on speed, quality, service, labor efficiency, and converting retail customers into Club members. Busy means cars backing up in the lanes and the line wrapping the lot. Slow means an empty tunnel. Weather kills volume. Employees talk about cars, lanes, memberships, pitching, prepping, loading, towels, chemicals. Never tables, orders, tickets, kitchens, or customers waiting on food. Any reference to work activity is car wash work.`;
-const VOICE = `${WORLD}
+// =====================================================
+// INDUSTRY LAYERS
+// The setting each AI tool operates in. "General" is the neutral default so the
+// app works for any manager out of the box — no trade slang unless the user's
+// own words call for it. The rest add industry-specific language on top.
+// This is the filter: carwash is now ONE option, not the hardcoded world.
+// =====================================================
+const INDUSTRIES = {
+  general: {
+    label: "General",
+    world: `WORLD — this is the setting:
+A frontline team in a service or operations business. The manager runs shifts and holds people accountable. Stay industry-neutral: talk about the team, the shift, the floor, the standard, the customer, the work. Do NOT invent an industry and do NOT use trade-specific slang. Mirror whatever terms the manager uses in their own words — if they name their setting (kitchen, sales floor, dock, job site, front desk, tunnel), match that language. When the setting is unclear, stay general. Never guess an industry or force jargon that wasn't given to you.`,
+    examples: {
+      coach: "e.g. My most reliable person has started snapping at new hires and rolling their eyes in front of the team. Others are starting to pull back from them.",
+      pushbackContext: "What's the situation? (optional — e.g. asked them to finish a task before leaving, third time this week)",
+    },
+  },
+  carwash: {
+    label: "Car Wash",
+    world: `WORLD — this is the setting, never deviate:
+Express car wash. The team works the tunnel, prep station, vacuum lanes, sales lanes, and pay stations. Roles: Sales Consultant (SC), Team Lead (TL), Assistant Site Manager (ASM), General Manager (GM). The business runs on speed, quality, service, labor efficiency, and converting retail customers into Club members. Busy means cars backing up in the lanes and the line wrapping the lot. Slow means an empty tunnel. Weather kills volume. Employees talk about cars, lanes, memberships, pitching, prepping, loading, towels, chemicals. Never tables, orders, tickets, kitchens, or customers waiting on food. Any reference to work activity is car wash work.`,
+    examples: {
+      coach: "e.g. My best closer has started snapping at new hires and rolling his eyes in pre-shift. Other staff are pulling back from him.",
+      pushbackContext: "What's the situation? (optional — e.g. asked her to restock towels in lane 2, third time this week)",
+    },
+  },
+  restaurant: {
+    label: "Restaurant",
+    world: `WORLD — this is the setting:
+Restaurant or food service. The team works front of house and back of house — servers, hosts, line cooks, prep, bar, bussers, shift leads. The business runs on speed of service, ticket times, food quality, guest experience, and labor cost. Busy means a full dining room, a wall of tickets, a wait list at the door. Slow means empty tables. Employees talk about covers, tickets, the rail, the line, sidework, tips, comps, 86'ing an item, turning tables. Match this language, not another industry's.`,
+    examples: {
+      coach: "e.g. My best server has started snapping at the new hosts and rolling her eyes in the pre-shift lineup. The rest of the front of house is pulling back from her.",
+      pushbackContext: "What's the situation? (optional — e.g. asked him to finish his sidework before clocking out, third time this week)",
+    },
+  },
+  retail: {
+    label: "Retail",
+    world: `WORLD — this is the setting:
+Retail store. The team works the sales floor, fitting rooms, stockroom, and registers — associates, key holders, shift leads, department leads. The business runs on conversion, units per transaction, customer experience, shrink, and labor. Busy means a packed floor and a line at the registers. Slow means a dead store. Employees talk about the floor, zones, go-backs, resets, planograms, the register, shrink, loss prevention. Match this language, not another industry's.`,
+    examples: {
+      coach: "e.g. My best associate has started snapping at the new hires and rolling her eyes during the huddle. The rest of the floor is pulling back from her.",
+      pushbackContext: "What's the situation? (optional — e.g. asked him to finish his zone before break, third time this week)",
+    },
+  },
+  warehouse: {
+    label: "Warehouse",
+    world: `WORLD — this is the setting:
+Warehouse, distribution, or fulfillment. The team works receiving, picking, packing, loading, and shipping — associates, forklift operators, leads, supervisors. The business runs on throughput, pick rates, accuracy, safety, and labor. Busy means a heavy dock and orders backing up. Slow means an idle floor. Employees talk about picks, pallets, the dock, orders, scanners, rates, safety, PPE, forklifts. Match this language, not another industry's.`,
+    examples: {
+      coach: "e.g. My fastest picker has started snapping at the new hires and rolling his eyes at stand-up. The rest of the crew is pulling back from him.",
+      pushbackContext: "What's the situation? (optional — e.g. asked him to clear his pick zone before break, third time this week)",
+    },
+  },
+  hospitality: {
+    label: "Hospitality",
+    world: `WORLD — this is the setting:
+Hotel or hospitality. The team works front desk, housekeeping, guest services, and back of house — agents, housekeepers, supervisors, managers. The business runs on occupancy, guest satisfaction, room readiness, service recovery, and labor. Busy means a full house and a lobby of check-ins. Slow means low occupancy. Employees talk about rooms, turns, check-ins, guests, comps, service recovery, the board. Match this language, not another industry's.`,
+    examples: {
+      coach: "e.g. My best front desk agent has started snapping at the new hires and rolling her eyes at the shift huddle. The rest of the team is pulling back from her.",
+      pushbackContext: "What's the situation? (optional — e.g. asked her to finish her room turns before end of shift, third time this week)",
+    },
+  },
+  fieldservice: {
+    label: "Field Service",
+    world: `WORLD — this is the setting:
+Field service or the trades — technicians running calls in the field (HVAC, plumbing, electrical, install, repair). The team is techs, dispatchers, and leads. The business runs on jobs completed, first-time fix rate, callbacks, safety, and drive time. Busy means a stacked schedule and calls waiting. Slow means open slots. Employees talk about calls, jobs, the truck, parts, callbacks, dispatch, and the customer's home or site. Match this language, not another industry's.`,
+    examples: {
+      coach: "e.g. My most experienced tech has started snapping at the new hires and blowing off dispatch. The rest of the crew is pulling back from him.",
+      pushbackContext: "What's the situation? (optional — e.g. asked him to log his job notes before heading home, third time this week)",
+    },
+  },
+};
+const DEFAULT_INDUSTRY = "general";
+function worldFor(key) {
+  return (INDUSTRIES[key] || INDUSTRIES[DEFAULT_INDUSTRY]).world;
+}
+function examplesFor(key) {
+  return (INDUSTRIES[key] || INDUSTRIES[DEFAULT_INDUSTRY]).examples;
+}
+// Industry setting shared across the app. No auth/profile yet, so it lives in app
+// state and persists to localStorage. When Phase 3 auth lands, move this to the
+// user profile so it follows the account instead of the browser.
+const IndustryContext = createContext({ industry: DEFAULT_INDUSTRY, setIndustry: () => {} });
+const useIndustry = () => useContext(IndustryContext);
+// The voice — same everywhere, sitting on top of whichever WORLD is active.
+function voiceFor(key) {
+  return `${worldFor(key)}
 VOICE — follow this exactly:
 You are a frontline operator who has run real shifts and held real people accountable. Not a consultant, not HR, not a life coach. You're standing next to this manager on the floor, not presenting to them.
 How you write:
@@ -210,6 +292,7 @@ How you write:
 - Match depth to the problem. A simple question gets a short answer. Save the detail for genuinely complex situations or when the manager asks for more. A manager on the floor has ten seconds, not ten minutes.
 Banned phrases (they read as fake, NEVER use them): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward," "I understand," "I hear you," "I know this is hard." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
 The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.`;
+}
 // Register logic — how warm vs. how direct. Injected into the conversation tools.
 // The standard never moves; the warmth flexes. Built for new managers learning to
 // sound human instead of reading a card.
@@ -396,6 +479,26 @@ function ResultCard({ children }) {
     </div>
   );
 }
+// ---------- Industry picker ----------
+// Native select for reliability on mobile. Reads/writes the shared industry setting.
+function IndustryPicker({ id }) {
+  const { industry, setIndustry } = useIndustry();
+  return (
+    <div className="relative">
+      <select
+        id={id}
+        value={industry}
+        onChange={(e) => setIndustry(e.target.value)}
+        className="w-full appearance-none rounded-lg bg-neutral-900 border border-neutral-800 px-3.5 py-2.5 pr-9 text-[15px] font-semibold text-neutral-100 focus:outline-none focus:border-neutral-600"
+      >
+        {Object.entries(INDUSTRIES).map(([k, v]) => (
+          <option key={k} value={k} className="bg-neutral-900 text-neutral-100">{v.label}</option>
+        ))}
+      </select>
+      <ChevronLeft size={16} className="absolute right-3 top-1/2 -translate-y-1/2 -rotate-90 text-neutral-500 pointer-events-none" />
+    </div>
+  );
+}
 // ---------- share card ----------
 function wrapLines(ctx, text, maxW) {
   const words = (text || "").split(/\s+/);
@@ -570,10 +673,8 @@ const COACH_SITUATIONS = [
   "Shift performance is declining",
   "Employee has potential but no confidence",
 ];
-const COACH_SYSTEM = `${VOICE}
-
+const coachSystem = (ind) => `${voiceFor(ind)}
 ${REGISTER}
-
 You are the AI Coach inside Frontline Coach. A manager describes a people problem on their shift. You diagnose it, tell them what they own, and hand them a plan they can run today. You challenge them when they're avoiding the conversation, being vague, overreacting, or blaming the team for a gap they created. You separate skill from will.
 Hard rules for this output:
 - LEADER FIRST. Before you diagnose the team, diagnose the leader. When a manager asks why performance, morale, or a person is declining, your first move is what the leader did or didn't do to cause it. Only after that do you look at the team. Never hand a manager an analysis that points only outward; that builds blame, not ownership.
@@ -603,6 +704,7 @@ Return ONLY valid JSON, no markdown, no preamble. Keep it SHORT so the whole obj
  "leadershipPrinciple": "one blunt line"
 }`;
 function AICoach() {
+  const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -612,7 +714,7 @@ function AICoach() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
+      const r = await callClaudeStream(coachSystem(industry), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
@@ -644,7 +746,7 @@ function AICoach() {
         value={input}
         onChange={(e) => setInput(e.target.value)}
         rows={4}
-        placeholder="e.g. My best closer has started snapping at new hires and rolling his eyes in pre-shift. Other staff are pulling back from him."
+        placeholder={examplesFor(industry).coach}
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
       />
       <div className="flex flex-wrap gap-2 my-3">
@@ -715,11 +817,9 @@ const PUSHBACK_COMMON = [
   "That's not fair",
 ];
 const TONES = ["Calm", "Firm", "Coaching", "Formal", "Supportive", "Direct"];
-const PUSHBACK_SYSTEM = `${VOICE}
-
+const pushbackSystem = (ind) => `${voiceFor(ind)}
 ${REGISTER}
 For this tool, the selected TONE is the register — match it exactly.
-
 A manager just got pushback from an employee, live, and needs the words right now. Give them a response that holds the standard without escalating and without groveling. The "immediateResponse" is the whole game — it has to be something a real manager would actually say standing there, not a scripted HR line.
 Situation rules:
 - If SITUATION details are provided, anchor every field to that exact situation. Do not invent facts beyond what's given.
@@ -746,6 +846,7 @@ Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
  "donts": ["2-3 short don'ts, the traps to avoid here, max ~10 words each"]
 }`;
 function PushbackCoach() {
+  const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [context, setContext] = useState("");
   const [tone, setTone] = useState("Firm");
@@ -769,7 +870,7 @@ function PushbackCoach() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaudeStream(PUSHBACK_SYSTEM, `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
+      const r = await callClaudeStream(pushbackSystem(industry), `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a response. Try again.");
@@ -798,7 +899,7 @@ function PushbackCoach() {
         value={context}
         onChange={(e) => setContext(e.target.value)}
         rows={2}
-        placeholder="What's the situation? (optional — e.g. asked her to restock towels in lane 2, third time this week)"
+        placeholder={examplesFor(industry).pushbackContext}
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3"
       />
       <div className="mb-3">
@@ -844,7 +945,7 @@ function PushbackCoach() {
 // =====================================================
 // FEATURE 3 — DOCUMENTATION ASSISTANT
 // =====================================================
-const DOC_SYSTEM = `${WORLD}
+const docSystem = (ind) => `${worldFor(ind)}
 You are Frontline Coach's documentation assistant. Turn the manager's rough notes into a clean, factual performance record. REMOVE insults, emotionally loaded language, assumptions, unverifiable motives, diagnoses, exaggeration, and any retaliatory or discriminatory language. State only observable behavior and facts. Never state or imply whether someone should be terminated.
 Return ONLY valid JSON, no markdown. Schema:
 {
@@ -859,6 +960,7 @@ Return ONLY valid JSON, no markdown. Schema:
  "cleanedNote": "a single tight paragraph combining the above into a record ready to file"
 }`;
 function DocAssistant() {
+  const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -867,7 +969,7 @@ function DocAssistant() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaude(DOC_SYSTEM, input);
+      const r = await callClaude(docSystem(industry), input);
       setResult(r);
     } catch (e) {
       setError("Couldn't clean that up. Try again.");
@@ -919,11 +1021,9 @@ function DocAssistant() {
 // FEATURE 4 — CONVERSATION BUILDER
 // =====================================================
 const CONVO_TYPES = ["Coaching", "Corrective", "Attendance", "Attitude", "Recognition", "Resetting expectations", "Final warning prep", "Trust repair"];
-const CONVO_SYSTEM = `${VOICE}
-
+const convoSystem = (ind) => `${voiceFor(ind)}
 ${REGISTER}
 For this tool, the selected TYPE sets the register. Recognition, Coaching, and Trust repair carry warmth; Corrective, Attendance, Attitude, and Final warning prep stay clean and direct. The standard holds either way.
-
 You build a manager a plan for a real conversation. Every script line is spoken, in their voice. Keep it to a few sentences each.
 Return ONLY valid JSON, no markdown. Schema:
 {
@@ -943,6 +1043,7 @@ Return ONLY valid JSON, no markdown. Schema:
  "documentationNote": "one-line factual note"
 }`;
 function ConvoBuilder() {
+  const { industry } = useIndustry();
   const [type, setType] = useState("Coaching");
   const [name, setName] = useState("");
   const [situation, setSituation] = useState("");
@@ -955,7 +1056,7 @@ function ConvoBuilder() {
     setLoading(true); setError(""); setResult(null);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
-      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult, max_tokens: 1800 });
+      const r = await callClaudeStream(convoSystem(industry), user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");
@@ -1038,7 +1139,7 @@ const DIAG_QUESTIONS = [
   { key: "committed", q: "Have they committed to improving?", opts: ["Yes", "No"] },
   { key: "consequences", q: "Are the consequences clear to them?", opts: ["Yes", "No"] },
 ];
-const DIAG_SYSTEM = `${VOICE}
+const diagSystem = (ind) => `${voiceFor(ind)}
 You diagnose whether a performance issue is primarily Skill, Will, Clarity, Capacity, Confidence, Accountability, Process failure, or Leadership failure. Land on "Leadership failure" or "Clarity" when the answers point there. Do not default to blaming the employee.
 Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
 {
@@ -1052,6 +1153,7 @@ Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
  "followUpInterval": "when to check"
 }`;
 function SkillWill() {
+  const { industry } = useIndustry();
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1063,7 +1165,7 @@ function SkillWill() {
     setLoading(true); setError(""); setResult(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
     try {
-      const r = await callClaude(DIAG_SYSTEM, `${summary}\nNotes: ${notes || "none"}`);
+      const r = await callClaude(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`);
       setResult(r);
     } catch (e) {
       setError("Couldn't run the diagnostic. Try again.");
@@ -1137,10 +1239,10 @@ const RP_SCENARIOS = [
   "Employee who argues every direction",
 ];
 const RP_DIFFICULTY = ["Easy", "Realistic", "Hard"];
-function rpSystem(scenario, difficulty) {
-  return `${WORLD}
+function rpSystem(scenario, difficulty, ind) {
+  return `${worldFor(ind)}
 You are playing an EMPLOYEE in a roleplay so a frontline manager can practice a hard conversation. Scenario: "${scenario}". Difficulty: ${difficulty}.
-You are an hourly car wash employee. Your shift, your complaints, your excuses, and anything you mention about work happens at the car wash. If you reference being busy, it's cars in the lanes, not tables or orders.
+You are an hourly frontline employee in the setting described above. Your shift, your complaints, your excuses, and anything you mention about work happen in that setting. Use that world's language for the work — if you reference being busy, it's the work of that setting, not some other industry's.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
 - Short. Real speech. Half-sentences, "I mean," "look," "whatever," trailing off. 1-3 sentences max per turn.
 - You're a person with a side to the story, not a problem to be solved.
@@ -1154,7 +1256,7 @@ ${difficulty === "Hard"
     : "Realistically guarded. Some pushback, some openness. Normal person having a normal hard conversation."}
 Open the scene with one believable line as the employee reacting to being pulled aside. Don't narrate. Just talk.`;
 }
-const RP_SCORE_SYSTEM = `${VOICE}
+const rpScoreSystem = (ind) => `${voiceFor(ind)}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly. If they nailed something, say that too, specifically.
 Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Schema:
 {
@@ -1167,6 +1269,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "doThisNextTime": "one specific change"
 }`;
 function Roleplay() {
+  const { industry } = useIndustry();
   const [scenario, setScenario] = useState(RP_SCENARIOS[0]);
   const [difficulty, setDifficulty] = useState("Realistic");
   const [started, setStarted] = useState(false);
@@ -1177,7 +1280,7 @@ function Roleplay() {
   const [error, setError] = useState("");
   const endRef = useRef(null);
   const inputRef = useRef(null);
-  const sys = rpSystem(scenario, difficulty);
+  const sys = rpSystem(scenario, difficulty, industry);
   function scrollDown() {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
@@ -1220,7 +1323,7 @@ function Roleplay() {
     setLoading(true); setError("");
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
     try {
-      const r = await callClaude(RP_SCORE_SYSTEM, `Scenario: ${scenario}\n\n${transcript}`);
+      const r = await callClaude(rpScoreSystem(industry), `Scenario: ${scenario}\n\n${transcript}`);
       setScore(r);
       scrollDown();
     } catch (e) {
@@ -1356,6 +1459,7 @@ function Roleplay() {
 // MORE — tools menu
 // =====================================================
 function MoreView({ go }) {
+  const { industry } = useIndustry();
   const tools = [
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
@@ -1376,6 +1480,19 @@ function MoreView({ go }) {
             <ArrowRight size={18} className="ml-auto text-neutral-600" />
           </button>
         ))}
+      </div>
+      <div className="mt-6">
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Settings</div>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Briefcase size={16} style={{ color: ACCENT }} />
+            <span className="font-semibold text-neutral-100">Your industry</span>
+          </div>
+          <p className="text-xs text-neutral-500 mb-3">
+            Sets the language every tool uses. Leave it on General and the coach mirrors your own words instead of any one trade.
+          </p>
+          <IndustryPicker id="industry-more" />
+        </div>
       </div>
     </div>
   );
@@ -1450,6 +1567,13 @@ function HomeView({ go }) {
         </div>
         <div className="text-xl font-bold text-neutral-50 mt-1">{today}</div>
       </div>
+      <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5">
+        <div className="flex items-center gap-2 mb-2">
+          <Briefcase size={15} style={{ color: ACCENT }} />
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">Coaching for</span>
+        </div>
+        <IndustryPicker id="industry-home" />
+      </div>
       <button onClick={() => go("coach")}
         className="w-full flex items-center justify-between rounded-xl p-5 mb-4 text-left text-neutral-950"
         style={{ backgroundColor: ACCENT }}>
@@ -1488,12 +1612,26 @@ const NAV = [
 ];
 export default function FrontlineCoach() {
   const [tab, setTab] = useState("home");
+  // Industry setting — persisted to localStorage until Phase 3 auth moves it to the profile.
+  const [industry, setIndustryState] = useState(() => {
+    try {
+      const saved = localStorage.getItem("fc_industry");
+      return saved && INDUSTRIES[saved] ? saved : DEFAULT_INDUSTRY;
+    } catch (e) {
+      return DEFAULT_INDUSTRY;
+    }
+  });
+  const setIndustry = (v) => {
+    setIndustryState(v);
+    try { localStorage.setItem("fc_industry", v); } catch (e) {}
+  };
   const scrollRef = useRef(null);
   const go = (id) => {
     setTab(id);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   };
   return (
+    <IndustryContext.Provider value={{ industry, setIndustry }}>
     <div className="fixed inset-0 bg-neutral-950 text-neutral-100 flex justify-center">
       {/* Hidden Netlify Forms registration — required for submissions to be captured */}
       <form name="tool-feedback" data-netlify="true" hidden>
@@ -1549,5 +1687,6 @@ export default function FrontlineCoach() {
         </div>
       </div>
     </div>
+    </IndustryContext.Provider>
   );
 }
