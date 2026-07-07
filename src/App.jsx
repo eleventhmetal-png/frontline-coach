@@ -313,6 +313,34 @@ function Quote({ children }) {
     </div>
   );
 }
+// Do / Don't glance card — one per result, 2-3 items a side, generated with the response.
+function DoDontCard({ dos, donts }) {
+  if (!(dos && dos.length) && !(donts && donts.length)) return null;
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-2.5">
+      <div className="rounded-lg border border-green-900/40 bg-green-950/20 p-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-green-400 mb-2">
+          <Check size={13} /> Do
+        </div>
+        <ul className="space-y-1.5">
+          {(dos || []).map((d, i) => (
+            <li key={i} className="text-[13px] text-neutral-200 leading-snug">{d}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-red-400 mb-2">
+          <X size={13} /> Don't
+        </div>
+        <ul className="space-y-1.5">
+          {(donts || []).map((d, i) => (
+            <li key={i} className="text-[13px] text-neutral-200 leading-snug">{d}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 // ---------- Loading messages ----------
 const LOADING_LINES = [
   "Reading the situation…",
@@ -553,6 +581,7 @@ Hard rules for this output:
 - "whatToSay" is the actual words, spoken. Not a description of what to say. Write what comes out of their mouth. Match the REGISTER — a confidence talk sounds human, a corrective talk stays clean.
 - "howToDeliver" is coaching on DELIVERY, not more content. Tone, pace, where to slow down, where to hold firm, what to read on their face. This is where a new manager learns to sound human instead of reading a card off the wall. Never leave it generic.
 - "makeItYours" must push the manager to say it in their own words, and name the one thing to keep no matter how they reword it. The goal is a manager who can hold the conversation, not one who reads a script.
+- "dos" and "donts" are a quick glance card for THIS conversation: 2-3 items each, max ~10 words, concrete moves and traps specific to this situation and register. Do not restate the fields above.
 - "leadershipPrinciple" is a blunt operator line, not a poster quote.
 - Never produce discriminatory, retaliatory, or humiliating tactics.
 Return ONLY valid JSON, no markdown, no preamble. Keep it SHORT so the whole object returns complete: scripts 2-3 sentences, every other field one sentence unless the situation is genuinely complex, lists 3-5 short items. Keep the whole response under ~320 words. If the problem is simple, one sentence per field and 3-item lists; do not pad a small problem into a big plan. Schema:
@@ -565,6 +594,8 @@ Return ONLY valid JSON, no markdown, no preamble. Keep it SHORT so the whole obj
  "whatToSay": "the spoken opening, in their voice, matched to the register",
  "howToDeliver": "how to carry it — tone, pace, where to slow down, where to hold firm, what to read on their face. How to say it, not what.",
  "makeItYours": "one line: say it in your own words, and the one thing to keep no matter how you word it",
+ "dos": ["2-3 short do's for this conversation, max ~10 words each"],
+ "donts": ["2-3 short don'ts, the traps to avoid here, max ~10 words each"],
  "watchFor": ["3-4 signals to read in the moment"],
  "nextSteps": ["actions with an owner and a deadline"],
  "documentThis": "one factual paragraph, no emotion, no motive",
@@ -581,7 +612,7 @@ function AICoach() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2200 });
+      const r = await callClaudeStream(COACH_SYSTEM, `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
@@ -598,6 +629,8 @@ function AICoach() {
     `WHAT TO SAY\n${result.whatToSay}`,
     `HOW TO DELIVER IT\n${result.howToDeliver}`,
     `MAKE IT YOURS\n${result.makeItYours}`,
+    `DO\n- ${(result.dos||[]).join("\n- ")}`,
+    `DON'T\n- ${(result.donts||[]).join("\n- ")}`,
     `WATCH FOR\n- ${(result.watchFor||[]).join("\n- ")}`,
     `NEXT STEPS\n- ${(result.nextSteps||[]).join("\n- ")}`,
     `DOCUMENT THIS\n${result.documentThis}`,
@@ -645,6 +678,7 @@ function AICoach() {
           {result.whatToSay && <Section label="What to say" accent><Quote>{result.whatToSay}</Quote></Section>}
           {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
           {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          <DoDontCard dos={result.dos} donts={result.donts} />
           {result.watchFor?.length > 0 && <Section label="Watch for"><BulletList items={result.watchFor} /></Section>}
           {result.nextSteps?.length > 0 && <Section label="Agree on next steps"><BulletList items={result.nextSteps} /></Section>}
           {result.documentThis && <Section label="Document this">{result.documentThis}</Section>}
@@ -707,7 +741,9 @@ Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
  "boundaryStatement": "the line, calm and clear",
  "escalationOption": "what to do if it keeps happening",
  "documentationNote": "one factual line for the file",
- "makeItYours": "one line: say it in your own words, keep the standard intact"
+ "makeItYours": "one line: say it in your own words, keep the standard intact",
+ "dos": ["2-3 short do's for this exchange, max ~10 words each"],
+ "donts": ["2-3 short don'ts, the traps to avoid here, max ~10 words each"]
 }`;
 function PushbackCoach() {
   const [input, setInput] = useState("");
@@ -726,12 +762,14 @@ function PushbackCoach() {
     `BOUNDARY: ${result.boundaryStatement}`,
     `IF IT CONTINUES: ${result.escalationOption}`,
     `MAKE IT YOURS: ${result.makeItYours}`,
+    `DO\n- ${(result.dos||[]).join("\n- ")}`,
+    `DON'T\n- ${(result.donts||[]).join("\n- ")}`,
   ].join("\n\n") : "";
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null);
     try {
-      const r = await callClaudeStream(PUSHBACK_SYSTEM, `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 700 });
+      const r = await callClaudeStream(PUSHBACK_SYSTEM, `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
       setResult(r);
     } catch (e) {
       setError("Couldn't generate a response. Try again.");
@@ -795,6 +833,7 @@ function PushbackCoach() {
           {result.escalationOption && <Section label="If it continues">{result.escalationOption}</Section>}
           {result.documentationNote && <Section label="Note for the file">{result.documentationNote}</Section>}
           {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          <DoDontCard dos={result.dos} donts={result.donts} />
           {!loading && <FeedbackRow tool="Pushback Coach" inputSummary={input} />}
         </ResultCard>
       )}
@@ -898,6 +937,8 @@ Return ONLY valid JSON, no markdown. Schema:
  "agreement": "the agreement language to land on",
  "closing": "how to close",
  "makeItYours": "one line: say it in your own words, and the one thing to keep no matter how you word it",
+ "dos": ["2-3 short do's for this conversation, max ~10 words each"],
+ "donts": ["2-3 short don'ts, the traps to avoid here, max ~10 words each"],
  "followUpPlan": "when and what to check",
  "documentationNote": "one-line factual note"
 }`;
@@ -914,7 +955,7 @@ function ConvoBuilder() {
     setLoading(true); setError(""); setResult(null);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
-      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult, max_tokens: 1600 });
+      const r = await callClaudeStream(CONVO_SYSTEM, user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");
@@ -932,6 +973,8 @@ function ConvoBuilder() {
     `LAND ON\n${result.agreement}`,
     `CLOSE\n${result.closing}`,
     `MAKE IT YOURS\n${result.makeItYours}`,
+    `DO\n- ${(result.dos||[]).join("\n- ")}`,
+    `DON'T\n- ${(result.donts||[]).join("\n- ")}`,
     `FOLLOW-UP\n${result.followUpPlan}`,
   ].join("\n\n") : "";
   return (
@@ -973,6 +1016,7 @@ function ConvoBuilder() {
           {result.agreement && <Section label="Land on">{result.agreement}</Section>}
           {result.closing && <Section label="Close">{result.closing}</Section>}
           {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+          <DoDontCard dos={result.dos} donts={result.donts} />
           {result.followUpPlan && <Section label="Follow-up">{result.followUpPlan}</Section>}
           {!loading && <FeedbackRow tool="Conversation Builder" inputSummary={situation} />}
         </ResultCard>
