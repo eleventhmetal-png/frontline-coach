@@ -1451,7 +1451,7 @@ function Roleplay() {
           <Section label="Accountability">{score.accountability}</Section>
           <Section label="Biggest miss" accent>{score.missedOpportunity}</Section>
           <Section label="Do this next time">{score.doThisNextTime}</Section>
-          <FeedbackRow tool="Roleplay" inputSummary={scenario} />
+          <FeedbackRow tool="Roleplay" inputSummary={lockedScenario.current} />
         </ResultCard>
       )}
       {!score && (
@@ -1493,7 +1493,6 @@ function Roleplay() {
 // MORE — tools menu
 // =====================================================
 function MoreView({ go }) {
-  const { industry } = useIndustry();
   const tools = [
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
