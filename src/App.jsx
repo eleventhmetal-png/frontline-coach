@@ -1690,7 +1690,7 @@ export default function FrontlineCoach() {
           )}
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
-        <main ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
+        <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           {tab === "home" && <HomeView go={go} />}
           {tab === "coach" && <AICoach />}
           {tab === "pushback" && <PushbackCoach />}
