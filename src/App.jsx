@@ -1675,7 +1675,7 @@ export default function FrontlineCoach() {
         <input type="text" name="timestamp" />
       </form>
       <div className="w-full max-w-md flex flex-col h-full">
-        <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
+        <header className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0" style={{ paddingTop: "calc(1rem + env(safe-area-inset-top))" }}>
           {tab !== "home" ? (
             <button onClick={() => go("home")} className="flex items-center gap-1 text-neutral-400 hover:text-neutral-100 text-sm">
               <ChevronLeft size={18} /> Home
@@ -1717,7 +1717,7 @@ export default function FrontlineCoach() {
             );
           })}
         </nav>
-        <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950 shrink-0">
+        <div className="px-5 py-2 border-t border-neutral-900 bg-neutral-950 shrink-0" style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}>
           <p className="text-[10px] text-neutral-700 text-center">
             Not legal or HR advice. Always follow your company's policies.
           </p>
