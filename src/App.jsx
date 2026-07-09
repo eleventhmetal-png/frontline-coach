@@ -1666,7 +1666,7 @@ export default function FrontlineCoach() {
   };
   return (
     <IndustryContext.Provider value={{ industry, setIndustry }}>
-    <div className="fixed inset-0 bg-neutral-950 text-neutral-100 flex justify-center" style={{ height: "100dvh" }}>
+    <div className="fixed inset-0 bg-neutral-950 text-neutral-100 flex justify-center">
       {/* Hidden Netlify Forms registration — required for submissions to be captured */}
       <form name="tool-feedback" data-netlify="true" hidden>
         <input type="text" name="tool" />
