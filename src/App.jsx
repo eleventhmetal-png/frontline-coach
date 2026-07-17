@@ -1644,61 +1644,8 @@ const NAV = [
   { id: "practice", label: "Practice", icon: Play },
   { id: "more", label: "More", icon: MoreHorizontal },
 ];
-// Temporary diagnostic HUD: tap the BETA badge to toggle. Shows every viewport
-// measurement iOS reports so we can see exactly where the bottom gap comes from.
-function DebugHUD() {
-  const [m, setM] = useState({});
-  useEffect(() => {
-    const probe = (h) => {
-      const el = document.createElement("div");
-      el.style.cssText = `position:fixed;top:0;left:0;width:0;visibility:hidden;height:${h};`;
-      document.body.appendChild(el);
-      const v = el.getBoundingClientRect().height;
-      el.remove();
-      return Math.round(v);
-    };
-    const sabProbe = () => {
-      const el = document.createElement("div");
-      el.style.cssText = "position:fixed;top:0;left:0;width:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom);";
-      document.body.appendChild(el);
-      const v = parseFloat(getComputedStyle(el).paddingBottom) || 0;
-      el.remove();
-      return Math.round(v);
-    };
-    const read = () => {
-      const vv = window.visualViewport;
-      const root = document.getElementById("root");
-      const r = root ? root.getBoundingClientRect() : { height: 0, bottom: 0 };
-      setM({
-        ih: window.innerHeight,
-        vvH: vv ? Math.round(vv.height) : -1,
-        vvTop: vv ? Math.round(vv.offsetTop) : -1,
-        scrH: window.screen.height,
-        vh: probe("100vh"),
-        dvh: probe("100dvh"),
-        svh: probe("100svh"),
-        lvh: probe("100lvh"),
-        sab: sabProbe(),
-        rootH: Math.round(r.height),
-        rootBot: Math.round(r.bottom),
-        standalone: window.matchMedia("(display-mode: standalone)").matches ? "yes" : "no",
-      });
-    };
-    read();
-    const id = setInterval(read, 1000);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <div className="fixed top-16 left-2 z-50 bg-black/85 border border-orange-500 rounded p-2 text-[11px] font-mono text-orange-300 leading-tight pointer-events-none">
-      {Object.entries(m).map(([k, v]) => (
-        <div key={k}>{k}: {String(v)}</div>
-      ))}
-    </div>
-  );
-}
 export default function FrontlineCoach() {
   const [tab, setTab] = useState("home");
-  const [debug, setDebug] = useState(false);
   // Industry setting — persisted to localStorage until Phase 3 auth moves it to the profile.
   const [industry, setIndustryState] = useState(() => {
     try {
@@ -1744,9 +1691,8 @@ export default function FrontlineCoach() {
               <span className="font-extrabold uppercase tracking-tight">Frontline Coach</span>
             </div>
           )}
-          <span onClick={() => setDebug((d) => !d)} className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
+          <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
-        {debug && <DebugHUD />}
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           {tab === "home" && <HomeView go={go} />}
           {tab === "coach" && <AICoach />}
