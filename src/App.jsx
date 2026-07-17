@@ -1717,25 +1717,9 @@ export default function FrontlineCoach() {
     setTab(id);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   };
-  // iOS 26 broke position:fixed full-height containers (they stop short of the
-  // home-indicator area). Measure the real viewport with JS and expose it as
-  // --app-h; the shell is a normal-flow element sized by that variable.
-  useEffect(() => {
-    const setH = () => {
-      const vv = window.visualViewport;
-      const h = vv ? vv.height : window.innerHeight;
-      document.documentElement.style.setProperty("--app-h", `${h}px`);
-    };
-    setH();
-    if (window.visualViewport) window.visualViewport.addEventListener("resize", setH);
-    window.addEventListener("resize", setH);
-    window.addEventListener("orientationchange", setH);
-    return () => {
-      if (window.visualViewport) window.visualViewport.removeEventListener("resize", setH);
-      window.removeEventListener("resize", setH);
-      window.removeEventListener("orientationchange", setH);
-    };
-  }, []);
+  // Note: no JS viewport measurement here. iOS 26 standalone misreports
+  // innerHeight/visualViewport (894 on a 956pt screen); #root height is
+  // handled in index.css with 100lvh, the one unit iOS gets right.
   return (
     <IndustryContext.Provider value={{ industry, setIndustry }}>
     <div className="relative w-full h-full bg-neutral-950 text-neutral-100 flex justify-center">
