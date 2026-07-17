@@ -12,13 +12,8 @@ body { margin: 0; background: #0a0a0a; }
    permanent black gap under the nav. Shell now lives in normal flow. */
 html, body { overflow: hidden; overscroll-behavior: none; }
 
-/* App height. iOS 26 bug: in standalone (home-screen) mode it reports the
-   dynamic/small viewport 62pt short of the real screen (dvh/innerHeight/
-   visualViewport all say 894 on a 956pt display). The large viewport (lvh)
-   is the only correct value, and standalone has no browser chrome to
-   collide with, so use it there. In-browser keeps dvh so the bottom nav
-   stays above Safari's toolbar. */
+/* App height: dvh tracks the real window. (The iOS 26 standalone shortfall
+   was caused by black-translucent status-bar mode — fixed in index.html by
+   switching to "black". Don't reintroduce lvh here: it overflows the window
+   and clips the bottom of the layout.) */
 #root { height: 100dvh; }
-@media (display-mode: standalone) {
-  #root { height: 100vh; height: 100lvh; }
-}

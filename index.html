@@ -13,7 +13,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- iOS 26 bug: "black-translucent" shorts the app window by the status-bar
+         height and dumps the deficit as an unpaintable gap at the bottom.
+         "black" gives a solid black status bar (invisible against our black UI)
+         and a correctly sized window. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Frontline Coach" />
   </head>
   <body>
