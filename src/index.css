@@ -2,9 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; }
+html, body { height: 100%; }
 body { margin: 0; background: #0a0a0a; }
 
 /* Lock the shell: no page-level rubber-banding, no body scroll.
-   Only the <main> content area scrolls; header + bottom nav stay pinned. */
-html, body { overflow: hidden; overscroll-behavior: none; position: fixed; width: 100%; }
+   Only the <main> content area scrolls; header + bottom nav stay pinned.
+   NOTE: no position:fixed here — iOS 26 refuses to extend fixed full-height
+   containers into the bottom bar / home-indicator area, which caused the
+   permanent black gap under the nav. Shell now lives in normal flow. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+
+/* App height: JS sets --app-h from visualViewport; dvh is the fallback. */
+#root { height: 100dvh; height: var(--app-h, 100dvh); }
