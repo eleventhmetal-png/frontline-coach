@@ -8,7 +8,7 @@ import {
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
-const MODEL_SMART = "claude-sonnet-4-6";
+const MODEL_SMART = "claude-sonnet-5";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
 async function rawClaude(messages, { model, system, max_tokens, temperature } = {}) {
   const res = await fetch("/api/claude", {
