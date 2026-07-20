@@ -1492,7 +1492,7 @@ function Roleplay() {
 // =====================================================
 // MORE — tools menu
 // =====================================================
-function MoreView({ go }) {
+function MoreView({ go, session, signOut }) {
   const tools = [
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
@@ -1527,6 +1527,22 @@ function MoreView({ go }) {
           <IndustryPicker id="industry-more" />
         </div>
       </div>
+      {session && (
+        <div className="mt-4">
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-neutral-500">Signed in as</div>
+              <div className="text-sm text-neutral-200 truncate max-w-[180px]">{session.user?.email}</div>
+            </div>
+            <button
+              onClick={() => signOut && signOut()}
+              className="text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-200"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1644,7 +1660,7 @@ const NAV = [
   { id: "practice", label: "Practice", icon: Play },
   { id: "more", label: "More", icon: MoreHorizontal },
 ];
-export default function FrontlineCoach() {
+export default function FrontlineCoach({ session, signOut } = {}) {
   const [tab, setTab] = useState("home");
   // Industry setting — persisted to localStorage until Phase 3 auth moves it to the profile.
   const [industry, setIndustryState] = useState(() => {
@@ -1704,7 +1720,7 @@ export default function FrontlineCoach() {
           {tab === "diagnose" && <SkillWill />}
           {tab === "document" && <DocAssistant />}
           {tab === "convo" && <ConvoBuilder />}
-          {tab === "more" && <MoreView go={go} />}
+          {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
