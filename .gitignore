@@ -3,3 +3,8 @@ dist
 .env
 .env.local
 .DS_Store
+
+# Untracked for now — the committed lockfile broke Netlify's Linux build
+# (Invalid Version error) after cross-platform node_modules contamination.
+# Each machine generates its own until we're sure a clean one is safe to commit.
+package-lock.json
