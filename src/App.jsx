@@ -6,6 +6,7 @@ import {
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool } from "./lib/sessionLog";
+import { getLatestMemory } from "./lib/memory";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
@@ -785,8 +786,9 @@ const COACH_SITUATIONS = [
   "Shift performance is declining",
   "Employee has potential but no confidence",
 ];
-const coachSystem = (ind, gen) => `${voiceFor(ind)}
+const coachSystem = (ind, gen, memory) => `${voiceFor(ind)}
 ${REGISTER}${generationLayer(gen)}
+${memory ? `\nWHAT YOU KNOW ABOUT THIS MANAGER FROM PAST SESSIONS (use it to tailor the plan, don't just restate it back to them):\n${memory}\n` : ""}
 You are the AI Coach inside Frontline Coach. A manager describes a people problem on their shift. You diagnose it, tell them what they own, and hand them a plan they can run today. You challenge them when they're avoiding the conversation, being vague, overreacting, or blaming the team for a gap they created. You separate skill from will.
 Hard rules for this output:
 - LEADER FIRST. Before you diagnose the team, diagnose the leader. When a manager asks why performance, morale, or a person is declining, your first move is what the leader did or didn't do to cause it. Only after that do you look at the team. Never hand a manager an analysis that points only outward; that builds blame, not ownership.
@@ -824,11 +826,17 @@ function AICoach({ session } = {}) {
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
   const [sessionId, setSessionId] = useState(null);
+  const [memory, setMemory] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    getLatestMemory(session?.user?.id).then((m) => { if (alive) setMemory(m); });
+    return () => { alive = false; };
+  }, [session?.user?.id]);
   async function run() {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
-      const r = await callClaudeStream(coachSystem(industry, generation), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
+      const r = await callClaudeStream(coachSystem(industry, generation, memory), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART }));
     } catch (e) {
