@@ -3,10 +3,11 @@ import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
+  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase, Clock
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
+import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
@@ -1246,8 +1247,9 @@ function DocAssistant({ session } = {}) {
 // FEATURE 4 — CONVERSATION BUILDER
 // =====================================================
 const CONVO_TYPES = ["Coaching", "Corrective", "Attendance", "Attitude", "Recognition", "Resetting expectations", "Final warning prep", "Trust repair"];
-const convoSystem = (ind, gen) => `${voiceFor(ind)}
+const convoSystem = (ind, gen, employeeMemory) => `${voiceFor(ind)}
 ${REGISTER}${generationLayer(gen)}
+${employeeMemory ? `\nPRIOR CONVERSATIONS WITH THIS EMPLOYEE (most recent first). Build the follow-up on what was already agreed and check whether it held. Reference the prior talk naturally, the way a manager who remembers it would. Do NOT repeat the whole prior conversation back, and do NOT invent any detail that isn't listed here:\n${employeeMemory}\n` : ""}
 For this tool, the selected TYPE sets the register. Recognition, Coaching, and Trust repair carry warmth; Corrective, Attendance, Attitude, and Final warning prep stay clean and direct. The standard holds either way.
 You build a manager a plan for a real conversation. Every script line is spoken, in their voice. Keep it to a few sentences each.
 ESCALATION GUARDRAIL: even on Final warning prep, stay inside the manager's real authority. Consequences point to the progressive-discipline process and involving their manager or HR — the manager does not announce a termination decision on their own. Never put a firing threat or a legal label like "insubordination" in their mouth; "documentationNote" states the observed behavior as fact, not a label or a diagnosis.
@@ -1281,14 +1283,44 @@ function ConvoBuilder({ session } = {}) {
   const [sessionId, setSessionId] = useState(null);
   const [view, setView] = useState("full");
   const [step, setStep] = useState(0);
+  const [employees, setEmployees] = useState([]);      // recent employees for quick-pick
+  const [prior, setPrior] = useState(null);            // { count, lastDate, block } for current name
+  const [usePrior, setUsePrior] = useState(true);      // Ignore toggle on the prior-talk chip
+  const uid = session?.user?.id;
+  useEffect(() => {
+    let alive = true;
+    getCoachedEmployees(uid).then((list) => { if (alive) setEmployees(list); });
+    return () => { alive = false; };
+  }, [uid]);
+  // Look up prior conversations for a given employee name and stage the recall.
+  async function refreshPrior(nameVal) {
+    const clean = (nameVal || "").trim();
+    if (!clean) { setPrior(null); return; }
+    const hist = await getEmployeeHistory(uid, clean);
+    if (!hist.length) { setPrior(null); return; }
+    setUsePrior(true);
+    setPrior({
+      count: hist.length,
+      lastDate: hist[0]?.created_at ? new Date(hist[0].created_at).toLocaleDateString() : "",
+      block: summarizeEmployeeHistory(hist),
+    });
+  }
+  function pickEmployee(e) { setName(e); refreshPrior(e); }
   async function run() {
     if (!situation.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full"); setStep(0);
+    // Pull the freshest recall right before generating, so it's authoritative.
+    let memoryBlock = "";
+    if (usePrior && name.trim()) {
+      const hist = await getEmployeeHistory(uid, name);
+      memoryBlock = summarizeEmployeeHistory(hist);
+    }
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
-      const r = await callClaudeStream(convoSystem(industry, generation), user, { onPartial: setResult, max_tokens: 1800 });
+      const r = await callClaudeStream(convoSystem(industry, generation, memoryBlock), user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
-      setSessionId(await logSession({ userId: session?.user?.id, tool: "convo", input: { type, name, situation, outcome, generation }, output: r, model: MODEL_SMART }));
+      setSessionId(await logSession({ userId: uid, tool: "convo", input: { type, name, situation, outcome, generation }, output: r, model: MODEL_SMART }));
+      getCoachedEmployees(uid).then(setEmployees); // this employee may be new to the list
     } catch (e) {
       setError(errMessage(e, "Couldn't build the plan. Add detail and try again."));
     } finally {
@@ -1344,8 +1376,29 @@ function ConvoBuilder({ session } = {}) {
           ))}
         </div>
       </div>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Employee name (optional)"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-3" />
+      <input value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => refreshPrior(e.target.value)} placeholder="Employee name (optional, lets it remember past talks)"
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-2" />
+      {employees.length > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-neutral-500 mr-0.5">Recent:</span>
+          {employees.map((e) => (
+            <button key={e} onClick={() => pickEmployee(e)}
+              className="text-xs rounded-full px-2.5 py-1 border text-neutral-300 hover:border-neutral-600 transition-colors"
+              style={name.trim().toLowerCase() === e.toLowerCase() ? { borderColor: ACCENT, color: ACCENT } : { borderColor: "#2a2a2a" }}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+      {prior && usePrior && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-2.5">
+          <Clock size={14} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
+          <div className="flex-1 text-xs text-neutral-300 leading-relaxed">
+            Building on your last talk with {name.trim()}{prior.lastDate ? ` (${prior.lastDate})` : ""}.{prior.count > 1 ? ` ${prior.count} prior conversations on file.` : ""}
+          </div>
+          <button onClick={() => setUsePrior(false)} className="text-[11px] text-neutral-500 hover:text-neutral-300 shrink-0">Ignore</button>
+        </div>
+      )}
       <textarea value={situation} onChange={(e) => setSituation(e.target.value)} rows={3}
         placeholder="What's the situation? The facts."
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3" />
