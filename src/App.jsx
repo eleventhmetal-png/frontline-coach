@@ -1958,6 +1958,55 @@ const NAV = [
   { id: "practice", label: "Practice", icon: Play },
   { id: "more", label: "More", icon: MoreHorizontal },
 ];
+// Top-level error boundary. Without this, any render exception unmounts the
+// whole app and the user gets a blank white screen with no way back. This
+// catches it, shows a friendly recovery screen, and gives a hook
+// (window.__reportError) for Sentry to plug into later. Resets when the user
+// navigates to a different tab so a crash on one screen doesn't strand them.
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    console.error("App crash caught by ErrorBoundary:", error, info);
+    if (typeof window !== "undefined" && typeof window.__reportError === "function") {
+      try { window.__reportError(error, info); } catch (e) { /* never let reporting throw */ }
+    }
+  }
+  componentDidUpdate(prevProps) {
+    // Clear the error when the user switches tabs — lets them recover by
+    // navigating away instead of being forced to reload.
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-4">
+          <AlertTriangle size={32} className="text-amber-500" />
+          <div className="text-lg font-bold text-neutral-100">Something broke on this screen</div>
+          <p className="text-sm text-neutral-400 max-w-xs">That's on us, not you. Try again, or reload the app — your account and history are safe.</p>
+          <div className="flex gap-3 mt-2">
+            <button onClick={() => this.setState({ hasError: false })}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-neutral-950" style={{ backgroundColor: ACCENT }}>
+              Try again
+            </button>
+            <button onClick={() => window.location.reload()}
+              className="rounded-lg px-4 py-2 text-sm font-semibold border border-neutral-700 text-neutral-200">
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 export default function FrontlineCoach({ session, signOut } = {}) {
   const [tab, setTab] = useState("home");
   // Industry setting — persisted to localStorage until Phase 3 auth moves it to the profile.
@@ -2008,6 +2057,7 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
+          <ErrorBoundary resetKey={tab}>
           {tab === "home" && <HomeView go={go} session={session} />}
           {tab === "coach" && <AICoach session={session} />}
           {tab === "pushback" && <PushbackCoach session={session} />}
@@ -2019,6 +2069,7 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           {tab === "document" && <DocAssistant session={session} />}
           {tab === "convo" && <ConvoBuilder session={session} />}
           {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
+          </ErrorBoundary>
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
