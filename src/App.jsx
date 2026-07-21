@@ -1734,6 +1734,18 @@ function MoreView({ go, session, signOut }) {
           </div>
         </div>
       )}
+      <a
+        href="https://otsowntheshift.com/?utm_source=app&utm_campaign=frontline_coach"
+        target="_blank" rel="noopener noreferrer"
+        className="mt-4 flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors"
+      >
+        <Zap size={20} style={{ color: ACCENT }} />
+        <div>
+          <div className="font-semibold text-neutral-100">More from Own the Shift</div>
+          <div className="text-xs text-neutral-500">Books and field tools for operators and leaders.</div>
+        </div>
+        <ArrowRight size={18} className="ml-auto text-neutral-600" />
+      </a>
       <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-neutral-600">
         <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Terms</a>
         <span>·</span>
