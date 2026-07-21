@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
-import { logSession } from "./lib/sessionLog";
+import { logSession, reportProblem } from "./lib/sessionLog";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
@@ -308,37 +308,91 @@ Never fake warmth as a tactic. If you don't mean it, don't write it. But do not 
 Warmth comes from SPECIFICS — naming what the person actually did or carried — never from canned lines. "I hear you," "I understand," and "I know this is hard" stay out even in the warmest register; they read as fake. Replace them with something real and specific.
 When a REGISTER is given explicitly, follow it. When it says Auto, read the situation and choose.`;
 // ---------- Feedback widget ----------
-function FeedbackRow({ tool, inputSummary }) {
+function FeedbackRow({ tool, inputSummary, userId, sessionId }) {
   const [vote, setVote] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSent, setReportSent] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
   async function handleVote(rating) {
     setVote(rating);
     setSubmitted(true);
     await submitFeedback(tool, rating, inputSummary);
   }
-  if (submitted) {
-    return (
-      <div className="flex items-center gap-2 pt-3 border-t border-neutral-800 mt-2 text-xs text-neutral-500">
-        <Check size={13} style={{ color: ACCENT }} />
-        <span>Thanks — that helps.</span>
-      </div>
-    );
+  async function handleReport() {
+    if (!reportReason.trim() || reportBusy) return;
+    setReportBusy(true);
+    const ok = await reportProblem({ userId, sessionId, reason: `[${tool}] ${reportReason.trim()}` });
+    setReportBusy(false);
+    if (ok) {
+      setReportSent(true);
+      setReporting(false);
+    }
   }
   return (
-    <div className="flex items-center gap-3 pt-3 border-t border-neutral-800 mt-2">
-      <span className="text-xs text-neutral-500 flex-1">Did this help?</span>
-      <button
-        onClick={() => handleVote("up")}
-        className="flex items-center gap-1 text-xs text-neutral-400 hover:text-green-400 transition-colors"
-      >
-        <ThumbsUp size={14} />
-      </button>
-      <button
-        onClick={() => handleVote("down")}
-        className="flex items-center gap-1 text-xs text-neutral-400 hover:text-red-400 transition-colors"
-      >
-        <ThumbsDown size={14} />
-      </button>
+    <div className="pt-3 border-t border-neutral-800 mt-2">
+      {submitted ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <Check size={13} style={{ color: ACCENT }} />
+          <span>Thanks — that helps.</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-500 flex-1">Did this help?</span>
+          <button
+            onClick={() => handleVote("up")}
+            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-green-400 transition-colors"
+          >
+            <ThumbsUp size={14} />
+          </button>
+          <button
+            onClick={() => handleVote("down")}
+            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-red-400 transition-colors"
+          >
+            <ThumbsDown size={14} />
+          </button>
+        </div>
+      )}
+      {reportSent ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 mt-2">
+          <Check size={13} style={{ color: ACCENT }} />
+          <span>Reported — thanks for flagging it.</span>
+        </div>
+      ) : reporting ? (
+        <div className="mt-2 space-y-2">
+          <textarea
+            value={reportReason}
+            onChange={(e) => setReportReason(e.target.value)}
+            rows={2}
+            placeholder="What's wrong with this response?"
+            className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-2.5 text-xs text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleReport}
+              disabled={!reportReason.trim() || reportBusy}
+              className="text-xs font-semibold rounded-md px-3 py-1.5 text-neutral-950 disabled:opacity-40"
+              style={{ backgroundColor: ACCENT }}
+            >
+              Submit report
+            </button>
+            <button
+              onClick={() => { setReporting(false); setReportReason(""); }}
+              className="text-xs text-neutral-500 hover:text-neutral-300 px-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setReporting(true)}
+          className="text-[11px] text-neutral-600 hover:text-neutral-400 mt-2"
+        >
+          Report a problem with this response
+        </button>
+      )}
     </div>
   );
 }
@@ -713,13 +767,14 @@ function AICoach({ session } = {}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
   async function run() {
     if (!input.trim()) return;
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
       const r = await callClaudeStream(coachSystem(industry), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
-      logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART }));
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
     } finally {
@@ -796,7 +851,7 @@ function AICoach({ session } = {}) {
               </div>
             </div>
           )}
-          {!loading && <FeedbackRow tool="AI Coach" inputSummary={input} />}
+          {!loading && <FeedbackRow tool="AI Coach" inputSummary={input} userId={session?.user?.id} sessionId={sessionId} />}
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
@@ -859,6 +914,7 @@ function PushbackCoach({ session } = {}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [share, setShare] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
   const copyAll = () => result ? [
     `WHEN THEY SAY: "${input}"`,
     `SAY THIS: ${result.immediateResponse}`,
@@ -873,11 +929,11 @@ function PushbackCoach({ session } = {}) {
   ].join("\n\n") : "";
   async function run() {
     if (!input.trim()) return;
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
       const r = await callClaudeStream(pushbackSystem(industry), `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
       setResult(r);
-      logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context }, output: r, model: MODEL_FAST });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context }, output: r, model: MODEL_FAST }));
     } catch (e) {
       setError("Couldn't generate a response. Try again.");
     } finally {
@@ -941,7 +997,7 @@ function PushbackCoach({ session } = {}) {
           {result.documentationNote && <Section label="Note for the file">{result.documentationNote}</Section>}
           {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
           <DoDontCard dos={result.dos} donts={result.donts} />
-          {!loading && <FeedbackRow tool="Pushback Coach" inputSummary={input} />}
+          {!loading && <FeedbackRow tool="Pushback Coach" inputSummary={input} userId={session?.user?.id} sessionId={sessionId} />}
         </ResultCard>
       )}
       <ShareSheet card={share} textVersion={copyAll()} onClose={() => setShare(null)} />
@@ -972,13 +1028,14 @@ function DocAssistant({ session } = {}) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
   async function run() {
     if (!input.trim()) return;
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
       const r = await callClaude(docSystem(industry), input);
       setResult(r);
-      logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART }));
     } catch (e) {
       setError("Couldn't clean that up. Try again.");
     } finally {
@@ -1019,7 +1076,7 @@ function DocAssistant({ session } = {}) {
               {result.cleanedNote}
             </div>
           </Section>
-          <FeedbackRow tool="Documentation Assistant" inputSummary={input} />
+          <FeedbackRow tool="Documentation Assistant" inputSummary={input} userId={session?.user?.id} sessionId={sessionId} />
         </ResultCard>
       )}
     </div>
@@ -1060,14 +1117,15 @@ function ConvoBuilder({ session } = {}) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
   async function run() {
     if (!situation.trim()) return;
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
       const r = await callClaudeStream(convoSystem(industry), user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
-      logSession({ userId: session?.user?.id, tool: "convo", input: { type, name, situation, outcome }, output: r, model: MODEL_SMART });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "convo", input: { type, name, situation, outcome }, output: r, model: MODEL_SMART }));
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");
     } finally {
@@ -1129,7 +1187,7 @@ function ConvoBuilder({ session } = {}) {
           {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
           <DoDontCard dos={result.dos} donts={result.donts} />
           {result.followUpPlan && <Section label="Follow-up">{result.followUpPlan}</Section>}
-          {!loading && <FeedbackRow tool="Conversation Builder" inputSummary={situation} />}
+          {!loading && <FeedbackRow tool="Conversation Builder" inputSummary={situation} userId={session?.user?.id} sessionId={sessionId} />}
         </ResultCard>
       )}
     </div>
@@ -1169,15 +1227,16 @@ function SkillWill({ session } = {}) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
   const answered = Object.keys(answers).length;
   const ready = answered === DIAG_QUESTIONS.length;
   async function run() {
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
     try {
       const r = await callClaude(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`);
       setResult(r);
-      logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART }));
     } catch (e) {
       setError("Couldn't run the diagnostic. Try again.");
     } finally {
@@ -1226,7 +1285,7 @@ function SkillWill({ session } = {}) {
           <Section label="Training action">{result.trainingAction}</Section>
           <Section label="Accountability action">{result.accountabilityAction}</Section>
           <Section label="Follow-up">{result.followUpInterval}</Section>
-          <FeedbackRow tool="Skill vs Will" inputSummary={notes} />
+          <FeedbackRow tool="Skill vs Will" inputSummary={notes} userId={session?.user?.id} sessionId={sessionId} />
         </ResultCard>
       )}
     </div>
@@ -1291,6 +1350,7 @@ function Roleplay({ session } = {}) {
   const [loading, setLoading] = useState(false);
   const [score, setScore] = useState(null);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   // Lock the industry the moment the roleplay starts. Changing the picker
@@ -1343,12 +1403,12 @@ function Roleplay({ session } = {}) {
     }
   }
   async function endAndScore() {
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setSessionId(null);
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
     try {
       const r = await callClaude(rpScoreSystem(lockedIndustry.current), `Scenario: ${lockedScenario.current}\n\n${transcript}`);
       setScore(r);
-      logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, transcript }, output: r, model: MODEL_SMART });
+      setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, transcript }, output: r, model: MODEL_SMART }));
       scrollDown();
     } catch (e) {
       setError("Couldn't score it. Try again.");
@@ -1357,7 +1417,7 @@ function Roleplay({ session } = {}) {
     }
   }
   function reset() {
-    setStarted(false); setHistory([]); setScore(null); setDraft(""); setError("");
+    setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null);
   }
   if (!started) {
     return (
@@ -1458,7 +1518,7 @@ function Roleplay({ session } = {}) {
           <Section label="Accountability">{score.accountability}</Section>
           <Section label="Biggest miss" accent>{score.missedOpportunity}</Section>
           <Section label="Do this next time">{score.doThisNextTime}</Section>
-          <FeedbackRow tool="Roleplay" inputSummary={lockedScenario.current} />
+          <FeedbackRow tool="Roleplay" inputSummary={lockedScenario.current} userId={session?.user?.id} sessionId={sessionId} />
         </ResultCard>
       )}
       {!score && (
