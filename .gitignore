@@ -8,3 +8,4 @@ dist
 # (Invalid Version error) after cross-platform node_modules contamination.
 # Each machine generates its own until we're sure a clean one is safe to commit.
 package-lock.json
+vite.config.js.timestamp-*
