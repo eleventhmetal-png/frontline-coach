@@ -1142,7 +1142,7 @@ function DocAssistant({ session } = {}) {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
-      const r = await callClaude(docSystem(industry), input);
+      const r = await callClaudeStream(docSystem(industry), input, {});
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART }));
     } catch (e) {
@@ -1345,7 +1345,7 @@ function SkillWill({ session } = {}) {
     setLoading(true); setError(""); setResult(null); setSessionId(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
     try {
-      const r = await callClaude(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`);
+      const r = await callClaudeStream(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`, {});
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART }));
     } catch (e) {
