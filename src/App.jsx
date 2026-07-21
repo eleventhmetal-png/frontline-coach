@@ -5,6 +5,7 @@ import {
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
+import { logSession } from "./lib/sessionLog";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
@@ -705,7 +706,7 @@ Return ONLY valid JSON, no markdown, no preamble. Keep it SHORT so the whole obj
  "followUp": "exact timing and what you're checking for",
  "leadershipPrinciple": "one blunt line"
 }`;
-function AICoach() {
+function AICoach({ session } = {}) {
   const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -718,6 +719,7 @@ function AICoach() {
     try {
       const r = await callClaudeStream(coachSystem(industry), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
+      logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART });
     } catch (e) {
       setError("Couldn't generate a plan. Add a bit more detail and try again.");
     } finally {
@@ -848,7 +850,7 @@ Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
  "dos": ["2-3 short do's for this exchange, max ~10 words each"],
  "donts": ["2-3 short don'ts, the traps to avoid here, max ~10 words each"]
 }`;
-function PushbackCoach() {
+function PushbackCoach({ session } = {}) {
   const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [context, setContext] = useState("");
@@ -875,6 +877,7 @@ function PushbackCoach() {
     try {
       const r = await callClaudeStream(pushbackSystem(industry), `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
       setResult(r);
+      logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context }, output: r, model: MODEL_FAST });
     } catch (e) {
       setError("Couldn't generate a response. Try again.");
     } finally {
@@ -963,7 +966,7 @@ Return ONLY valid JSON, no markdown. Schema:
  "followUpDate": "suggested follow-up",
  "cleanedNote": "a single tight paragraph combining the above into a record ready to file"
 }`;
-function DocAssistant() {
+function DocAssistant({ session } = {}) {
   const { industry } = useIndustry();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -975,6 +978,7 @@ function DocAssistant() {
     try {
       const r = await callClaude(docSystem(industry), input);
       setResult(r);
+      logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART });
     } catch (e) {
       setError("Couldn't clean that up. Try again.");
     } finally {
@@ -1047,7 +1051,7 @@ Return ONLY valid JSON, no markdown. Schema:
  "followUpPlan": "when and what to check",
  "documentationNote": "one-line factual note"
 }`;
-function ConvoBuilder() {
+function ConvoBuilder({ session } = {}) {
   const { industry } = useIndustry();
   const [type, setType] = useState("Coaching");
   const [name, setName] = useState("");
@@ -1063,6 +1067,7 @@ function ConvoBuilder() {
     try {
       const r = await callClaudeStream(convoSystem(industry), user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
+      logSession({ userId: session?.user?.id, tool: "convo", input: { type, name, situation, outcome }, output: r, model: MODEL_SMART });
     } catch (e) {
       setError("Couldn't build the plan. Add detail and try again.");
     } finally {
@@ -1157,7 +1162,7 @@ Return ONLY valid JSON, no markdown. Keep fields tight. Schema:
  "accountabilityAction": "the accountability move",
  "followUpInterval": "when to check"
 }`;
-function SkillWill() {
+function SkillWill({ session } = {}) {
   const { industry } = useIndustry();
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState("");
@@ -1172,6 +1177,7 @@ function SkillWill() {
     try {
       const r = await callClaude(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`);
       setResult(r);
+      logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART });
     } catch (e) {
       setError("Couldn't run the diagnostic. Try again.");
     } finally {
@@ -1274,7 +1280,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change"
 }`;
-function Roleplay() {
+function Roleplay({ session } = {}) {
   const { industry } = useIndustry();
   const [scenario, setScenario] = useState(RP_SCENARIOS[0]);
   const [customScenario, setCustomScenario] = useState("");
@@ -1342,6 +1348,7 @@ function Roleplay() {
     try {
       const r = await callClaude(rpScoreSystem(lockedIndustry.current), `Scenario: ${lockedScenario.current}\n\n${transcript}`);
       setScore(r);
+      logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, transcript }, output: r, model: MODEL_SMART });
       scrollDown();
     } catch (e) {
       setError("Couldn't score it. Try again.");
@@ -1711,15 +1718,15 @@ export default function FrontlineCoach({ session, signOut } = {}) {
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           {tab === "home" && <HomeView go={go} />}
-          {tab === "coach" && <AICoach />}
-          {tab === "pushback" && <PushbackCoach />}
+          {tab === "coach" && <AICoach session={session} />}
+          {tab === "pushback" && <PushbackCoach session={session} />}
           {/* Practice stays mounted so an in-progress roleplay survives tab switches */}
           <div style={{ display: tab === "practice" ? "block" : "none" }}>
-            <Roleplay />
+            <Roleplay session={session} />
           </div>
-          {tab === "diagnose" && <SkillWill />}
-          {tab === "document" && <DocAssistant />}
-          {tab === "convo" && <ConvoBuilder />}
+          {tab === "diagnose" && <SkillWill session={session} />}
+          {tab === "document" && <DocAssistant session={session} />}
+          {tab === "convo" && <ConvoBuilder session={session} />}
           {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
