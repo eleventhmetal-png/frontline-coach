@@ -7,15 +7,27 @@ import {
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
+import { supabase } from "./lib/supabaseClient";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
+// The proxy requires a valid Supabase session, so every call carries the signed-in
+// user's access token. Without it the proxy returns 401 — no anonymous access to the model.
+async function authHeaders() {
+  const h = { "Content-Type": "application/json" };
+  try {
+    const { data } = (await supabase?.auth?.getSession?.()) ?? { data: null };
+    const token = data?.session?.access_token;
+    if (token) h.Authorization = `Bearer ${token}`;
+  } catch (e) { /* no session → proxy will 401 */ }
+  return h;
+}
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
 const MODEL_SMART = "claude-sonnet-5";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
 async function rawClaude(messages, { model, system, max_tokens, temperature } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders(),
     body: JSON.stringify({
       model: model || MODEL_SMART,
       max_tokens: max_tokens || 1000,
@@ -99,7 +111,7 @@ function extractPartialJson(text) {
 async function streamClaude(messages, { model, system, max_tokens, temperature, onText } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders(),
     body: JSON.stringify({
       stream: true,
       model: model || MODEL_SMART,
