@@ -370,7 +370,8 @@ How you write:
 - Vary the rhythm. Some sentences short. Punch.
 - Match depth to the problem. A simple question gets a short answer. Save the detail for genuinely complex situations or when the manager asks for more. A manager on the floor has ten seconds, not ten minutes.
 Banned phrases (they read as fake, NEVER use them): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward," "I understand," "I hear you," "I know this is hard." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
-The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.`;
+The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.
+${GUARDRAILS}`;
 }
 // Register logic — how warm vs. how direct. Injected into the conversation tools.
 // The standard never moves; the warmth flexes. Built for new managers learning to
@@ -383,6 +384,29 @@ Two dials. The STANDARD never moves. The WARMTH flexes to fit the moment.
 Never fake warmth as a tactic. If you don't mean it, don't write it. But do not strip the humanity out of a talk that needs it. A flat, clinical script on a confidence conversation does more damage than no script at all.
 Warmth comes from SPECIFICS — naming what the person actually did or carried — never from canned lines. "I hear you," "I understand," and "I know this is hard" stay out even in the warmest register; they read as fake. Replace them with something real and specific.
 When a REGISTER is given explicitly, follow it. When it says Auto, read the situation and choose.`;
+// Employment guardrails — injected into every manager-facing prompt (see voiceFor + docSystem).
+// NOT injected into the in-character roleplay employee (rpSystem), which must stay in role.
+const GUARDRAILS = `
+EMPLOYMENT GUARDRAILS (non-negotiable):
+- You ASSIST the manager. You never make the employment decision. You do not decide whether
+  anyone should be terminated, disciplined, investigated, accommodated, or reported.
+- Never invent facts. Do not fabricate dates, times, quotes, names, prior conversations,
+  policies, witnesses, or employee behavior the user did not provide. If a specific detail is
+  needed and wasn't given, insert a clearly marked blank like [DATE] or [WHAT WAS SAID] for the
+  manager to fill — never guess it.
+- Any write-up, documentation, discipline, PIP, or performance content is a DRAFT for the
+  manager to review and verify before use. Say so.
+- Keep all language behavior-based, specific, and objective. Describe observable actions and
+  their operational impact. No character judgments, no diagnoses, no assumptions about intent.
+- Never reference or infer protected characteristics (race, sex, age, religion, disability,
+  national origin, pregnancy, medical conditions, etc.).
+- On sensitive situations — harassment, discrimination, accommodation or leave, retaliation,
+  threats, violence, self-harm, wage/hour, union activity, or termination — do not free-lance a
+  plan. Document only the observable facts neutrally and direct the manager to involve HR or
+  qualified personnel before acting.
+- Never state or imply a legal conclusion. You are not HR and not legal counsel; say so when the
+  situation calls for it.
+`;
 // ---------- Feedback widget ----------
 function FeedbackRow({ tool, inputSummary, userId, sessionId }) {
   const [vote, setVote] = useState(null);
@@ -472,18 +496,20 @@ function FeedbackRow({ tool, inputSummary, userId, sessionId }) {
     </div>
   );
 }
-function CopyBtn({ getText }) {
+function CopyBtn({ getText, disabled }) {
   const [done, setDone] = useState(false);
   return (
     <button
+      disabled={disabled}
       onClick={async () => {
+        if (disabled) return;
         try {
           await navigator.clipboard.writeText(getText());
           setDone(true);
           setTimeout(() => setDone(false), 1400);
         } catch (e) {}
       }}
-      className="flex items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-100 transition-colors"
+      className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${disabled ? "text-neutral-600 cursor-not-allowed" : "text-neutral-400 hover:text-neutral-100"}`}
     >
       {done ? <Check size={14} /> : <Copy size={14} />}
       {done ? "Copied" : "Copy"}
@@ -1117,6 +1143,7 @@ function PushbackCoach({ session } = {}) {
 // FEATURE 3 — DOCUMENTATION ASSISTANT
 // =====================================================
 const docSystem = (ind) => `${worldFor(ind)}
+${GUARDRAILS}
 You are Frontline Coach's documentation assistant. Turn the manager's rough notes into a clean, factual performance record. REMOVE insults, emotionally loaded language, assumptions, unverifiable motives, diagnoses, exaggeration, and any retaliatory or discriminatory language. State only observable behavior and facts. Never state or imply whether someone should be terminated.
 Exclude protected-class details, medical speculation, family matters, rumor, and personal opinion. If the employee stated a fact that's directly relevant, record only the operational fact, not the diagnosis or the backstory — e.g. "arrived 25 minutes late; cited an appointment," never "has ongoing medical issues."
 Return ONLY valid JSON, no markdown. Schema:
@@ -1138,9 +1165,10 @@ function DocAssistant({ session } = {}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
   async function run() {
     if (!input.trim()) return;
-    setLoading(true); setError(""); setResult(null); setSessionId(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null); setConfirmed(false);
     try {
       const r = await callClaudeStream(docSystem(industry), input, {});
       setResult(r);
@@ -1169,8 +1197,11 @@ function DocAssistant({ session } = {}) {
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
-          <div className="flex justify-end mb-1">
-            <CopyBtn getText={() => result.cleanedNote} />
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2">
+            <AlertTriangle size={14} className="shrink-0" style={{ color: ACCENT }} />
+            <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
+              Draft — review and verify before you file it
+            </span>
           </div>
           <Section label="Date / time">{result.dateTime}</Section>
           <Section label="Observed behavior">{result.observedBehavior}</Section>
@@ -1185,6 +1216,22 @@ function DocAssistant({ session } = {}) {
               {result.cleanedNote}
             </div>
           </Section>
+          <div className="mt-4 rounded-lg bg-neutral-900 border border-neutral-800 p-3">
+            <label className="flex items-start gap-2.5 cursor-pointer text-[13px] leading-relaxed text-neutral-300">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                className="mt-0.5 shrink-0 accent-current"
+                style={{ accentColor: ACCENT }}
+              />
+              <span>I confirm the facts in this record are accurate and match what I actually observed. This is my document — Frontline Coach only formatted it.</span>
+            </label>
+            <div className="mt-3 flex items-center justify-end gap-3">
+              {!confirmed && <span className="text-[11px] text-neutral-500">Confirm accuracy to copy</span>}
+              <CopyBtn getText={() => result.cleanedNote} disabled={!confirmed} />
+            </div>
+          </div>
           <FeedbackRow tool="Documentation Assistant" inputSummary={input} userId={session?.user?.id} sessionId={sessionId} />
         </ResultCard>
       )}
