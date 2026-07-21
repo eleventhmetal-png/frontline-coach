@@ -197,7 +197,7 @@ export default function AuthGate({ children }) {
           Root app shell locks html/body/#root to a fixed viewport height for
           the in-app screens, so this outer div owns its own scroll instead of
           relying on document scroll (which is disabled globally). */}
-      <div className="max-w-md md:max-w-2xl mx-auto px-6 md:px-10 pt-16 pb-14">
+      <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-6 md:px-10 pt-16 pb-14">
         <div className="flex items-center gap-2 mb-4 justify-center">
           <div className="w-9 h-9 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
             <Zap size={20} className="text-neutral-950" />
@@ -221,7 +221,7 @@ export default function AuthGate({ children }) {
         <img
           src="/hero-phone.png"
           alt="Frontline Coach app running on an iPhone, showing today's leadership brief and coaching tools"
-          className="w-full max-w-md mx-auto rounded-2xl mb-12 shadow-2xl shadow-black/50"
+          className="w-full mx-auto rounded-2xl mb-12 shadow-2xl shadow-black/50"
         />
 
         <p className="text-base text-neutral-400 text-center leading-relaxed mb-12 max-w-md mx-auto">
