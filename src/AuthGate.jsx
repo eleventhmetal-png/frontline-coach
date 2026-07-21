@@ -244,7 +244,16 @@ export default function AuthGate({ children }) {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-5 transition duration-200 hover:-translate-y-1 hover:border-neutral-700 hover:shadow-xl hover:shadow-black/40"
+              className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-5 transition duration-200 hover:-translate-y-1"
+              style={{ transition: "box-shadow 200ms, border-color 200ms, transform 200ms" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = `${ACCENT}80`;
+                e.currentTarget.style.boxShadow = `0 20px 45px -12px ${ACCENT}55, 0 0 30px -5px ${ACCENT}40`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "";
+                e.currentTarget.style.boxShadow = "none";
+              }}
             >
               <f.icon size={20} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
               <div>
