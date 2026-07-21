@@ -1,139 +1,234 @@
 // Terms of Service + Privacy Policy shown in-app (AuthGate legal modal).
-// DRAFT — have an attorney review before this gates real paying users.
-// Placeholder entity name below ("Frontline Coach") — swap in your registered
-// business name once you have one.
+//
+// DRAFT — tailored to the actual product (Anthropic AI processing, Supabase/
+// Canada storage, private per-user session data, no public user content, no
+// live paid billing yet). Written to the audit framework in the project notes.
+//
+// BEFORE THIS BINDS REAL USERS, an attorney should review the clauses marked
+// "RED" in the accompanying handoff notes: Limitation of Liability (§15),
+// Indemnification (§16), Dispute Resolution / arbitration decision (§17),
+// the AI-in-employment prohibitions (§7), and employee/third-party data (§8).
+//
+// Entity: OTS Media LLC (Missouri). Contact: owntheshift.everyday@gmail.com.
+// Still outstanding: a business/registered-agent postal address (add before
+// any commercial email or final attorney review).
 
 export const LAST_UPDATED = "July 20, 2026";
 
 export const TERMS_SECTIONS = [
   {
-    heading: "1. Acceptance of Terms",
+    heading: "1. Who These Terms Are Between",
     body: [
-      "By creating an account or using Frontline Coach (\"the Service\"), you agree to these Terms of Service. If you don't agree, don't use the Service.",
+      "Own The Shift — Frontline Coach (\"the Service\") is operated by OTS Media LLC, a Missouri limited liability company (\"we,\" \"us,\" \"our\"). These Terms of Service are a legal agreement between you and OTS Media LLC.",
+      "They cover the Frontline Coach website and application and all related tools. Certain features may later be sold to organizations under a separate written agreement; where such an agreement exists, it controls over these Terms for that organization's users.",
     ],
   },
   {
-    heading: "2. What the Service Is",
+    heading: "2. Accepting These Terms",
     body: [
-      "Frontline Coach is an AI-assisted coaching tool for managers and supervisors. It generates suggested language, practice scenarios, and documentation drafts based on information you provide.",
+      "By checking the acceptance box and creating an account, you confirm you have read and agree to these Terms and acknowledge the Privacy Policy. If you don't agree, don't create an account or use the Service.",
+      "We keep a record of the account, date, and version of the Terms and Privacy Policy accepted. If we make a material change — for example to liability, dispute resolution, data use, or paid terms — we will notify you and, where appropriate, ask you to accept the updated version before continuing.",
     ],
   },
   {
-    heading: "3. Not Legal, HR, or Professional Advice",
+    heading: "3. What the Service Is",
     body: [
-      "The Service provides general coaching guidance only. It is not legal advice, HR advice, or a substitute for consulting a qualified attorney, HR professional, or your employer's policies. Any employment action you take — including discipline, termination, or documentation — is your responsibility. Always follow your company's policies and applicable law.",
+      "Frontline Coach is an AI-assisted coaching tool for newly promoted managers and shift leaders. It generates suggested language, practice roleplays, diagnostics, and documentation drafts based on information you provide.",
+      "Features may change, and some may be experimental. We don't promise the Service will always be available, error-free, or fit for any particular decision you make with it.",
     ],
   },
   {
-    heading: "4. Eligibility & Accounts",
+    heading: "4. Not Legal, HR, or Professional Advice",
     body: [
-      "You must be at least 18 years old to use the Service. You're responsible for keeping your login credentials secure and for all activity under your account. Tell us right away if you suspect unauthorized use.",
+      "The Service provides general coaching guidance only. It is not legal advice, HR advice, or a substitute for a qualified attorney, HR professional, or your employer's policies. Any employment action you take — including coaching, discipline, documentation, or termination — is your decision and your responsibility. Always follow your company's policies and applicable law.",
     ],
   },
   {
-    heading: "5. Acceptable Use",
+    heading: "5. Eligibility and Accounts",
     body: [
-      "Don't use the Service to generate content intended to harass, discriminate against, or retaliate against an employee in violation of law. Don't attempt to reverse-engineer, scrape, or resell the Service without permission.",
+      "You must be at least 18 years old and able to form a binding contract to use the Service. You are responsible for the accuracy of your account information, for keeping your login credentials secure, and for all activity under your account. Tell us promptly at owntheshift.everyday@gmail.com if you suspect unauthorized use.",
+      "If you create an account using an employer's email or on an employer's behalf, you confirm you're authorized to do so. Whether an employer can access accounts or content created by its people depends on any separate agreement with that employer.",
     ],
   },
   {
-    heading: "6. AI-Generated Content",
+    heading: "6. Acceptable Use",
     body: [
-      "Responses are generated by AI models and may occasionally be inaccurate, incomplete, or inappropriate for your specific situation. Review all suggested language before using it in a real conversation, coaching session, or written record.",
+      "Don't use the Service to harass, discriminate against, retaliate against, or unlawfully surveil any person. Don't use it to build a record intended to justify an unlawful employment action.",
+      "Don't reverse-engineer, scrape, resell, or share access to the Service, attempt to defeat its security, or use it to violate anyone's rights or the law.",
     ],
   },
   {
-    heading: "7. Your Content & Session Data",
+    heading: "7. AI Output and Employment Decisions",
     body: [
-      "You retain ownership of what you type into the Service. We log session inputs and outputs to operate the Service, protect against abuse, and (with your data) improve coaching quality over time. See the Privacy Policy below for details.",
+      "Responses are generated by AI and may be inaccurate, incomplete, outdated, or wrong for your specific situation. You must review and exercise your own judgment on everything before using it in a real conversation, coaching session, or written record.",
+      "You agree NOT to rely on the Service as the sole or primary basis for any hiring, firing, promotion, demotion, pay, discipline, scheduling, accommodation, harassment, or other legally significant employment decision. The Service supports your judgment; it does not replace it, and it is not an automated decision-making tool. Federal, state, and local laws govern the use of automated tools in employment, and you are responsible for complying with them.",
     ],
   },
   {
-    heading: "8. Subscription & Payment",
+    heading: "8. Information You Enter About Other People",
     body: [
-      "If you're on a paid plan, fees are billed as disclosed at signup. Subscriptions renew automatically until canceled. No refunds for partial billing periods except where required by law.",
+      "Coaching often involves describing employees or coworkers. When you enter information about another person, you confirm you have the authority to do so and that doing so complies with your employer's policies and applicable law.",
+      "Please keep entries limited to what the coaching actually needs. We ask that you avoid entering full legal names, government IDs, medical or disability details, or other sensitive personal information about employees unless truly necessary. You are responsible for the information you choose to enter.",
     ],
   },
   {
-    heading: "9. Termination",
+    heading: "9. Your Content and Our License to Operate",
     body: [
-      "We may suspend or terminate accounts that violate these Terms. You can stop using the Service and request account deletion at any time.",
+      "You keep ownership of what you type into the Service. You grant us a limited license to store, process, and transmit your inputs and the generated outputs solely to operate the Service for you — including sending inputs to our AI provider, saving your session history, protecting against abuse, and generating your practice-pattern feedback.",
+      "We do NOT use your inputs or outputs to train AI models, and we do not sell them. This license ends when you delete the content or your account, except for limited copies retained as described in the Privacy Policy or required by law.",
     ],
   },
   {
-    heading: "10. Disclaimer of Warranties",
+    heading: "10. Our Intellectual Property",
     body: [
-      "The Service is provided \"as is\" without warranties of any kind, express or implied, including fitness for a particular purpose or non-infringement.",
+      "The Service itself — software, design, brand names, logos, prompts, frameworks, and documentation — belongs to OTS Media LLC or its licensors. We grant you a limited, revocable, non-transferable license to use the Service for its intended purpose while your account is in good standing. Any feedback you send us may be used to improve the Service without obligation to you.",
     ],
   },
   {
-    heading: "11. Limitation of Liability",
+    heading: "11. Subscriptions and Payment",
     body: [
-      "To the maximum extent permitted by law, Frontline Coach is not liable for indirect, incidental, or consequential damages arising from your use of the Service, including employment decisions made using its output.",
+      "The Service is currently free to use. We do not charge you, and no automatic renewal or billing is in effect.",
+      "If we introduce paid plans, we will disclose all material terms — price, billing cadence, any trial length and what happens when it ends, and renewal timing — clearly at the point of purchase, and obtain your express consent before charging you. Where a plan renews automatically, we'll say so plainly and let you cancel online at least as easily as you signed up, with confirmation. Specific paid terms will be added here before any charge is made.",
     ],
   },
   {
-    heading: "12. Changes to These Terms",
+    heading: "12. Third-Party Services",
     body: [
-      "We may update these Terms from time to time. Continued use of the Service after a change means you accept the updated Terms.",
+      "The Service depends on third parties, including Anthropic (AI processing), Supabase (authentication and database), Netlify (hosting), and Google (optional sign-in). Their availability and their own terms are outside our control. We're not responsible for failures or changes in third-party services, though we'll make reasonable efforts to keep the Service running.",
     ],
   },
   {
-    heading: "13. Contact",
-    body: ["Questions about these Terms? Reach out through the app's support contact."],
+    heading: "13. Suspension, Termination, and Deletion",
+    body: [
+      "You can stop using the Service and request account deletion at any time by contacting owntheshift.everyday@gmail.com (or using the in-app option where available). We may suspend or terminate accounts that violate these Terms, and may act immediately without advance notice where needed to address fraud, abuse, security, or legal risk.",
+      "On termination, your license to use the Service ends. We'll delete or de-identify your data as described in the Privacy Policy, subject to limited operational copies and any legal retention obligation.",
+    ],
+  },
+  {
+    heading: "14. Disclaimer of Warranties",
+    body: [
+      "The Service is provided \"as is\" and \"as available,\" without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, non-infringement, accuracy, or uninterrupted or secure operation. We do not warrant that AI output is correct or suitable for your situation. Some jurisdictions don't allow certain disclaimers, so parts of this section may not apply to you.",
+    ],
+  },
+  {
+    heading: "15. Limitation of Liability",
+    body: [
+      "To the maximum extent permitted by law, OTS Media LLC will not be liable for indirect, incidental, special, consequential, or punitive damages, or for lost profits, lost data, or business interruption, arising from your use of the Service — including any employment decision made using its output.",
+      "To the maximum extent permitted by law, our total liability for any claim relating to the Service will not exceed the greater of the amount you paid us for the Service in the twelve months before the claim, or fifty U.S. dollars ($50). Nothing here limits liability that cannot be limited by law.",
+    ],
+  },
+  {
+    heading: "16. Indemnification",
+    body: [
+      "You agree to defend and indemnify OTS Media LLC against third-party claims and reasonable costs arising from your misuse of the Service, your violation of these Terms or the law, or information you entered that you had no right to enter — including claims by an employee or coworker about information you submitted about them. This does not apply to the extent a claim results from our own violation of law.",
+    ],
+  },
+  {
+    heading: "17. Disputes and Governing Law",
+    body: [
+      "These Terms are governed by the laws of the State of Missouri, without regard to conflict-of-laws rules, and except where your local consumer-protection laws provide rights that cannot be waived.",
+      "Before filing anything, contact us at owntheshift.everyday@gmail.com and give us 30 days to resolve the issue informally. If we can't, disputes will be resolved in the state or federal courts located in Missouri, unless a binding arbitration provision is added here in the future. (No arbitration or class-action waiver currently applies; if one is added, it will be presented for your acceptance.)",
+    ],
+  },
+  {
+    heading: "18. Electronic Communications",
+    body: [
+      "You consent to receive account, security, and service communications from us electronically, and agree that electronic records and agreements satisfy any requirement that they be in writing. Keep your email address current so you receive these notices. You may still receive certain notices inside the app.",
+    ],
+  },
+  {
+    heading: "19. Accessibility",
+    body: [
+      "We want the Service to be usable by everyone. If you encounter an accessibility barrier, tell us at owntheshift.everyday@gmail.com and we'll work to provide the information or function in another way.",
+    ],
+  },
+  {
+    heading: "20. General; Changes; Contact",
+    body: [
+      "These Terms, with the Privacy Policy, are the entire agreement between you and us about the Service. If any part is unenforceable, the rest stays in effect. We may assign these Terms in connection with a merger or sale; you may not assign yours without our consent. Our failure to enforce a term isn't a waiver.",
+      "We may update these Terms; material changes will be notified as described in Section 2. Questions: OTS Media LLC, owntheshift.everyday@gmail.com.",
+    ],
   },
 ];
 
 export const PRIVACY_SECTIONS = [
   {
-    heading: "1. Information We Collect",
+    heading: "1. Who We Are",
     body: [
-      "Account info: email address and authentication data (handled by our auth provider, Supabase).",
-      "Usage data: the inputs you provide to each coaching tool and the outputs generated, timestamped, and linked to your account.",
+      "This Privacy Policy explains how OTS Media LLC (\"we\") handles information in Own The Shift — Frontline Coach. Questions: owntheshift.everyday@gmail.com.",
     ],
   },
   {
-    heading: "2. How We Use It",
+    heading: "2. Information We Collect",
     body: [
-      "To operate and improve the Service, including generating coaching responses, maintaining session history so context carries across visits, and reviewing flagged content for abuse or quality issues.",
+      "Account information: your email address and authentication data, handled by our auth provider, Supabase (and Google, if you use Google sign-in).",
+      "Profile information: optional details such as your name, role, and organization name.",
+      "Session content: the inputs you enter into each tool and the outputs generated — including practice roleplay transcripts — timestamped and linked to your account. This may include information you enter about other people.",
+      "Derived content: synthesized summaries of your practice patterns used to tailor coaching. Abuse/quality reports you submit. Basic technical and log data needed to run and secure the Service.",
     ],
   },
   {
-    heading: "3. AI Processing",
+    heading: "3. How We Use Information",
     body: [
-      "Your inputs are sent to Anthropic's Claude API to generate responses. Anthropic processes this data under its own API terms; we do not control Anthropic's model training practices for API traffic beyond what its terms specify.",
+      "To operate the Service: generate coaching responses, keep your session history so context carries across visits, produce your practice-pattern feedback, and provide support.",
+      "To protect the Service: review flagged content and investigate abuse, security, or misuse. We do not use your content to train AI models, and we do not sell your information.",
     ],
   },
   {
-    heading: "4. Where Data Lives",
+    heading: "4. AI Processing",
     body: [
-      "Account and session data is stored in Supabase (hosted Postgres). Access is restricted so each user can only read their own session history; broader access is limited to what's needed for abuse review and service operation.",
+      "Your inputs are sent to Anthropic's Claude API to generate responses. Anthropic processes this data under its commercial/API terms and does not use API inputs or outputs to train its models. We send only what's needed to produce your result.",
     ],
   },
   {
-    heading: "5. Data Sharing",
+    heading: "5. Where Your Data Is Stored",
     body: [
-      "We don't sell your data. We share it only with the service providers needed to run Frontline Coach (Anthropic for AI processing, Supabase for storage/auth, Netlify for hosting) and if required by law.",
+      "Account and session data is stored in Supabase (hosted PostgreSQL) on infrastructure located in Canada. If you use the Service from another country, your information will be transferred to and processed in Canada and the United States, which may have different data-protection laws than where you live.",
     ],
   },
   {
-    heading: "6. Your Rights",
+    heading: "6. Who Can See Your Content",
     body: [
-      "You can request a copy of your data or ask us to delete your account and associated data at any time, subject to reasonable verification and any legal retention requirements.",
+      "Access is restricted by database policy so that you can only read your own session history — other users cannot, and managers do not automatically get access to content created by other people. Broader access is limited to what's needed for abuse review, support, and running the Service.",
+      "We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.",
     ],
   },
   {
-    heading: "7. Children's Privacy",
-    body: ["The Service isn't directed at anyone under 18, and we don't knowingly collect data from minors."],
-  },
-  {
-    heading: "8. Security",
+    heading: "7. Information About Other People",
     body: [
-      "We use industry-standard practices (encrypted transport, access-controlled database policies) to protect your data, but no system is 100% secure.",
+      "Because coaching often involves employees or coworkers, you may enter information about people who are not users of the Service. You are responsible for having the right to enter that information. We ask you to minimize it and avoid sensitive details. If someone believes their information was entered improperly, they can contact us at owntheshift.everyday@gmail.com.",
     ],
   },
   {
-    heading: "9. Changes to This Policy",
-    body: ["We'll update this page if our data practices change materially."],
+    heading: "8. Data Retention and Loss",
+    body: [
+      "We keep your account and session data until you delete it or ask us to delete your account, except for limited copies needed for operations or required by law.",
+      "Be aware: the Service does not currently maintain independent backups. Data could be lost due to technical failure, and deletions are permanent. Do not rely on the Service as your system of record for anything you must retain.",
+    ],
+  },
+  {
+    heading: "9. Your Choices and Rights",
+    body: [
+      "You can request a copy of your data, ask us to correct it, or ask us to delete your account and associated data by contacting owntheshift.everyday@gmail.com, subject to reasonable identity verification and any legal retention requirement.",
+      "Depending on where you live (for example California, Colorado, or Texas), you may have additional rights to access, delete, correct, or opt out of certain uses of your personal information. We do not sell your information or use it for targeted advertising. We honor recognized browser opt-out signals such as Global Privacy Control where applicable.",
+    ],
+  },
+  {
+    heading: "10. Security",
+    body: [
+      "We use reasonable measures — encrypted transport and access-controlled database policies — to protect your information. No system is perfectly secure, and we can't guarantee absolute security. If a breach affects your information, we'll notify you as required by applicable law.",
+    ],
+  },
+  {
+    heading: "11. Children's Privacy",
+    body: [
+      "The Service is intended for adults in a workplace setting. It isn't directed to anyone under 18, and we don't knowingly collect information from anyone under 18. If you believe a minor has used the Service, contact owntheshift.everyday@gmail.com and we'll address it.",
+    ],
+  },
+  {
+    heading: "12. Changes and Contact",
+    body: [
+      "We'll update this page if our data practices change materially and, where appropriate, notify you. Contact: OTS Media LLC,owntheshift.everyday@gmail.com.",
+    ],
   },
 ];
