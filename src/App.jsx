@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, createContext, useContext } from "r
 import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
-  ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
+  ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool } from "./lib/sessionLog";
@@ -1786,19 +1786,40 @@ function getFocusForTool(tool) {
 // =====================================================
 // HOME
 // =====================================================
+// Collapsed preview for the home briefing — first sentence if it lands early
+// enough to read as a real preview, otherwise a hard character cutoff.
+function truncateToSentence(text, maxLen = 130) {
+  if (!text) return "";
+  const firstSentenceEnd = text.indexOf(". ");
+  if (firstSentenceEnd > -1 && firstSentenceEnd < maxLen) return text.slice(0, firstSentenceEnd + 1);
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen).trim() + "…";
+}
 function HomeView({ go, session } = {}) {
   const [lastTool, setLastTool] = useState(null);
+  const [memory, setMemory] = useState(null);
+  const [briefOpen, setBriefOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     if (session?.user?.id) {
       getLastSessionTool(session.user.id).then((tool) => {
         if (!cancelled) setLastTool(tool);
       });
+      getLatestMemory(session.user.id).then((m) => {
+        if (!cancelled) setMemory(m);
+      });
     }
     return () => { cancelled = true; };
   }, [session?.user?.id]);
-  const focusText = (lastTool && getFocusForTool(lastTool)) || getTodayFocus();
-  const focusLabel = lastTool && FOCUS_BY_TOOL[lastTool] ? `Since your last ${TOOL_LABELS[lastTool] || lastTool} session` : "Today's focus";
+  // Three tiers: a real synthesized memory (specific to this manager) beats
+  // the generic per-tool follow-up, which beats the day-rotation phrase for
+  // managers with no session history at all yet.
+  const focusText = memory || (lastTool && getFocusForTool(lastTool)) || getTodayFocus();
+  const focusLabel = memory
+    ? "Since your last few sessions"
+    : lastTool && FOCUS_BY_TOOL[lastTool]
+      ? `Since your last ${TOOL_LABELS[lastTool] || lastTool} session`
+      : "Today's focus";
   const quick = [
     { id: "pushback", label: "Handle pushback", icon: Shield },
     { id: "practice", label: "Practice a conversation", icon: Play },
@@ -1809,12 +1830,24 @@ function HomeView({ go, session } = {}) {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   return (
     <div>
-      <div className="mb-5">
+      <div className="mb-4">
         <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
           Today's Leadership Brief
         </div>
         <div className="text-xl font-bold text-neutral-50 mt-1">{today}</div>
       </div>
+      <button
+        onClick={() => setBriefOpen((v) => !v)}
+        className="w-full text-left mb-5 pb-4 border-b border-neutral-800"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500">{focusLabel}</span>
+          <ChevronDown size={16} className={`text-neutral-600 shrink-0 transition-transform ${briefOpen ? "rotate-180" : ""}`} />
+        </div>
+        <p className="text-[14px] text-neutral-300 leading-relaxed mt-2">
+          {briefOpen ? focusText : truncateToSentence(focusText)}
+        </p>
+      </button>
       <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5">
         <div className="flex items-center gap-2 mb-2">
           <Briefcase size={15} style={{ color: ACCENT }} />
@@ -1841,10 +1874,6 @@ function HomeView({ go, session } = {}) {
             <ArrowRight size={18} className="ml-auto text-neutral-600" />
           </button>
         ))}
-      </div>
-      <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">{focusLabel}</div>
-        <p className="text-[15px] text-neutral-200 leading-relaxed">{focusText}</p>
       </div>
     </div>
   );
