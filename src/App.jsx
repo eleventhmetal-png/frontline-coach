@@ -90,7 +90,11 @@ function scrubVoice(obj) {
     out = swap(out, "touch base", "check in");
     out = swap(out, "reach out", "talk to");
     out = out
+      .replace(/\s*[—–]\s*/g, ", ")   // em/en dash reads as AI: swap for a comma
+      .replace(/\s+--\s+/g, ", ")      // double-hyphen used as a dash
+      .replace(/,\s*,/g, ",")          // collapse any doubled commas that creates
       .replace(/\s+([.,;:!?])/g, "$1")
+      .replace(/,(\s*[.!?])/g, "$1")   // ", ." -> "." when a dash landed before end punctuation
       .replace(/[ \t]{2,}/g, " ")
       .replace(/^\s*[,.;:!]\s*/, "")
       .trim();
@@ -369,7 +373,7 @@ How you write:
 - Lead with the point. No warmup sentence.
 - Vary the rhythm. Some sentences short. Punch.
 - Match depth to the problem. A simple question gets a short answer. Save the detail for genuinely complex situations or when the manager asks for more. A manager on the floor has ten seconds, not ten minutes.
-Banned phrases (they read as fake, NEVER use them): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward," "I understand," "I hear you," "I know this is hard." Never use the structure "It's not just X, it's Y." Do not lean on em dashes; a comma usually works.
+Banned phrases (they read as fake, NEVER use them): "it's important to," "make sure to," "be sure to," "navigate," "foster," "ensure," "leverage," "at the end of the day," "that being said," "circle back," "reach out," "touch base," "going forward," "I understand," "I hear you," "I know this is hard." Never use the structure "It's not just X, it's Y." Never use em dashes (— or --); they read as AI. Use a comma, a period, or the word "and" instead.
 The lens: extreme ownership, clarity is kindness, candor over comfort, standards over feelings. Apply it. Do not name-drop frameworks or quote anyone.
 ${GUARDRAILS}`;
 }
@@ -1200,7 +1204,7 @@ function DocAssistant({ session } = {}) {
           <div className="mb-3 flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2">
             <AlertTriangle size={14} className="shrink-0" style={{ color: ACCENT }} />
             <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
-              Draft — review and verify before you file it
+              Draft. Review and verify before you file it
             </span>
           </div>
           <Section label="Date / time">{result.dateTime}</Section>
@@ -1225,7 +1229,7 @@ function DocAssistant({ session } = {}) {
                 className="mt-0.5 shrink-0 accent-current"
                 style={{ accentColor: ACCENT }}
               />
-              <span>I confirm the facts in this record are accurate and match what I actually observed. This is my document — Frontline Coach only formatted it.</span>
+              <span>I confirm the facts in this record are accurate and match what I actually observed. This is my document, Frontline Coach only formatted it.</span>
             </label>
             <div className="mt-3 flex items-center justify-end gap-3">
               {!confirmed && <span className="text-[11px] text-neutral-500">Confirm accuracy to copy</span>}
@@ -1275,9 +1279,10 @@ function ConvoBuilder({ session } = {}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
+  const [view, setView] = useState("full");
   async function run() {
     if (!situation.trim()) return;
-    setLoading(true); setError(""); setResult(null); setSessionId(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full");
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
       const r = await callClaudeStream(convoSystem(industry, generation), user, { onPartial: setResult, max_tokens: 1800 });
@@ -1303,6 +1308,13 @@ function ConvoBuilder({ session } = {}) {
     `DON'T\n- ${(result.donts||[]).join("\n- ")}`,
     `FOLLOW-UP\n${result.followUpPlan}`,
   ].join("\n\n") : "";
+  const copyQuick = () => result ? [
+    `OPEN\n${result.opening}`,
+    `POINT\n${result.mainMessage}`,
+    (result.questions||[]).length ? `ASK\n- ${(result.questions||[]).slice(0, 2).join("\n- ")}` : "",
+    result.likelyPushback ? `IF PUSHBACK: ${result.likelyPushback}\n→ ${result.suggestedReply || ""}` : "",
+    `CLOSE\n${result.closing}`,
+  ].filter(Boolean).join("\n\n") : "";
   return (
     <div>
       <ToolHeader title="Conversation Builder" sub="Walk in with a plan instead of winging it." />
@@ -1330,21 +1342,49 @@ function ConvoBuilder({ session } = {}) {
       <ErrorNote msg={error} />
       {result && (
         <ResultCard>
-          <div className="flex justify-end mb-1">
-            <CopyBtn getText={copyAll} />
+          <div className="flex items-center justify-between mb-3">
+            <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900">
+              {[["full", "Full plan"], ["quick", "Quick card"]].map(([v, lbl]) => (
+                <button key={v} onClick={() => setView(v)}
+                  disabled={loading}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
+                  style={view === v ? { backgroundColor: ACCENT, color: "#0a0a0a" } : {}}>
+                  <span className={view === v ? "" : "text-neutral-400"}>{lbl}</span>
+                </button>
+              ))}
+            </div>
+            <CopyBtn getText={view === "quick" ? copyQuick : copyAll} />
           </div>
-          {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
-          {result.mainMessage && <Section label="Main message">{result.mainMessage}</Section>}
-          {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
-          {result.questions?.length > 0 && <Section label="Ask"><BulletList items={result.questions} /></Section>}
-          {result.expectedResponse && <Section label="Expect">{result.expectedResponse}</Section>}
-          {result.likelyPushback && <Section label="Likely pushback">{result.likelyPushback}</Section>}
-          {result.suggestedReply && <Section label="Your reply" accent><Quote>{result.suggestedReply}</Quote></Section>}
-          {result.agreement && <Section label="Land on">{result.agreement}</Section>}
-          {result.closing && <Section label="Close">{result.closing}</Section>}
-          {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
-          <DoDontCard dos={result.dos} donts={result.donts} />
-          {result.followUpPlan && <Section label="Follow-up">{result.followUpPlan}</Section>}
+          {view === "quick" ? (
+            <>
+              <div className="mb-3 text-[11px] text-neutral-500">The five lines to hold during the talk. Say them your way. Tap Full plan for the rest.</div>
+              {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
+              {result.mainMessage && <Section label="The point">{result.mainMessage}</Section>}
+              {result.questions?.length > 0 && <Section label="Ask"><BulletList items={result.questions.slice(0, 2)} /></Section>}
+              {result.likelyPushback && (
+                <Section label="If they push back">
+                  <div className="text-neutral-400 mb-1.5">{result.likelyPushback}</div>
+                  {result.suggestedReply && <Quote>{result.suggestedReply}</Quote>}
+                </Section>
+              )}
+              {result.closing && <Section label="Close">{result.closing}</Section>}
+            </>
+          ) : (
+            <>
+              {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
+              {result.mainMessage && <Section label="Main message">{result.mainMessage}</Section>}
+              {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
+              {result.questions?.length > 0 && <Section label="Ask"><BulletList items={result.questions} /></Section>}
+              {result.expectedResponse && <Section label="Expect">{result.expectedResponse}</Section>}
+              {result.likelyPushback && <Section label="Likely pushback">{result.likelyPushback}</Section>}
+              {result.suggestedReply && <Section label="Your reply" accent><Quote>{result.suggestedReply}</Quote></Section>}
+              {result.agreement && <Section label="Land on">{result.agreement}</Section>}
+              {result.closing && <Section label="Close">{result.closing}</Section>}
+              {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+              <DoDontCard dos={result.dos} donts={result.donts} />
+              {result.followUpPlan && <Section label="Follow-up">{result.followUpPlan}</Section>}
+            </>
+          )}
           {!loading && <FeedbackRow tool="Conversation Builder" inputSummary={situation} userId={session?.user?.id} sessionId={sessionId} />}
         </ResultCard>
       )}
