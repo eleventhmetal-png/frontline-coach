@@ -203,7 +203,8 @@ export default function AuthGate({ children }) {
         </div>
 
         <h1 className="text-2xl font-extrabold text-center leading-tight mb-3">
-          AI coaching for the conversations frontline managers dread.
+          Stop hoping your managers figure it out.{" "}
+          <span style={{ color: ACCENT }}>Give them a system.</span>
         </h1>
         <p className="text-sm text-neutral-400 text-center leading-relaxed mb-8 max-w-sm mx-auto">
           Frontline Coach gives newly promoted managers and shift leads the exact words for a hard
@@ -214,8 +215,14 @@ export default function AuthGate({ children }) {
         <img
           src="/hero-phone.png"
           alt="Frontline Coach app running on an iPhone, showing today's leadership brief and coaching tools"
-          className="w-full max-w-xs mx-auto rounded-2xl mb-10"
+          className="w-full max-w-xs mx-auto rounded-2xl mb-8"
         />
+
+        <p className="text-sm text-neutral-400 text-center leading-relaxed mb-10 max-w-sm mx-auto">
+          Most frontline managers get promoted and then left on their own — no coaching training, no
+          rehearsal, no plan for the conversation that's about to go sideways. Frontline Coach is
+          what closes that gap, one shift at a time.
+        </p>
 
         <button
           onClick={() => document.getElementById("auth")?.scrollIntoView({ behavior: "smooth" })}
