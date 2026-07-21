@@ -282,10 +282,12 @@ export default function AuthGate({ children }) {
       <div id="auth" className="border-t border-neutral-900 pt-14 pb-20 flex items-center justify-center px-6">
       <div className="w-full max-w-xs">
         <div className="flex items-center gap-2 mb-8 justify-center">
-          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
+          <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: ACCENT }}>
             <Zap size={16} className="text-neutral-950" />
           </div>
-          <span className="font-extrabold uppercase tracking-tight">Frontline Coach</span>
+          <span className="font-extrabold tracking-tight text-sm">
+            Own The Shift <span className="text-neutral-600 mx-0.5">—</span> Frontline Coach
+          </span>
         </div>
 
         <div className="flex rounded-lg border border-neutral-800 p-1 mb-6">
