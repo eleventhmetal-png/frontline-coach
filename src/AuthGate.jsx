@@ -209,6 +209,11 @@ export default function AuthGate({ children }) {
           </span>
         </div>
 
+        <div className="flex items-center justify-center gap-2 -mt-6 mb-10">
+          <Shield size={14} style={{ color: ACCENT }} />
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-400">Veteran-Owned &amp; Operated</span>
+        </div>
+
         <h1 className="text-3xl md:text-4xl font-extrabold text-center leading-tight mb-5 max-w-xl mx-auto">
           Stop hoping your managers figure it out.{" "}
           <span style={{ color: ACCENT }}>Give them a system.</span>
