@@ -1502,8 +1502,20 @@ function Roleplay({ session } = {}) {
   async function endAndScore() {
     setLoading(true); setError(""); setSessionId(null);
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
+    const user = `Scenario: ${lockedScenario.current}\n\n${transcript}`;
     try {
-      const r = await callClaude(rpScoreSystem(lockedIndustry.current), `Scenario: ${lockedScenario.current}\n\n${transcript}`);
+      // Score via the streaming path (keep-alive avoids the buffered-response
+      // gateway timeout) and auto-retry a few times, so a transient hiccup or a
+      // one-off bad-JSON parse doesn't force the manager to hit the button again.
+      let r = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          r = await callClaudeStream(rpScoreSystem(lockedIndustry.current), user, { max_tokens: 1200 });
+          if (r) break;
+        } catch (e) { lastErr = e; }
+        if (attempt < 2) await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
+      }
+      if (!r) throw lastErr || new Error("no score");
       setScore(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript }, output: r, model: MODEL_SMART }));
       scrollDown();
