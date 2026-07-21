@@ -1280,9 +1280,10 @@ function ConvoBuilder({ session } = {}) {
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
   const [view, setView] = useState("full");
+  const [step, setStep] = useState(0);
   async function run() {
     if (!situation.trim()) return;
-    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full");
+    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full"); setStep(0);
     const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
     try {
       const r = await callClaudeStream(convoSystem(industry, generation), user, { onPartial: setResult, max_tokens: 1800 });
@@ -1315,6 +1316,19 @@ function ConvoBuilder({ session } = {}) {
     result.likelyPushback ? `IF PUSHBACK: ${result.likelyPushback}\n→ ${result.suggestedReply || ""}` : "",
     `CLOSE\n${result.closing}`,
   ].filter(Boolean).join("\n\n") : "";
+  const guidedSteps = result ? [
+    result.opening && { label: "Open", node: <Quote>{result.opening}</Quote> },
+    result.mainMessage && { label: "The point", node: result.mainMessage },
+    result.questions?.length > 0 && { label: "Ask", node: <BulletList items={result.questions.slice(0, 3)} /> },
+    result.likelyPushback && { label: "If they push back", node: (
+      <div>
+        <div className="text-neutral-400 mb-1.5">{result.likelyPushback}</div>
+        {result.suggestedReply && <Quote>{result.suggestedReply}</Quote>}
+      </div>
+    ) },
+    result.agreement && { label: "Land on", node: result.agreement },
+    result.closing && { label: "Close", node: result.closing },
+  ].filter(Boolean) : [];
   return (
     <div>
       <ToolHeader title="Conversation Builder" sub="Walk in with a plan instead of winging it." />
@@ -1344,8 +1358,8 @@ function ConvoBuilder({ session } = {}) {
         <ResultCard>
           <div className="flex items-center justify-between mb-3">
             <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900">
-              {[["full", "Full plan"], ["quick", "Quick card"]].map(([v, lbl]) => (
-                <button key={v} onClick={() => setView(v)}
+              {[["full", "Full plan"], ["quick", "Quick card"], ["guided", "Guided"]].map(([v, lbl]) => (
+                <button key={v} onClick={() => { setView(v); if (v === "guided") setStep(0); }}
                   disabled={loading}
                   className="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
                   style={view === v ? { backgroundColor: ACCENT, color: "#0a0a0a" } : {}}>
@@ -1353,9 +1367,44 @@ function ConvoBuilder({ session } = {}) {
                 </button>
               ))}
             </div>
-            <CopyBtn getText={view === "quick" ? copyQuick : copyAll} />
+            <CopyBtn getText={view === "full" ? copyAll : copyQuick} />
           </div>
-          {view === "quick" ? (
+          {view === "guided" && guidedSteps.length > 0 && (() => {
+            const idx = Math.min(step, guidedSteps.length - 1);
+            const cur = guidedSteps[idx];
+            const last = idx === guidedSteps.length - 1;
+            return (
+              <div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  {guidedSteps.map((s, i) => (
+                    <div key={i} className="h-1 rounded-full flex-1 transition-colors"
+                      style={{ backgroundColor: i <= idx ? ACCENT : "#2a2a2a" }} />
+                  ))}
+                </div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500 mb-2">Step {idx + 1} of {guidedSteps.length}</div>
+                <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-4 min-h-[7rem]">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: ACCENT }}>{cur.label}</div>
+                  <div className="text-[15px] leading-relaxed text-neutral-100">{cur.node}</div>
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <button onClick={() => setStep(Math.max(0, idx - 1))} disabled={idx === 0}
+                    className={`text-sm font-medium px-4 py-2 rounded-lg border border-neutral-800 transition-colors ${idx === 0 ? "text-neutral-700 cursor-not-allowed" : "text-neutral-300 hover:text-neutral-100"}`}>
+                    Back
+                  </button>
+                  {last ? (
+                    <span className="text-[12px] text-neutral-500">That's the conversation. Go run it.</span>
+                  ) : (
+                    <button onClick={() => setStep(idx + 1)}
+                      className="text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+                      style={{ backgroundColor: ACCENT, color: "#0a0a0a" }}>
+                      Next
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+          {view === "quick" && (
             <>
               <div className="mb-3 text-[11px] text-neutral-500">The five lines to hold during the talk. Say them your way. Tap Full plan for the rest.</div>
               {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
@@ -1369,7 +1418,8 @@ function ConvoBuilder({ session } = {}) {
               )}
               {result.closing && <Section label="Close">{result.closing}</Section>}
             </>
-          ) : (
+          )}
+          {view === "full" && (
             <>
               {result.opening && <Section label="Open" accent><Quote>{result.opening}</Quote></Section>}
               {result.mainMessage && <Section label="Main message">{result.mainMessage}</Section>}
