@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { Zap, Loader2, Mail, Lock, AlertTriangle, X } from "lucide-react";
+import {
+  Zap, Loader2, Mail, Lock, AlertTriangle, X,
+  MessageSquare, Shield, Play, ClipboardList, Target, FileText,
+} from "lucide-react";
 import { supabase, supabaseReady } from "./lib/supabaseClient";
 import { TERMS_SECTIONS, PRIVACY_SECTIONS, LAST_UPDATED } from "./legalContent";
 
 const ACCENT = "#E8923C";
+
+const FEATURES = [
+  { icon: MessageSquare, title: "AI Coach", desc: "Describe a people problem on your shift. Get a plan you can run today." },
+  { icon: Shield, title: "Pushback Coach", desc: "Get the exact words when an employee pushes back, live." },
+  { icon: Play, title: "Practice", desc: "Rehearse a hard conversation against an AI employee before the real one." },
+  { icon: ClipboardList, title: "Conversation Builder", desc: "Walk into any conversation with a plan instead of winging it." },
+  { icon: Target, title: "Skill vs. Will Diagnostic", desc: "Find out if it's a skill problem, a will problem — or yours." },
+  { icon: FileText, title: "Documentation Assistant", desc: "Turn rough notes into a clean, factual record." },
+];
 
 // Google "G" mark, inline so we don't pull an icon-font dependency for one button.
 function GoogleMark() {
@@ -175,7 +187,74 @@ export default function AuthGate({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center px-6">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      {/* Public landing content — reachable with no login, per Google OAuth
+          verification requirements (home page not gated, explains what the
+          app does, brand name distinct from a generic Google product term). */}
+      <div className="max-w-md mx-auto px-6 pt-14 pb-10">
+        <div className="flex items-center gap-2 mb-3 justify-center">
+          <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
+            <Zap size={18} className="text-neutral-950" />
+          </div>
+          <span className="font-extrabold uppercase tracking-tight text-lg">Frontline Coach</span>
+        </div>
+        <div className="text-center text-[11px] uppercase tracking-widest text-neutral-500 mb-8">
+          by Own The Shift
+        </div>
+
+        <h1 className="text-2xl font-extrabold text-center leading-tight mb-3">
+          AI coaching for the conversations frontline managers dread.
+        </h1>
+        <p className="text-sm text-neutral-400 text-center leading-relaxed mb-8 max-w-sm mx-auto">
+          Frontline Coach gives newly promoted managers and shift leads the exact words for a hard
+          conversation, a place to rehearse it first, and a clean record after — built by an
+          operator who runs shifts for a living, not a corporate HR vendor.
+        </p>
+
+        <img
+          src="/hero-phone.png"
+          alt="Frontline Coach app running on an iPhone, showing today's leadership brief and coaching tools"
+          className="w-full max-w-xs mx-auto rounded-2xl mb-10"
+        />
+
+        <button
+          onClick={() => document.getElementById("auth")?.scrollIntoView({ behavior: "smooth" })}
+          className="w-full rounded-lg py-3 font-semibold text-sm mb-10 text-neutral-950"
+          style={{ backgroundColor: ACCENT }}
+        >
+          Get Started
+        </button>
+
+        <div className="space-y-3 mb-10">
+          {FEATURES.map((f) => (
+            <div
+              key={f.title}
+              className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+            >
+              <f.icon size={18} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
+              <div>
+                <div className="font-semibold text-sm">{f.title}</div>
+                <div className="text-xs text-neutral-500 leading-snug">{f.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[11px] text-neutral-600 text-center mb-10 max-w-sm mx-auto">
+          Coaching guidance only — not legal or HR advice. Always follow your company's policies.
+          See our{" "}
+          <a href="/terms.html" className="underline" style={{ color: ACCENT }}>
+            Terms
+          </a>{" "}
+          and{" "}
+          <a href="/privacy.html" className="underline" style={{ color: ACCENT }}>
+            Privacy Policy
+          </a>.
+        </p>
+      </div>
+
+      {/* Sign in / sign up */}
+      <div id="auth" className="flex items-center justify-center px-6 pb-16">
       <div className="w-full max-w-xs">
         <div className="flex items-center gap-2 mb-8 justify-center">
           <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
@@ -270,6 +349,7 @@ export default function AuthGate({ children }) {
             {mode === "signin" ? "Sign In" : "Create Account"}
           </button>
         </form>
+      </div>
       </div>
       {showLegal && <LegalModal onClose={() => setShowLegal(false)} />}
     </div>
