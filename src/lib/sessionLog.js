@@ -45,3 +45,24 @@ export async function reportProblem({ userId, sessionId, reason }) {
     return false;
   }
 }
+
+// Phase 3, step 9: lets the Home screen tie its suggested focus card to
+// whatever the manager actually used last, instead of a generic rotation.
+// Returns the tool id (e.g. "coach") of the most recent session, or null for
+// a brand-new user with no history yet.
+export async function getLastSessionTool(userId) {
+  if (!supabaseReady || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("tool")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.tool;
+  } catch (e) {
+    return null;
+  }
+}
