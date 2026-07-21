@@ -1434,6 +1434,7 @@ function Roleplay({ session } = {}) {
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
   const [memory, setMemory] = useState(null);
+  const [memoryOpen, setMemoryOpen] = useState(false); // collapsed by default so it never blocks the tool
   const endRef = useRef(null);
   const inputRef = useRef(null);
   // Practice is the one tool with a real multi-turn transcript, so it's the
@@ -1520,9 +1521,17 @@ function Roleplay({ session } = {}) {
       <div>
         <ToolHeader title="Practice" sub="Run the hard conversation against an AI employee before you run it for real." />
         {memory && (
-          <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5">
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: ACCENT }}>What showed up in your last few reps</div>
-            <p className="text-[14px] text-neutral-300 leading-relaxed">{memory}</p>
+          <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900">
+            <button
+              onClick={() => setMemoryOpen((v) => !v)}
+              className="w-full text-left p-3.5 flex items-center justify-between gap-2"
+            >
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>What showed up in your last few reps</span>
+              <ChevronDown size={16} className={`text-neutral-600 shrink-0 transition-transform ${memoryOpen ? "rotate-180" : ""}`} />
+            </button>
+            {memoryOpen && (
+              <p className="text-[14px] text-neutral-300 leading-relaxed px-3.5 pb-3.5 -mt-1">{memory}</p>
+            )}
           </div>
         )}
         <div className="mb-4">
@@ -1713,6 +1722,11 @@ function MoreView({ go, session, signOut }) {
           </div>
         </div>
       )}
+      <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-neutral-600">
+        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Terms</a>
+        <span>·</span>
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Privacy</a>
+      </div>
     </div>
   );
 }
