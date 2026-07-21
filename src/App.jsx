@@ -21,6 +21,26 @@ async function authHeaders() {
   } catch (e) { /* no session → proxy will 401 */ }
   return h;
 }
+// Maps a non-OK proxy response to a typed error with a user-facing message, so
+// tools can tell an expired session (401) apart from a rate limit (429) or a
+// server error, instead of showing one vague "try again" for everything.
+function proxyError(status) {
+  const e = new Error(`proxy ${status}`);
+  e.status = status;
+  if (status === 401) e.userMessage = "Your session expired. Sign in again to keep going.";
+  else if (status === 429) e.userMessage = "The coach is busy right now. Give it a few seconds and try again.";
+  else if (status >= 500) e.userMessage = "Something went wrong on our end. Try again in a moment.";
+  return e;
+}
+function errMessage(e, fallback) {
+  return e && e.userMessage ? e.userMessage : fallback;
+}
+// A genuine 401 means the token refresh already failed upstream — the session
+// is dead. Sign out so AuthGate shows the login screen instead of the app
+// looping errors forever. Safe to call more than once.
+async function handleAuthFailure() {
+  try { await supabase?.auth?.signOut(); } catch (e) { /* ignore */ }
+}
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
 const MODEL_SMART = "claude-sonnet-5";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
@@ -36,6 +56,10 @@ async function rawClaude(messages, { model, system, max_tokens, temperature } = 
       messages,
     }),
   });
+  if (!res.ok) {
+    if (res.status === 401) handleAuthFailure();
+    throw proxyError(res.status);
+  }
   const data = await res.json();
   return (data.content || [])
     .filter((b) => b.type === "text")
@@ -121,7 +145,11 @@ async function streamClaude(messages, { model, system, max_tokens, temperature, 
       messages,
     }),
   });
-  if (!res.ok || !res.body) throw new Error("stream unavailable");
+  if (!res.ok) {
+    if (res.status === 401) handleAuthFailure();
+    throw proxyError(res.status);
+  }
+  if (!res.body) throw new Error("stream unavailable");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "", full = "";
@@ -168,6 +196,8 @@ async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
     if (parsed) return scrubVoice(parsed);
     throw new Error("bad JSON");
   } catch (e) {
+    // Don't fire a second doomed request for auth/rate-limit — let it surface.
+    if (e && (e.status === 401 || e.status === 429)) throw e;
     return await callClaude(system, user, opts);
   }
 }
@@ -852,7 +882,7 @@ function AICoach({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART }));
     } catch (e) {
-      setError("Couldn't generate a plan. Add a bit more detail and try again.");
+      setError(errMessage(e, "Couldn't generate a plan. Add a bit more detail and try again."));
     } finally {
       setLoading(false);
     }
@@ -1013,7 +1043,7 @@ function PushbackCoach({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context, generation }, output: r, model: MODEL_FAST }));
     } catch (e) {
-      setError("Couldn't generate a response. Try again.");
+      setError(errMessage(e, "Couldn't generate a response. Try again."));
     } finally {
       setLoading(false);
     }
@@ -1116,7 +1146,7 @@ function DocAssistant({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART }));
     } catch (e) {
-      setError("Couldn't clean that up. Try again.");
+      setError(errMessage(e, "Couldn't clean that up. Try again."));
     } finally {
       setLoading(false);
     }
@@ -1207,7 +1237,7 @@ function ConvoBuilder({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "convo", input: { type, name, situation, outcome, generation }, output: r, model: MODEL_SMART }));
     } catch (e) {
-      setError("Couldn't build the plan. Add detail and try again.");
+      setError(errMessage(e, "Couldn't build the plan. Add detail and try again."));
     } finally {
       setLoading(false);
     }
@@ -1319,7 +1349,7 @@ function SkillWill({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART }));
     } catch (e) {
-      setError("Couldn't run the diagnostic. Try again.");
+      setError(errMessage(e, "Couldn't run the diagnostic. Try again."));
     } finally {
       setLoading(false);
     }
@@ -1478,7 +1508,7 @@ function Roleplay({ session } = {}) {
         (t) => { setHistory([{ role: "assistant", content: t }]); scrollDown(); },
         { model: MODEL_FAST, max_tokens: 350, temperature: 1 });
     } catch (e) {
-      setError("Couldn't start the roleplay. Try again.");
+      setError(errMessage(e, "Couldn't start the roleplay. Try again."));
     } finally {
       setLoading(false);
     }
@@ -1494,7 +1524,7 @@ function Roleplay({ session } = {}) {
         (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
     } catch (e) {
-      setError("No reply came back. Try sending again.");
+      setError(errMessage(e, "No reply came back. Try sending again."));
     } finally {
       setLoading(false);
     }
@@ -1520,7 +1550,7 @@ function Roleplay({ session } = {}) {
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript }, output: r, model: MODEL_SMART }));
       scrollDown();
     } catch (e) {
-      setError("Couldn't score it. Try again.");
+      setError(errMessage(e, "Couldn't score it. Try again."));
     } finally {
       setLoading(false);
     }
