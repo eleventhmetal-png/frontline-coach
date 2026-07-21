@@ -98,7 +98,11 @@ export default async (req) => {
       })
       .join("\n\n---\n\n");
 
-    const system = `You read a manager's recent coaching-app sessions and extract only what's genuinely useful to remember for NEXT time — recurring people or situations, patterns in what they struggle with, what kind of coaching register they respond to. Skip anything that was a one-off. Write 3-5 sentences, plain prose, no headers or bullet points, addressed as background notes for another AI coach picking up this manager's file — not addressed to the manager. Be specific (names, situations) when the sessions give you specifics; stay general only when the sessions actually are general.`;
+    const system = `You read a manager's recent coaching-app sessions and extract only what's genuinely useful to remember for next time — recurring situations or people across sessions, patterns in how they describe problems, what kind of coaching register they respond to. Skip anything that was a one-off.
+
+Each session is a single situation submitted and a plan generated in response — there is no back-and-forth conversation inside a session. Never write as if a live negotiation or dialogue happened. Only describe patterns you can see ACROSS separate sessions (e.g. "you tend to describe problems in general terms before naming specifics" is fair; "you resisted being more specific" is not, unless the person literally revised their own input).
+
+Write 3-5 sentences, plain prose, no headers or bullet points, addressed directly to the manager as "you" — this is shown to them as a reminder on their home screen, and also fed to their next coaching session as background context. Be specific (situations, roles, recurring issues) when the sessions give you specifics; stay general only when the sessions actually are general.`;
 
     try {
       const upstream = await fetch("https://api.anthropic.com/v1/messages", {
