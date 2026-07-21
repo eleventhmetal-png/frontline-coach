@@ -1,12 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Phase 3, step 6: nightly memory-synthesis job.
+// Phase 3, step 6: nightly memory-synthesis job — PRACTICE ONLY.
 //
-// Reads recent session activity per user, asks Claude to pull out durable
-// coaching-relevant takeaways (recurring people/situations, patterns,
-// what's actually sticking vs. not), and writes one row per user into
-// public.memory. AICoach (and eventually the other tools) reads the latest
-// row back in to tailor its plans instead of starting cold every time.
+// Practice (roleplay) is the one tool with a genuine multi-turn transcript, so
+// it's the only place a real behavioral pattern can be synthesized honestly.
+// This job reads a user's recent Practice reps (the roleplay dialogue + the
+// debrief), asks Claude to name the patterns that show up ACROSS reps (e.g.
+// "you concede early when the employee pushes on tone"), and writes one row per
+// user into public.memory. The Practice tool reads the latest row back in and
+// shows it before the next rep; Coach also gets it as background on how this
+// manager tends to handle live conversations.
+//
+// One-shot tools (coach, pushback, convo, skill_will, document) are NOT
+// synthesized here — they have no back-and-forth to synthesize. Their Home
+// follow-up reminder just quotes the plan's own follow-up field client-side
+// (see src/lib/sessionLog.js getLastFollowUp).
 //
 // Runs on Netlify's scheduler (see `config` export below) once a day. Can
 // also be hit manually while testing — see the auth check below.
@@ -20,8 +28,8 @@ import { createClient } from "@supabase/supabase-js";
 //   SYNTHESIS_JOB_SECRET       - any random string. Lets you trigger this manually
 //                                for testing via header x-synthesis-key.
 
-const MODEL_SYNTHESIS = "claude-opus-4-8"; // build-time: Opus for quality while we validate output. Switch to claude-sonnet-5 once the prompt is proven out and this is running daily for real users — cost adds up, Sonnet should be plenty for this once it's dialed in.
-const MIN_NEW_SESSIONS = 3; // don't bother synthesizing over 1-2 stray sessions
+const MODEL_SYNTHESIS = "claude-sonnet-5"; // standing rule: app runs on current-gen Sonnet, not a pinned dated snapshot. Sonnet is plenty for this synthesis.
+const MIN_NEW_PRACTICE_SESSIONS = 3; // need a few reps before a "pattern" is real, not a one-off
 const MAX_SESSIONS_PER_USER = 15; // cap how much we feed the model per user
 
 function json(obj, status = 200) {
@@ -58,6 +66,7 @@ export default async (req) => {
     db
       .from("sessions")
       .select("id, user_id, tool, input, output, created_at")
+      .eq("tool", "practice")
       .gte("created_at", since)
       .order("created_at", { ascending: false }),
     db.from("memory").select("user_id, created_at").order("created_at", { ascending: false }),
@@ -84,25 +93,27 @@ export default async (req) => {
       ? userSessions.filter((s) => s.created_at > lastMemoryAt)
       : userSessions;
 
-    if (newSinceLastMemory.length < MIN_NEW_SESSIONS) {
+    if (newSinceLastMemory.length < MIN_NEW_PRACTICE_SESSIONS) {
       results.skipped++;
       continue;
     }
 
     const toSummarize = userSessions.slice(0, MAX_SESSIONS_PER_USER);
     const transcript = toSummarize
-      .map((s) => {
-        const inputText = typeof s.input === "string" ? s.input : JSON.stringify(s.input);
-        const outputText = typeof s.output === "string" ? s.output : JSON.stringify(s.output).slice(0, 600);
-        return `[${s.tool}] INPUT: ${inputText}\nOUTPUT: ${outputText}`;
+      .map((s, i) => {
+        const inp = s.input && typeof s.input === "object" ? s.input : {};
+        const scenario = inp.scenario || "(scenario not recorded)";
+        const dialogue = typeof inp.transcript === "string" ? inp.transcript : JSON.stringify(inp.transcript || "");
+        const debrief = typeof s.output === "string" ? s.output : JSON.stringify(s.output || {});
+        return `REP ${i + 1} — SCENARIO: ${scenario}\nDIALOGUE (MANAGER = the person you're coaching, EMPLOYEE = the roleplay bot):\n${dialogue}\nDEBRIEF SCORE: ${debrief}`;
       })
-      .join("\n\n---\n\n");
+      .join("\n\n===== NEXT REP =====\n\n");
 
-    const system = `You read a manager's recent coaching-app sessions and extract only what's genuinely useful to remember for next time — recurring situations or people across sessions, patterns in how they describe problems, what kind of coaching register they respond to. Skip anything that was a one-off.
+    const system = `You read a manager's recent Practice reps — roleplay conversations they ran against a simulated employee, each followed by a debrief score. These are REAL multi-turn conversations with actual back-and-forth, so you can and should reference how the manager handled the dialogue itself.
 
-Each session is a single situation submitted and a plan generated in response — there is no back-and-forth conversation inside a session. Never write as if a live negotiation or dialogue happened. Only describe patterns you can see ACROSS separate sessions (e.g. "you tend to describe problems in general terms before naming specifics" is fair; "you resisted being more specific" is not, unless the person literally revised their own input).
+Your job: name the behavioral patterns that repeat ACROSS reps — the things this manager tends to do when a live conversation gets hard. Be concrete and honest, the way a district manager who watched all these reps would put it. Examples of the register: "you tend to concede the moment the employee pushes back on tone," "you ask a good opening question and then answer it yourself before they can," "you set a clear standard early but stop following up once the employee gets emotional." Only call something a pattern if it shows up in more than one rep — never build a pattern off a single exchange. If the reps show real improvement, say that specifically.
 
-Write 3-5 sentences, plain prose, no headers or bullet points, addressed directly to the manager as "you" — this is shown to them as a reminder on their home screen, and also fed to their next coaching session as background context. Be specific (situations, roles, recurring issues) when the sessions give you specifics; stay general only when the sessions actually are general.`;
+Write 3-5 sentences, plain prose, no headers or bullet points, addressed directly to the manager as "you." This is shown to them inside the Practice tool before their next rep, and fed to their coaching sessions as background on how they handle live conversations. Be specific about what they do and when it happens; don't hedge into generic advice.`;
 
     try {
       const upstream = await fetch("https://api.anthropic.com/v1/messages", {

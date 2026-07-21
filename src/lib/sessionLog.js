@@ -66,3 +66,44 @@ export async function getLastSessionTool(userId) {
     return null;
   }
 }
+
+// Home "accountability layer": each one-shot tool already writes a concrete
+// follow-up commitment into its own output JSON. Rather than synthesize a
+// pattern across sessions (which invents a back-and-forth that one-shot tools
+// never had), we just quote back what the last plan actually told the manager
+// to do. No AI call, no made-up narrative — the plan's own words.
+//
+// Practice is deliberately excluded: it has a real transcript and gets its own
+// synthesized pattern feedback inside the Practice tool, not here.
+const FOLLOWUP_FIELD_BY_TOOL = {
+  coach: "followUp",
+  convo: "followUpPlan",
+  document: "followUpDate",
+  skill_will: "followUpInterval",
+  pushback: "followUpQuestion",
+};
+
+export async function getLastFollowUp(userId) {
+  if (!supabaseReady || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("tool, output")
+      .eq("user_id", userId)
+      .neq("tool", "practice")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (error || !data) return null;
+    for (const row of data) {
+      const field = FOLLOWUP_FIELD_BY_TOOL[row.tool];
+      if (!field) continue;
+      const out = row.output;
+      if (!out || typeof out !== "object") continue;
+      const text = typeof out[field] === "string" ? out[field].trim() : "";
+      if (text) return { tool: row.tool, text };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}

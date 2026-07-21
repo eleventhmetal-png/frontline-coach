@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
-import { logSession, reportProblem, getLastSessionTool } from "./lib/sessionLog";
+import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
@@ -788,7 +788,7 @@ const COACH_SITUATIONS = [
 ];
 const coachSystem = (ind, gen, memory) => `${voiceFor(ind)}
 ${REGISTER}${generationLayer(gen)}
-${memory ? `\nWHAT YOU KNOW ABOUT THIS MANAGER FROM PAST SESSIONS (use it to tailor the plan, don't just restate it back to them):\n${memory}\n` : ""}
+${memory ? `\nHOW THIS MANAGER TENDS TO HANDLE LIVE CONVERSATIONS (patterns from their recent practice reps — use it to tailor the plan and pre-empt their habits, don't just restate it back to them):\n${memory}\n` : ""}
 You are the AI Coach inside Frontline Coach. A manager describes a people problem on their shift. You diagnose it, tell them what they own, and hand them a plan they can run today. You challenge them when they're avoiding the conversation, being vague, overreacting, or blaming the team for a gap they created. You separate skill from will.
 Hard rules for this output:
 - LEADER FIRST. Before you diagnose the team, diagnose the leader. When a manager asks why performance, morale, or a person is declining, your first move is what the leader did or didn't do to cause it. Only after that do you look at the team. Never hand a manager an analysis that points only outward; that builds blame, not ownership.
@@ -1421,8 +1421,20 @@ function Roleplay({ session } = {}) {
   const [score, setScore] = useState(null);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
+  const [memory, setMemory] = useState(null);
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  // Practice is the one tool with a real multi-turn transcript, so it's the
+  // one place a synthesized pattern is earned. Show what the nightly job pulled
+  // from the last few reps right before the next one — this is where it's
+  // actionable, not buried on Home.
+  useEffect(() => {
+    let cancelled = false;
+    if (session?.user?.id) {
+      getLatestMemory(session.user.id).then((m) => { if (!cancelled) setMemory(m); });
+    }
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
   // Lock the industry the moment the roleplay starts. Changing the picker
   // mid-session can't drift the employee's world or misscore the debrief.
   const lockedIndustry = useRef(DEFAULT_INDUSTRY);
@@ -1495,6 +1507,12 @@ function Roleplay({ session } = {}) {
     return (
       <div>
         <ToolHeader title="Practice" sub="Run the hard conversation against an AI employee before you run it for real." />
+        {memory && (
+          <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: ACCENT }}>What showed up in your last few reps</div>
+            <p className="text-[14px] text-neutral-300 leading-relaxed">{memory}</p>
+          </div>
+        )}
         <div className="mb-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Industry</div>
           <IndustryPicker id="industry-practice" />
@@ -1797,7 +1815,7 @@ function truncateToSentence(text, maxLen = 130) {
 }
 function HomeView({ go, session } = {}) {
   const [lastTool, setLastTool] = useState(null);
-  const [memory, setMemory] = useState(null);
+  const [followUp, setFollowUp] = useState(null);
   const [briefOpen, setBriefOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -1805,18 +1823,20 @@ function HomeView({ go, session } = {}) {
       getLastSessionTool(session.user.id).then((tool) => {
         if (!cancelled) setLastTool(tool);
       });
-      getLatestMemory(session.user.id).then((m) => {
-        if (!cancelled) setMemory(m);
+      getLastFollowUp(session.user.id).then((f) => {
+        if (!cancelled) setFollowUp(f);
       });
     }
     return () => { cancelled = true; };
   }, [session?.user?.id]);
-  // Three tiers: a real synthesized memory (specific to this manager) beats
-  // the generic per-tool follow-up, which beats the day-rotation phrase for
-  // managers with no session history at all yet.
-  const focusText = memory || (lastTool && getFocusForTool(lastTool)) || getTodayFocus();
-  const focusLabel = memory
-    ? "Since your last few sessions"
+  // Home = accountability layer. Three tiers: the actual follow-up commitment
+  // from the manager's last one-shot plan (quoted verbatim, no synthesis) beats
+  // the generic per-tool nudge, which beats the day-rotation phrase for a
+  // manager with no session history yet. Cross-session pattern synthesis lives
+  // in Practice now — Home never invents a narrative.
+  const focusText = followUp?.text || (lastTool && getFocusForTool(lastTool)) || getTodayFocus();
+  const focusLabel = followUp
+    ? `Follow up from your last ${TOOL_LABELS[followUp.tool] || followUp.tool} plan`
     : lastTool && FOCUS_BY_TOOL[lastTool]
       ? `Since your last ${TOOL_LABELS[lastTool] || lastTool} session`
       : "Today's focus";
