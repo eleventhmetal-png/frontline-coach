@@ -198,14 +198,15 @@ export default function AuthGate({ children }) {
           the in-app screens, so this outer div owns its own scroll instead of
           relying on document scroll (which is disabled globally). */}
       <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-6 md:px-10 pt-16 pb-14">
-        <div className="flex items-center gap-2 mb-4 justify-center">
-          <div className="w-9 h-9 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
+        <div className="flex items-center gap-2 mb-10 justify-center">
+          <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: ACCENT }}>
             <Zap size={20} className="text-neutral-950" />
           </div>
-          <span className="font-extrabold uppercase tracking-tight text-xl">Frontline Coach</span>
-        </div>
-        <div className="text-center text-[11px] uppercase tracking-widest text-neutral-500 mb-10">
-          by Own The Shift
+          {/* Literal text must match the OAuth consent screen's App name field
+              exactly — Google's verification check compares this string. */}
+          <span className="font-extrabold tracking-tight text-lg md:text-xl">
+            Own The Shift <span className="text-neutral-600 mx-1">—</span> Frontline Coach
+          </span>
         </div>
 
         <h1 className="text-3xl md:text-4xl font-extrabold text-center leading-tight mb-5 max-w-xl mx-auto">
