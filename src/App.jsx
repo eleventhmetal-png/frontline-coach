@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
   Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase
 } from "lucide-react";
-import { logSession, reportProblem } from "./lib/sessionLog";
+import { logSession, reportProblem, getLastSessionTool } from "./lib/sessionLog";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
@@ -1721,17 +1721,76 @@ const FOCUS_ROTATION = [
   "Identify the gap between your top performer and your average one. What's creating that distance?",
   "Ask: what does the team believe I actually care about, based on what I inspect and what I let slide?",
 ];
-function getTodayFocus() {
-  const now = new Date();
-  // Use a fixed epoch date so the index is consistent across all timezones
+function daysSinceEpoch() {
   const epoch = new Date(2026, 0, 1); // Jan 1 2026 = index 0
-  const daysSinceEpoch = Math.floor((now - epoch) / 86400000);
-  return FOCUS_ROTATION[((daysSinceEpoch % FOCUS_ROTATION.length) + FOCUS_ROTATION.length) % FOCUS_ROTATION.length];
+  return Math.floor((new Date() - epoch) / 86400000);
+}
+function getTodayFocus() {
+  const d = daysSinceEpoch();
+  return FOCUS_ROTATION[((d % FOCUS_ROTATION.length) + FOCUS_ROTATION.length) % FOCUS_ROTATION.length];
+}
+// Phase 3, step 9 — once we know what tool the manager used last (via
+// Supabase session history), the focus card follows up on THAT instead of
+// the generic rotation. Still rotates day to day within the relevant list
+// so it doesn't repeat the same line every visit.
+const TOOL_LABELS = {
+  coach: "Coach", pushback: "Pushback", practice: "Practice",
+  convo: "Conversation Builder", skill_will: "Skill vs. Will", document: "Documentation",
+};
+const FOCUS_BY_TOOL = {
+  coach: [
+    "You got a plan from Coach last time — go verify it actually got run. A plan that never leaves the screen didn't help anyone.",
+    "Check back on your last Coach session. Did you say what you planned to say, or did it get softened in the moment?",
+    "Follow up on the standard you set in your last coaching plan. Silence is where standards go to die.",
+    "Revisit your last Coach conversation — did the follow-up happen on the date you picked, or slide?",
+  ],
+  pushback: [
+    "You handled pushback last time — watch if it repeats. One instance is a moment; a pattern is a decision you have to make.",
+    "Check whether the pushback you answered last time actually stopped, or just went quiet for a day.",
+    "Follow up on the boundary you set last time. If it hasn't been tested since, it isn't real yet.",
+  ],
+  practice: [
+    "You practiced a hard conversation — now go have the real one. Practice that never turns into action is just rehearsal.",
+    "Take what came out of your last roleplay debrief and run it for real this week. The debrief only matters if you use it.",
+    "Look back at your last practice score — the 'biggest miss' called out there is exactly what to fix in the real conversation.",
+  ],
+  convo: [
+    "You built a conversation plan — schedule it if you haven't had it yet. A plan sitting unused isn't leadership, it's procrastination.",
+    "Check your last Conversation Builder plan — did you land the agreement you built, or did it drift?",
+    "Follow up on the conversation you planned. The follow-up plan you wrote down is only real once you run it.",
+  ],
+  skill_will: [
+    "You diagnosed a root cause last time — check if you actually acted on it, or just noted it and moved on.",
+    "Revisit your last Skill vs. Will diagnosis. If it landed on 'Leadership,' that's on you to fix, not them.",
+    "Follow up on the accountability action from your last diagnostic. Diagnosis without action changes nothing.",
+  ],
+  document: [
+    "You documented something last time — make sure the follow-up date on that file actually happened.",
+    "Check the record you filed last time. Documentation only protects you if the follow-up conversation happens too.",
+  ],
+};
+function getFocusForTool(tool) {
+  const list = FOCUS_BY_TOOL[tool];
+  if (!list || !list.length) return null;
+  const d = daysSinceEpoch();
+  return list[((d % list.length) + list.length) % list.length];
 }
 // =====================================================
 // HOME
 // =====================================================
-function HomeView({ go }) {
+function HomeView({ go, session } = {}) {
+  const [lastTool, setLastTool] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (session?.user?.id) {
+      getLastSessionTool(session.user.id).then((tool) => {
+        if (!cancelled) setLastTool(tool);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+  const focusText = (lastTool && getFocusForTool(lastTool)) || getTodayFocus();
+  const focusLabel = lastTool && FOCUS_BY_TOOL[lastTool] ? `Since your last ${TOOL_LABELS[lastTool] || lastTool} session` : "Today's focus";
   const quick = [
     { id: "pushback", label: "Handle pushback", icon: Shield },
     { id: "practice", label: "Practice a conversation", icon: Play },
@@ -1776,8 +1835,8 @@ function HomeView({ go }) {
         ))}
       </div>
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Today's focus</div>
-        <p className="text-[15px] text-neutral-200 leading-relaxed">{getTodayFocus()}</p>
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">{focusLabel}</div>
+        <p className="text-[15px] text-neutral-200 leading-relaxed">{focusText}</p>
       </div>
     </div>
   );
@@ -1842,7 +1901,7 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
-          {tab === "home" && <HomeView go={go} />}
+          {tab === "home" && <HomeView go={go} session={session} />}
           {tab === "coach" && <AICoach session={session} />}
           {tab === "pushback" && <PushbackCoach session={session} />}
           {/* Practice stays mounted so an in-progress roleplay survives tab switches */}
