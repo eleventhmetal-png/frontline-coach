@@ -187,26 +187,32 @@ export default function AuthGate({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+    <div
+      className="h-full overflow-y-auto bg-neutral-950 text-neutral-100"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       {/* Public landing content — reachable with no login, per Google OAuth
           verification requirements (home page not gated, explains what the
-          app does, brand name distinct from a generic Google product term). */}
-      <div className="max-w-md mx-auto px-6 pt-14 pb-10">
-        <div className="flex items-center gap-2 mb-3 justify-center">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
-            <Zap size={18} className="text-neutral-950" />
+          app does, brand name distinct from a generic Google product term).
+          Root app shell locks html/body/#root to a fixed viewport height for
+          the in-app screens, so this outer div owns its own scroll instead of
+          relying on document scroll (which is disabled globally). */}
+      <div className="max-w-md md:max-w-2xl mx-auto px-6 md:px-10 pt-16 pb-14">
+        <div className="flex items-center gap-2 mb-4 justify-center">
+          <div className="w-9 h-9 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
+            <Zap size={20} className="text-neutral-950" />
           </div>
-          <span className="font-extrabold uppercase tracking-tight text-lg">Frontline Coach</span>
+          <span className="font-extrabold uppercase tracking-tight text-xl">Frontline Coach</span>
         </div>
-        <div className="text-center text-[11px] uppercase tracking-widest text-neutral-500 mb-8">
+        <div className="text-center text-[11px] uppercase tracking-widest text-neutral-500 mb-10">
           by Own The Shift
         </div>
 
-        <h1 className="text-2xl font-extrabold text-center leading-tight mb-3">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-center leading-tight mb-5 max-w-xl mx-auto">
           Stop hoping your managers figure it out.{" "}
           <span style={{ color: ACCENT }}>Give them a system.</span>
         </h1>
-        <p className="text-sm text-neutral-400 text-center leading-relaxed mb-8 max-w-sm mx-auto">
+        <p className="text-base text-neutral-400 text-center leading-relaxed mb-12 max-w-md mx-auto">
           Frontline Coach gives newly promoted managers and shift leads the exact words for a hard
           conversation, a place to rehearse it first, and a clean record after — built by an
           operator who runs shifts for a living, not a corporate HR vendor.
@@ -215,10 +221,10 @@ export default function AuthGate({ children }) {
         <img
           src="/hero-phone.png"
           alt="Frontline Coach app running on an iPhone, showing today's leadership brief and coaching tools"
-          className="w-full max-w-xs mx-auto rounded-2xl mb-8"
+          className="w-full max-w-md mx-auto rounded-2xl mb-12 shadow-2xl shadow-black/50"
         />
 
-        <p className="text-sm text-neutral-400 text-center leading-relaxed mb-10 max-w-sm mx-auto">
+        <p className="text-base text-neutral-400 text-center leading-relaxed mb-12 max-w-md mx-auto">
           Most frontline managers get promoted and then left on their own — no coaching training, no
           rehearsal, no plan for the conversation that's about to go sideways. Frontline Coach is
           what closes that gap, one shift at a time.
@@ -226,28 +232,30 @@ export default function AuthGate({ children }) {
 
         <button
           onClick={() => document.getElementById("auth")?.scrollIntoView({ behavior: "smooth" })}
-          className="w-full rounded-lg py-3 font-semibold text-sm mb-10 text-neutral-950"
-          style={{ backgroundColor: ACCENT }}
+          className="block mx-auto rounded-lg px-10 py-3.5 font-semibold text-sm mb-14 text-neutral-950 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+          style={{ backgroundColor: ACCENT, boxShadow: `0 0 0 rgba(232,146,60,0)` }}
+          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = `0 10px 25px -5px ${ACCENT}66`)}
+          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
         >
           Get Started
         </button>
 
-        <div className="space-y-3 mb-10">
+        <div className="grid md:grid-cols-2 gap-4 mb-14 max-w-xl mx-auto">
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+              className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-5 transition duration-200 hover:-translate-y-1 hover:border-neutral-700 hover:shadow-xl hover:shadow-black/40"
             >
-              <f.icon size={18} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
+              <f.icon size={20} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
               <div>
                 <div className="font-semibold text-sm">{f.title}</div>
-                <div className="text-xs text-neutral-500 leading-snug">{f.desc}</div>
+                <div className="text-xs text-neutral-500 leading-snug mt-1">{f.desc}</div>
               </div>
             </div>
           ))}
         </div>
 
-        <p className="text-[11px] text-neutral-600 text-center mb-10 max-w-sm mx-auto">
+        <p className="text-[11px] text-neutral-600 text-center mb-14 max-w-sm mx-auto">
           Coaching guidance only — not legal or HR advice. Always follow your company's policies.
           See our{" "}
           <a href="/terms.html" className="underline" style={{ color: ACCENT }}>
@@ -261,7 +269,7 @@ export default function AuthGate({ children }) {
       </div>
 
       {/* Sign in / sign up */}
-      <div id="auth" className="flex items-center justify-center px-6 pb-16">
+      <div id="auth" className="border-t border-neutral-900 pt-14 pb-20 flex items-center justify-center px-6">
       <div className="w-full max-w-xs">
         <div className="flex items-center gap-2 mb-8 justify-center">
           <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
@@ -287,7 +295,7 @@ export default function AuthGate({ children }) {
         <button
           onClick={handleGoogle}
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30"
         >
           <GoogleMark /> Continue with Google
         </button>
@@ -349,7 +357,7 @@ export default function AuthGate({ children }) {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
             style={{ backgroundColor: ACCENT }}
           >
             {busy && <Loader2 className="animate-spin" size={16} />}
