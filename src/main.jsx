@@ -1,3 +1,4 @@
+import "./sentry.js"; // must load first so Sentry can catch early errors
 import React from "react";
 import ReactDOM from "react-dom/client";
 import FrontlineCoach from "./App.jsx";
