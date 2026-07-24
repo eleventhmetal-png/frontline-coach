@@ -10,8 +10,7 @@
 // the AI-in-employment prohibitions (§7), and employee/third-party data (§8).
 //
 // Entity: OTS Media LLC (Missouri). Contact: owntheshift.everyday@gmail.com.
-// Still outstanding: a business/registered-agent postal address (add before
-// any commercial email or final attorney review).
+// Business address: 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.
 
 export const LAST_UPDATED = "July 20, 2026";
 
@@ -146,7 +145,7 @@ export const TERMS_SECTIONS = [
     heading: "20. General; Changes; Contact",
     body: [
       "These Terms, with the Privacy Policy, are the entire agreement between you and us about the Service. If any part is unenforceable, the rest stays in effect. We may assign these Terms in connection with a merger or sale; you may not assign yours without our consent. Our failure to enforce a term isn't a waiver.",
-      "We may update these Terms; material changes will be notified as described in Section 2. Questions: OTS Media LLC, owntheshift.everyday@gmail.com.",
+      "We may update these Terms; material changes will be notified as described in Section 2. Questions: OTS Media LLC, owntheshift.everyday@gmail.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
     ],
   },
 ];
@@ -228,7 +227,7 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "12. Changes and Contact",
     body: [
-      "We'll update this page if our data practices change materially and, where appropriate, notify you. Contact: OTS Media LLC,owntheshift.everyday@gmail.com.",
+      "We'll update this page if our data practices change materially and, where appropriate, notify you. Contact: OTS Media LLC, owntheshift.everyday@gmail.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
     ],
   },
 ];

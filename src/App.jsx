@@ -1971,6 +1971,7 @@ function MoreView({ go, session, signOut }) {
         <span>·</span>
         <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Privacy</a>
       </div>
+      <p className="mt-3 text-center text-[10px] text-neutral-700">© 2026 OTS Media LLC</p>
     </div>
   );
 }
