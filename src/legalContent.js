@@ -9,7 +9,7 @@
 // Indemnification (§16), Dispute Resolution / arbitration decision (§17),
 // the AI-in-employment prohibitions (§7), and employee/third-party data (§8).
 //
-// Entity: OTS Media LLC (Missouri). Contact: owntheshift.everyday@gmail.com.
+// Entity: OTS Media LLC (Missouri). Contact: hello@otsowntheshift.com.
 // Business address: 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.
 
 export const LAST_UPDATED = "July 20, 2026";
@@ -45,7 +45,7 @@ export const TERMS_SECTIONS = [
   {
     heading: "5. Eligibility and Accounts",
     body: [
-      "You must be at least 18 years old and able to form a binding contract to use the Service. You are responsible for the accuracy of your account information, for keeping your login credentials secure, and for all activity under your account. Tell us promptly at owntheshift.everyday@gmail.com if you suspect unauthorized use.",
+      "You must be at least 18 years old and able to form a binding contract to use the Service. You are responsible for the accuracy of your account information, for keeping your login credentials secure, and for all activity under your account. Tell us promptly at hello@otsowntheshift.com if you suspect unauthorized use.",
       "If you create an account using an employer's email or on an employer's behalf, you confirm you're authorized to do so. Whether an employer can access accounts or content created by its people depends on any separate agreement with that employer.",
     ],
   },
@@ -99,7 +99,7 @@ export const TERMS_SECTIONS = [
   {
     heading: "13. Suspension, Termination, and Deletion",
     body: [
-      "You can stop using the Service and request account deletion at any time by contacting owntheshift.everyday@gmail.com (or using the in-app option where available). We may suspend or terminate accounts that violate these Terms, and may act immediately without advance notice where needed to address fraud, abuse, security, or legal risk.",
+      "You can stop using the Service and request account deletion at any time by contacting hello@otsowntheshift.com (or using the in-app option where available). We may suspend or terminate accounts that violate these Terms, and may act immediately without advance notice where needed to address fraud, abuse, security, or legal risk.",
       "On termination, your license to use the Service ends. We'll delete or de-identify your data as described in the Privacy Policy, subject to limited operational copies and any legal retention obligation.",
     ],
   },
@@ -126,7 +126,7 @@ export const TERMS_SECTIONS = [
     heading: "17. Disputes and Governing Law",
     body: [
       "These Terms are governed by the laws of the State of Missouri, without regard to conflict-of-laws rules, and except where your local consumer-protection laws provide rights that cannot be waived.",
-      "Before filing anything, contact us at owntheshift.everyday@gmail.com and give us 30 days to resolve the issue informally. If we can't, disputes will be resolved in the state or federal courts located in Missouri, unless a binding arbitration provision is added here in the future. (No arbitration or class-action waiver currently applies; if one is added, it will be presented for your acceptance.)",
+      "Before filing anything, contact us at hello@otsowntheshift.com and give us 30 days to resolve the issue informally. If we can't, disputes will be resolved in the state or federal courts located in Missouri, unless a binding arbitration provision is added here in the future. (No arbitration or class-action waiver currently applies; if one is added, it will be presented for your acceptance.)",
     ],
   },
   {
@@ -138,14 +138,14 @@ export const TERMS_SECTIONS = [
   {
     heading: "19. Accessibility",
     body: [
-      "We want the Service to be usable by everyone. If you encounter an accessibility barrier, tell us at owntheshift.everyday@gmail.com and we'll work to provide the information or function in another way.",
+      "We want the Service to be usable by everyone. If you encounter an accessibility barrier, tell us at hello@otsowntheshift.com and we'll work to provide the information or function in another way.",
     ],
   },
   {
     heading: "20. General; Changes; Contact",
     body: [
       "These Terms, with the Privacy Policy, are the entire agreement between you and us about the Service. If any part is unenforceable, the rest stays in effect. We may assign these Terms in connection with a merger or sale; you may not assign yours without our consent. Our failure to enforce a term isn't a waiver.",
-      "We may update these Terms; material changes will be notified as described in Section 2. Questions: OTS Media LLC, owntheshift.everyday@gmail.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
+      "We may update these Terms; material changes will be notified as described in Section 2. Questions: OTS Media LLC, hello@otsowntheshift.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
     ],
   },
 ];
@@ -154,7 +154,7 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "1. Who We Are",
     body: [
-      "This Privacy Policy explains how OTS Media LLC (\"we\") handles information in Own The Shift — Frontline Coach. Questions: owntheshift.everyday@gmail.com.",
+      "This Privacy Policy explains how OTS Media LLC (\"we\") handles information in Own The Shift — Frontline Coach. Questions: hello@otsowntheshift.com.",
     ],
   },
   {
@@ -195,7 +195,7 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "7. Information About Other People",
     body: [
-      "Because coaching often involves employees or coworkers, you may enter information about people who are not users of the Service. You are responsible for having the right to enter that information. We ask you to minimize it and avoid sensitive details. If someone believes their information was entered improperly, they can contact us at owntheshift.everyday@gmail.com.",
+      "Because coaching often involves employees or coworkers, you may enter information about people who are not users of the Service. You are responsible for having the right to enter that information. We ask you to minimize it and avoid sensitive details. If someone believes their information was entered improperly, they can contact us at hello@otsowntheshift.com.",
     ],
   },
   {
@@ -208,7 +208,7 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "9. Your Choices and Rights",
     body: [
-      "You can request a copy of your data, ask us to correct it, or ask us to delete your account and associated data by contacting owntheshift.everyday@gmail.com, subject to reasonable identity verification and any legal retention requirement.",
+      "You can request a copy of your data, ask us to correct it, or ask us to delete your account and associated data by contacting hello@otsowntheshift.com, subject to reasonable identity verification and any legal retention requirement.",
       "Depending on where you live (for example California, Colorado, or Texas), you may have additional rights to access, delete, correct, or opt out of certain uses of your personal information. We do not sell your information or use it for targeted advertising. We honor recognized browser opt-out signals such as Global Privacy Control where applicable.",
     ],
   },
@@ -221,13 +221,13 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "11. Children's Privacy",
     body: [
-      "The Service is intended for adults in a workplace setting. It isn't directed to anyone under 18, and we don't knowingly collect information from anyone under 18. If you believe a minor has used the Service, contact owntheshift.everyday@gmail.com and we'll address it.",
+      "The Service is intended for adults in a workplace setting. It isn't directed to anyone under 18, and we don't knowingly collect information from anyone under 18. If you believe a minor has used the Service, contact hello@otsowntheshift.com and we'll address it.",
     ],
   },
   {
     heading: "12. Changes and Contact",
     body: [
-      "We'll update this page if our data practices change materially and, where appropriate, notify you. Contact: OTS Media LLC, owntheshift.everyday@gmail.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
+      "We'll update this page if our data practices change materially and, where appropriate, notify you. Contact: OTS Media LLC, hello@otsowntheshift.com, 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.",
     ],
   },
 ];
