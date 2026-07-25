@@ -90,6 +90,11 @@ export default function AuthGate({ children }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [showLegal, setShowLegal] = useState(false);
+  // null = still checking; { is_full, is_closed } once known. UX only -- the
+  // real gate is the handle_new_user() trigger (see beta_gate migration).
+  // Fails open (stays null / non-blocking) if the RPC call itself errors, so a
+  // network hiccup here never wrongly locks out sign-in for existing users.
+  const [betaStatus, setBetaStatus] = useState(null);
 
   useEffect(() => {
     if (!supabaseReady) {
@@ -100,8 +105,16 @@ export default function AuthGate({ children }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
     });
+    supabase
+      .rpc("beta_status")
+      .then(({ data, error: rpcError }) => {
+        if (!rpcError && data && data[0]) setBetaStatus(data[0]);
+      })
+      .catch(() => {});
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const signupClosed = !!(betaStatus && (betaStatus.is_full || betaStatus.is_closed));
 
   if (!supabaseReady) {
     return (
@@ -147,6 +160,14 @@ export default function AuthGate({ children }) {
       setError("You need to accept the Terms of Service to create an account.");
       return;
     }
+    if (mode === "signup" && signupClosed) {
+      setError(
+        betaStatus?.is_closed
+          ? "Beta signups are closed."
+          : "Beta is full right now."
+      );
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "signup") {
@@ -165,7 +186,18 @@ export default function AuthGate({ children }) {
         if (signInError) throw signInError;
       }
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      const msg = err.message || "Something went wrong.";
+      // Fallback for the case the pre-check above missed a race (someone else
+      // took the last slot between page load and submit) -- the trigger still
+      // blocked it correctly, this just avoids surfacing a raw DB error.
+      // NOTE: confirm this matches the actual error text Supabase returns for
+      // a trigger-raised exception during signUp() -- GoTrue's wording for
+      // this case can vary by version and wasn't verified against a live call.
+      if (mode === "signup" && /database error saving new user|unexpected_failure/i.test(msg)) {
+        setError("The beta may have just filled up or closed. Refresh and try signing in if you already have an account.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -173,6 +205,14 @@ export default function AuthGate({ children }) {
 
   const handleGoogle = async () => {
     resetFeedback();
+    if (mode === "signup" && signupClosed) {
+      setError(
+        betaStatus?.is_closed
+          ? "Beta signups are closed. If you already have an account, use Sign In."
+          : "Beta is full right now. If you already have an account, use Sign In."
+      );
+      return;
+    }
     setBusy(true);
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -309,9 +349,17 @@ export default function AuthGate({ children }) {
           ))}
         </div>
 
+        {mode === "signup" && signupClosed && (
+          <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
+            {betaStatus?.is_closed
+              ? "Beta signups are closed. Already have an account? Switch to Sign In."
+              : "Beta is full right now. Already have an account? Switch to Sign In."}
+          </div>
+        )}
+
         <button
           onClick={handleGoogle}
-          disabled={busy}
+          disabled={busy || (mode === "signup" && signupClosed)}
           className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30"
         >
           <GoogleMark /> Continue with Google
@@ -373,7 +421,7 @@ export default function AuthGate({ children }) {
 
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || (mode === "signup" && signupClosed)}
             className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
             style={{ backgroundColor: ACCENT }}
           >
