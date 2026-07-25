@@ -9,6 +9,12 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+# Route checkout session creation to its function. Must come BEFORE the SPA fallback.
+[[redirects]]
+  from = "/api/create-checkout-session"
+  to = "/.netlify/functions/create-checkout-session"
+  status = 200
+
 # Single-page app: send everything else to index.html.
 [[redirects]]
   from = "/*"

@@ -9,3 +9,10 @@ dist
 # Each machine generates its own until we're sure a clean one is safe to commit.
 package-lock.json
 vite.config.js.timestamp-*
+
+# Local Netlify folder
+.netlify
+deno.lock
+
+# Local Supabase CLI cache -- machine-specific, not project state
+supabase/.temp/
