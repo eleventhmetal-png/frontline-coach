@@ -358,6 +358,10 @@ export const PAGES = [
         p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator who learned all of this the wrong way first.",
         links: [["learned all of this the wrong way first", "/operator"]],
       },
+      {
+        p: "If the conversation you're dreading is someone pushing back on you, there's a whole page on that.",
+        links: [["a whole page on that", "/employee-pushback"]],
+      },
 
       { h2: "What it won't do" },
       {
@@ -402,6 +406,229 @@ export const PAGES = [
         faq: {
           q: "Is there training for shift leads and first-time supervisors?",
           a: "Very little that's built for the frontline. Most leadership material is written for executives and directors, who have training budgets and time to read. That gap is why this app exists.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "employee-pushback",
+    title: "What to Say When an Employee Pushes Back",
+    description:
+      "You gave a direction and they pushed. The three things supervisors actually hear, why arguing loses either way, and the words that hold the standard.",
+    h1: "What to Say When an Employee Pushes Back",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/employee-pushback#article`,
+        headline: "What to Say When an Employee Pushes Back",
+        description:
+          "The three forms of pushback frontline supervisors actually hear, and what to say to each one.",
+        url: `${SITE}/employee-pushback`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "You gave a direction. They pushed. And now everybody within earshot has stopped what they're doing to see what you do next.",
+      },
+      {
+        p: "That audience is the part that makes this hard. It isn't really a disagreement about a task anymore. Whatever happens in the next thirty seconds is what your crew will understand the rules to be.",
+      },
+
+      { h2: "Both instincts are wrong" },
+      {
+        p: "The first instinct is to win it. Escalate, pull rank, end it. That works, right now, in front of everyone. What it costs is the person — they stop bringing you problems, and you find out what that cost about a week after something breaks that you should have heard about early.",
+      },
+      {
+        p: "The second instinct is to fold. Drop it, do it yourself, come back to it later. That teaches the crew something more expensive: that the standard is negotiable if you push hard enough. The next person pushes sooner.",
+      },
+      { em: "Separate the pushback from the task." },
+      {
+        p: "The task is not negotiable and you handle it now, in one sentence. The pushback is a real thing that needs a real conversation, and it does not happen on the floor with an audience. Almost every bad outcome here comes from trying to do both at once.",
+      },
+
+      { h2: "The three things you'll actually hear" },
+      {
+        p: "Supervisors using Frontline Coach bring the same three situations over and over. They are not variations of each other and they don't take the same response.",
+      },
+
+      { h3: "1. \"You never told me that\" — or \"I didn't know that was a rule\"" },
+      {
+        p: "Start here: it might be true. Not as a courtesy — genuinely. Somebody may have been assumed into a job nobody ever walked them through.",
+      },
+      {
+        line: {
+          kind: "bad",
+          label: "The trap",
+          text: "Yes I did. I told you about this last week, and I told the whole team in the huddle.",
+        },
+      },
+      {
+        p: "Now you're arguing about memory. You cannot win that, and winning it wouldn't help — you'd have proved a point and taught them nothing. Worse, you've made the conversation about you.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "What works better",
+          text: "Fair enough. So we're clear from right now: [the standard]. That's what I need every shift. Anything about it that isn't clear?",
+        },
+      },
+      {
+        p: "You gave up nothing. The standard is stated, it's understood, and it starts now. Whether they were told before stopped mattering the moment you decided not to fight about it.",
+      },
+      {
+        p: "Then do the part most supervisors skip. Go find out whether they actually knew. If two or three people don't know a rule, that isn't three attitude problems — it's one training problem, and it's yours. I got this wrong for years, and it cost somebody her job.",
+        links: [["cost somebody her job", "/operator"]],
+      },
+
+      { h3: "2. \"You're targeting me\"" },
+      {
+        p: "This one escalates faster than anything else, because it isn't about the task at all. It's an accusation about you, and it usually isn't about today — it's about a pattern they think they've been watching.",
+      },
+      {
+        line: {
+          kind: "bad",
+          label: "The trap",
+          text: "I'm not targeting anybody. I treat everyone exactly the same. I've told other people the same thing.",
+        },
+      },
+      {
+        p: "The second you defend yourself, you've agreed to argue as an equal, in public, about your own fairness. There's no version of that you come out of well.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "What works better",
+          text: "That's a serious thing to say and I'm not going to brush it off. Right now I need [the task] done. Then you and I are sitting down off the floor, and you're going to tell me exactly what you've been seeing — because if I'm being uneven, I need to know.",
+        },
+      },
+      {
+        p: "You didn't concede and you didn't defend. You took it seriously, held the immediate standard, and moved the real conversation somewhere it can actually happen.",
+      },
+      {
+        p: "Then keep the appointment, and go in genuinely willing to hear that they're right. Have you corrected other people for this same thing? If you haven't, they are right, and the fastest way to lose a crew is to be the supervisor who only notices some people.",
+      },
+
+      { h3: "3. Arguing with you in front of the crew" },
+      {
+        p: "Sometimes the words aren't the problem. Somebody is dismissive every time they're challenged, and they do it where everyone can hear. One supervisor described exactly this and said the thing that worried him wasn't the employee — it was that the attitude was spreading across the site.",
+      },
+      {
+        p: "He was right to worry about that. Public defiance that goes unanswered isn't one person's behaviour for long.",
+      },
+      {
+        p: "But answering it publicly is how you end up in a shouting match you can't win. Take the audience away instead.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "Two moves, in this order",
+          text: "I need this done the way we discussed. Walk outside with me for a minute.",
+        },
+      },
+      {
+        p: "The first sentence settles it for everyone listening. The second one ends the performance. Nobody gets a show, and you haven't backed down in front of anybody.",
+      },
+      {
+        p: "Then, off the floor, set the standard that actually matters here — not about the task, about where disagreement happens:",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "The standard worth setting",
+          text: "You can disagree with me. I want to know when you think I'm wrong. You can't do it on the floor in front of the crew, because then it isn't a disagreement, it's a contest. Come find me and I'll hear you out every time.",
+        },
+      },
+      {
+        p: "That gives them a legitimate route for the thing they actually want, which is to be heard. Most people take it.",
+      },
+
+      { h2: "The rule underneath all three" },
+      {
+        p: "Lead with an observable fact, not a characterisation. \"You told me you weren't doing it, in front of two other people, at four fifteen\" is difficult to argue with. \"You have an attitude problem\" is an opinion, and people defend themselves against opinions with everything they have.",
+      },
+      {
+        p: "This is also why the documentation matters later. Facts survive four months. Your impression of somebody's attitude does not.",
+      },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        p: "Pushback Coach exists for the thirty seconds you don't have. Type what they said, pick your tone, and get words you can use standing right there — not a framework to study later.",
+      },
+      {
+        ul: [
+          "Pushback Coach — the response when somebody argues while you're in front of them.",
+          "Practice — rehearse against an AI employee who deflects and pushes back, before you do it live.",
+          "Conversation Builder — plan the off-the-floor follow-up, which is where these actually get resolved.",
+          "Documentation Assistant — turn what happened into a factual record while you still remember it.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator.",
+        links: [["Navy veteran and eighteen-year frontline operator", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer. It doesn't know your company's policies, your union contract, or your state's employment law, and it will never tell you to discipline or fire anybody. If pushback involves a safety refusal, a discrimination or harassment claim, or anything protected, stop and go to HR — that is not a coaching conversation. Every decision stays yours and your company's process governs.",
+      },
+
+      { h2: "Questions supervisors actually ask" },
+      {
+        faq: {
+          q: "What do I say when an employee says \"that's not my job\"?",
+          a: "Handle the task first and the job description later. Something like: \"Right now I need this done. If it's outside what you understood your role to be, come find me after and we'll go through it properly.\" You've held the standard without conceding that the boundary is up for negotiation mid-shift — and if it turns out they're right about the role, you can fix that off the floor.",
+        },
+      },
+      {
+        faq: {
+          q: "An employee told me I'm targeting them. What do I do?",
+          a: "Don't defend yourself in the moment — that turns it into a public argument about your fairness. Take it seriously, hold the immediate standard, and move the conversation off the floor. Then genuinely check whether you've corrected other people for the same thing. If you haven't, they have a point.",
+        },
+      },
+      {
+        faq: {
+          q: "What if they say nobody ever told them the rule?",
+          a: "Assume it might be true and don't argue about the past. State the standard, confirm it's understood, and start it now. Then check whether other people know it either. Several people not knowing a rule is a training gap, not a discipline problem.",
+        },
+      },
+      {
+        faq: {
+          q: "How do I handle someone arguing with me in front of other employees?",
+          a: "Settle the direction in one sentence so everyone listening hears it, then move the conversation off the floor immediately. Don't try to win it publicly. Afterwards, set the standard about where disagreement happens — that they can push back on you, just not in front of the crew.",
+        },
+      },
+      {
+        faq: {
+          q: "Should I write somebody up for pushing back?",
+          a: "Usually not for the pushback itself. Disagreeing with a supervisor isn't misconduct, and writing it up teaches people to go quiet rather than to comply. Refusing a reasonable direction after it's been clearly restated is a different matter — follow your company's progressive discipline process for that.",
+        },
+      },
+      {
+        faq: {
+          q: "What if I lose my temper?",
+          a: "Go back and own it, specifically and without a speech. \"I raised my voice at you on the floor yesterday. That was wrong of me and it won't happen again. The thing I needed hasn't changed.\" Owning it costs you far less authority than pretending it didn't happen, and the crew saw it either way.",
         },
       },
     ],
