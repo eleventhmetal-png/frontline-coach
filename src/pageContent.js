@@ -188,6 +188,10 @@ export const PAGES = [
       {
         p: "It won't make you a leader. It'll keep your people from paying for lessons that could have just been taught.",
       },
+      {
+        p: "If you were promoted recently and nobody trained you, start here.",
+        links: [["start here", "/new-manager-coach"]],
+      },
 
       { h2: "What it isn't" },
       {
@@ -197,6 +201,209 @@ export const PAGES = [
         p: "I built it because the version of me eighteen years ago needed it, and nothing like it existed.",
       },
       { sig: "— Ben Ryan" },
+    ],
+  },
+
+  {
+    slug: "new-manager-coach",
+    title: "AI Coaching for Newly Promoted Managers and Shift Leads",
+    description:
+      "Just promoted and nobody trained you? What first-time supervisors get wrong, what to say instead, and the exact words for your first hard conversation.",
+    h1: "You Got Promoted. Nobody Trained You.",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/new-manager-coach#article`,
+        headline: "You Got Promoted. Nobody Trained You.",
+        description:
+          "What first-time supervisors get wrong, what works instead, and the words for a first hard conversation.",
+        url: `${SITE}/new-manager-coach`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "You were good at the work, so they made you the boss of it. That's how almost every frontline promotion happens.",
+      },
+      {
+        p: "Then Saturday comes. Somebody calls off, somebody else is forty minutes behind, and a person you had lunch with last week tells you they're not doing something. Nobody covered this. You're improvising in front of a crew that's watching to see what you do.",
+      },
+      {
+        p: "If that's where you are right now, this is the part nobody sat you down and explained.",
+      },
+
+      { h2: "What almost every new supervisor gets wrong" },
+      { em: "You try to stay liked." },
+      {
+        p: "It doesn't feel like a decision. It feels like being reasonable. You let the late arrival slide because they had a rough week. You do the task yourself instead of asking twice. You soften the ask until it sounds like a favour, because you still remember being on that side of it.",
+      },
+      {
+        p: "Every one of those is a small loan against your own authority, and it comes due faster than you'd think. The crew learns which rules are real and which ones depend on your mood. Then when you finally hold the line, it lands as a mood swing instead of a standard, and now you're the boss who changed.",
+      },
+      {
+        p: "The other failure mode is the opposite and it's just as common. You overcorrect, lead through pressure, and get compliance for a month before your best person quits.",
+      },
+      { p: "Both come from the same place. Nobody taught you the third option." },
+
+      { h2: "What actually works" },
+      { em: "Hold the standard. Flex the warmth." },
+      {
+        p: "The standard is what has to happen. It doesn't move because you like somebody or because it's a bad day. How you say it moves constantly — different person, different history, different day.",
+      },
+      {
+        p: "New supervisors get this backwards. They flex the standard to protect the relationship, when the relationship is exactly what survives a clear standard and what erodes under an unclear one.",
+      },
+      {
+        p: "The standard is also the kindness. People can't hit a target they can't see. Leaving somebody guessing about whether they're doing okay isn't generous — they find out what you actually thought during a review or a termination, which is the worst possible time.",
+      },
+      {
+        p: "And find out before you decide. Somebody failing at a task might just not know how to do it. Nobody may have ever shown them. That question costs you thirty seconds and it changes what the conversation is.",
+      },
+
+      { h2: "The one you're dreading: managing people you used to work beside" },
+      {
+        p: "This is the hardest version and the most common one, because frontline promotions come from inside.",
+      },
+      {
+        p: "Say somebody you're friendly with has been clocking in five to seven minutes late most shifts. Not enough to write up. Enough that the crew has noticed, and enough that two other people have started drifting later too.",
+      },
+      { p: "Most new supervisors open one of two ways." },
+      {
+        line: {
+          kind: "bad",
+          label: "The apology open",
+          text: "Hey, I hate to even bring this up, and honestly it's not a big deal, but I've been asked to say something about the clock-in times...",
+        },
+      },
+      {
+        p: "You've already lost. You told them it isn't important, you blamed somebody above you, and you left with nothing agreed.",
+      },
+      {
+        line: {
+          kind: "bad",
+          label: "The hammer open",
+          text: "You've been late all week. This is your verbal warning. Fix it or we go to paperwork.",
+        },
+      },
+      {
+        p: "You'll get compliance and you'll spend it. That person stops bringing you problems, and you won't notice what that cost until something breaks that you should have heard about a week early.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "What works better",
+          text: "You've clocked in five or six minutes late four of the last five shifts. I need you here at your start time, ready to go. Is something making that hard?",
+        },
+      },
+      {
+        p: "Three things happen in those two sentences. You named the specific observable fact, so there's nothing to argue about. You stated the standard plainly, with no apology and no threat. Then you asked — which gives them room to tell you it's a scheduling problem rather than an attitude problem.",
+      },
+      {
+        p: "You don't need to be tough. You need to be specific, and then you need to stop talking and listen to the answer.",
+      },
+
+      { h2: "What happened when Team Leads actually used it" },
+      {
+        p: "In July 2026, five Team Leads at a multi-site hourly operation used Frontline Coach to prepare one-on-ones. Each picked two of their people. What their General Manager reported back:",
+      },
+      {
+        ul: [
+          "It was more useful for coaching conversations than recognition ones. It gave them a structured way to raise a performance problem without the employee feeling like they were just getting in trouble.",
+          "It got them asking better questions instead of telling people what to fix. Several said that made the conversations feel collaborative rather than one-way.",
+          "One Team Lead used it after an employee pushed back on a request, and said it helped him slow down and think instead of reacting while emotions were high.",
+          "Another said it helped him avoid sounding frustrated or aggressive while still communicating urgency.",
+          "The more detail they gave it, the more useful the coaching got.",
+        ],
+      },
+      {
+        p: "What they didn't like: responses ran too long to read mid-conversation, the language sometimes read as robotic, and it didn't remember previous conversations. All three are now built — shorter streaming responses, a delivery layer for how to say something rather than just what, and memory of who you've coached so a follow-up builds on the last conversation instead of starting cold.",
+      },
+      { em: "That last one was a Team Lead's suggestion. It shipped." },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        p: "The gap for most new supervisors isn't knowing what they want. You already know the person should show up on time. The gap is the words, in the moment, with that specific person in front of you.",
+      },
+      {
+        ul: [
+          "AI Coach — describe what's happening on your shift and get a plan you can run today, not a framework to study.",
+          "Conversation Builder — walk in with your opening line, your observable facts, and the one thing you need different.",
+          "Practice — rehearse against an AI employee who pushes back, deflects, and brings up something you didn't plan for. Better there than in the break room.",
+          "Pushback Coach — the words when somebody argues while you're standing right there.",
+          "Skill vs. Will Diagnostic — work out whether it's a skill problem, a will problem, or yours.",
+          "Documentation Assistant — turn rough notes into a clean, factual record.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator who learned all of this the wrong way first.",
+        links: [["learned all of this the wrong way first", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer. It doesn't know your company's policies, your union contract, or your state's employment law, and it will never tell you to fire somebody or discipline anybody. It organises your thinking and gives you language. Every decision stays yours, and your company's process still governs.",
+      },
+      {
+        p: "It also won't make you a leader in a week. Doing the boring part repeatedly is what does that. This just means the boring part doesn't have to start with you guessing.",
+      },
+
+      { h2: "Questions new supervisors actually ask" },
+      {
+        faq: {
+          q: "I just got promoted and I have no idea what I'm doing. Is that normal?",
+          a: "Yes, and it's the standard experience rather than a sign you weren't ready. Most frontline promotions come with a new badge and no training. The people who get good at it aren't more natural — they get reps and feedback sooner.",
+        },
+      },
+      {
+        faq: {
+          q: "How do I manage people who used to be my coworkers?",
+          a: "Change the standard first, not the friendship. Be specific and consistent about what has to happen, and don't pretend the promotion didn't happen. The awkward stretch is short. Being unclear to avoid it is what makes it last months.",
+        },
+      },
+      {
+        faq: {
+          q: "What if somebody doesn't respect me because I'm new or younger?",
+          a: "Respect follows predictability more than tenure. If you say what you expect, hold it the same way for everybody, and follow through when you say you will, that resolves faster than any speech about authority.",
+        },
+      },
+      {
+        faq: {
+          q: "Should I write somebody up or just talk to them first?",
+          a: "Talk first, and find out whether they actually know how to do the thing. Plenty of performance problems are training problems wearing a costume. Follow your company's progressive discipline process for anything formal — that process, not this page, is what governs.",
+        },
+      },
+      {
+        faq: {
+          q: "How do I have a hard conversation without it turning into an argument?",
+          a: "Lead with an observable fact instead of a characterisation. \"You clocked in six minutes late four times this week\" is hard to argue with. \"You have an attitude problem\" is an opinion, and people defend themselves against opinions.",
+        },
+      },
+      {
+        faq: {
+          q: "Is there training for shift leads and first-time supervisors?",
+          a: "Very little that's built for the frontline. Most leadership material is written for executives and directors, who have training budgets and time to read. That gap is why this app exists.",
+        },
+      },
     ],
   },
 ];

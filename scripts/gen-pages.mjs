@@ -32,23 +32,81 @@ const esc = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+// Inline links are the one place raw HTML is allowed through, because a paragraph
+// that can't contain a link is useless for cross-page linking. Use {p, links:[...]}
+// where each entry is [textToMatch, href]; the text is escaped first, then the
+// match is wrapped. Anything not listed stays escaped.
+function withLinks(text, links) {
+  let out = esc(text);
+  for (const [label, href] of links || []) {
+    out = out.replace(esc(label), `<a href="${esc(href)}">${esc(label)}</a>`);
+  }
+  return out;
+}
+
 function renderBlock(b) {
   if (b.h2) return `  <h2>${esc(b.h2)}</h2>`;
-  if (b.p) return `  <p>${esc(b.p)}</p>`;
+  if (b.h3) return `  <h3>${esc(b.h3)}</h3>`;
+  if (b.p) return `  <p>${withLinks(b.p, b.links)}</p>`;
   if (b.em) return `  <p class="lead">${esc(b.em)}</p>`;
   if (b.sig) return `  <p class="sig">${esc(b.sig)}</p>`;
+  if (b.ul)
+    return (
+      `  <ul>\n` +
+      b.ul.map((li) => `    <li>${withLinks(li, b.links)}</li>`).join("\n") +
+      `\n  </ul>`
+    );
   if (b.belief)
     return (
       `  <p class="belief"><b>${esc(b.belief.lead)}</b> ` +
       `${esc(b.belief.rest)}</p>`
+    );
+  // A quoted line somebody would actually say, labelled so the reader knows
+  // whether they're looking at the mistake or the fix. kind: bad | good | plain
+  if (b.line)
+    return (
+      `  <figure class="line ${esc(b.line.kind || "plain")}">\n` +
+      `    <figcaption>${esc(b.line.label)}</figcaption>\n` +
+      `    <blockquote>${esc(b.line.text)}</blockquote>\n` +
+      `  </figure>`
+    );
+  // FAQ pair. Also harvested into FAQPage JSON-LD by page().
+  if (b.faq)
+    return (
+      `  <div class="faq">\n` +
+      `    <h3>${esc(b.faq.q)}</h3>\n` +
+      `    <p>${withLinks(b.faq.a, b.links)}</p>\n` +
+      `  </div>`
     );
   throw new Error(`Unknown block type: ${JSON.stringify(b)}`);
 }
 
 function page(p) {
   const url = `${SITE}/${p.slug}`;
+
+  // FAQPage is built automatically from any {faq} blocks. This is the highest-value
+  // markup on a content page for AI answer engines — the Q&A pairs are what actually
+  // get quoted back to somebody asking a question — so it should never depend on
+  // remembering to hand-write it.
+  const faqs = p.blocks.filter((b) => b.faq).map((b) => b.faq);
+  const faqNode =
+    faqs.length > 0
+      ? [
+          {
+            "@type": "FAQPage",
+            "@id": `${url}#faq`,
+            mainEntity: faqs.map((f) => ({
+              "@type": "Question",
+              name: f.q,
+              acceptedAnswer: { "@type": "Answer", text: f.a },
+            })),
+          },
+        ]
+      : [];
+
   const graph = [
     ...p.schema,
+    ...faqNode,
     // Reference-only stubs so this page's graph resolves standalone. The full
     // definitions live in index.html on the homepage.
     { "@type": "WebSite", "@id": WEBSITE_ID, url: `${SITE}/` },
@@ -119,10 +177,41 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
     letter-spacing:0.14em; color:#f5f5f5;
     margin:52px 0 18px; padding-top:24px; border-top:1px solid #1f1f1f;
   }
+  h3 {
+    font-size:17px; font-weight:700; color:#f5f5f5;
+    letter-spacing:-0.01em; margin:32px 0 12px;
+  }
   p { font-size:16.5px; line-height:1.7; color:#b3b3b3; margin:0 0 22px; }
   p.lead { color:#f5f5f5; font-weight:600; font-size:18px; }
   p.belief b { color:#f5f5f5; font-weight:700; }
   p.sig { color:#737373; font-size:15px; margin-top:36px; }
+  ul { margin:0 0 24px; padding-left:22px; }
+  li { font-size:16.5px; line-height:1.7; color:#b3b3b3; margin-bottom:10px; }
+  li b, p b { color:#f5f5f5; font-weight:700; }
+  a { color:var(--accent); }
+
+  /* A line somebody would actually say. Border colour carries the verdict so it
+     reads at a glance on a phone without relying on the caption. */
+  figure.line {
+    margin:0 0 24px; padding:16px 20px;
+    background:#131313; border-left:3px solid #404040; border-radius:0 9px 9px 0;
+  }
+  figure.line figcaption {
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.12em; color:#737373; margin-bottom:9px;
+  }
+  figure.line blockquote {
+    margin:0; font-size:16.5px; line-height:1.65; color:#e5e5e5;
+  }
+  figure.line blockquote::before { content:"\\201C"; }
+  figure.line blockquote::after { content:"\\201D"; }
+  figure.line.bad { border-left-color:#7f1d1d; }
+  figure.line.bad figcaption { color:#b45454; }
+  figure.line.good { border-left-color:var(--accent); }
+  figure.line.good figcaption { color:var(--accent); }
+
+  .faq { margin-bottom:8px; }
+  .faq h3 { margin-top:28px; margin-bottom:8px; font-size:16px; }
   .cta {
     margin-top:56px; padding-top:32px; border-top:1px solid #1f1f1f;
   }
