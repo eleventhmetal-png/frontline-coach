@@ -289,12 +289,16 @@ export default function AuthGate({ children }) {
       setError("Enter your email and password.");
       return;
     }
-    if (mode === "signup" && /@clubcarwash\.com$/i.test(email.trim())) {
-      // UX only -- the real block is the handle_new_user() trigger
-      // (block_ccw_domain migration), which no client-side check can bypass.
-      setError("This email domain isn't eligible for Frontline Coach.");
-      return;
-    }
+    // NOTE: the blocked-domain pre-check that used to live here was removed on
+    // purpose. It hard-coded a specific employer's email domain, and everything
+    // in this file ships to the browser -- the domain was findable in plain text
+    // inside dist/assets/index-*.js, which publicly tied this product to that
+    // company. The block itself is unaffected: handle_new_user() (see the
+    // block_ccw_domain migration) is and always was the real gate, and no
+    // client-side check could bypass it. The only thing lost is a tailored error
+    // message; blocked signups now fall through to the generic catch below,
+    // which is arguably better here since a domain-specific message is itself a
+    // tell. Do not reintroduce a domain literal in client code.
     if (mode === "signup" && !tosAccepted) {
       setError("You need to accept the Terms of Service to create an account.");
       return;
@@ -333,12 +337,11 @@ export default function AuthGate({ children }) {
       // a trigger-raised exception during signUp() -- GoTrue's wording for
       // this case can vary by version and wasn't verified against a live call.
       if (mode === "signup" && /database error saving new user|unexpected_failure/i.test(msg)) {
-        // NOTE: same caveat as before -- this fallback covers both the
-        // beta cap/date block AND the clubcarwash.com domain block, since
-        // both raise generic-looking errors through Supabase's signup API.
-        // Not verified against a live call which exact wording surfaces for
-        // the domain block specifically; confirm and split this out into
-        // its own message if it turns out to read confusingly in practice.
+        // NOTE: same caveat as before -- this fallback now covers every
+        // trigger-raised rejection: the beta cap, the close date, and the
+        // blocked-domain rule. All of them surface as generic errors through
+        // Supabase's signup API. Keep this message generic on purpose; naming
+        // which rule fired would leak what the rules are.
         setError("This account can't be created right now. If you're joining the beta and already have an account, try signing in instead.");
       } else {
         setError(msg);
