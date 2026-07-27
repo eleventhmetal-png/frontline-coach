@@ -1135,6 +1135,17 @@ export const PAGES = [
       {
         p: "You can ask any AI what to say to a late employee and get reasonable advice. What you can't easily get is something that stays in character as a specific difficult person while you fumble, pushes back the way a frontline employee actually pushes back, and holds the thread across a whole conversation instead of handing you a bulleted list.",
       },
+
+      { h2: "And how it's different from roleplay tools built for office managers" },
+      {
+        p: "There are good conversation-practice tools aimed at managers in tech and professional services. Their scenarios are things like managing up, negotiating scope, and running a performance review cycle. If that's your job, use one of those.",
+      },
+      {
+        p: "This is built for hourly frontline supervision, and the conversations are not the same. Somebody clocking in late four shifts running. A prep who says \"that's not my job\" in front of two coworkers. A closing checklist quietly going unfinished until the whole crew stops doing it. An employee who tells you you're targeting them. Nobody on a floor at 6am is negotiating scope creep.",
+      },
+      {
+        p: "The vocabulary matters more than it sounds like it should. A rehearsal partner that talks like a product manager doesn't prepare you for a conversation with somebody who has been on their feet for nine hours.",
+      },
       {
         p: "Frontline Coach also remembers who you've coached and what you covered, so the follow-up two weeks later builds on the last conversation rather than starting from nothing. That was a Team Lead's suggestion and it shipped.",
       },
@@ -1187,6 +1198,18 @@ export const PAGES = [
         faq: {
           q: "Is this the same as sales roleplay software?",
           a: "No. This is for supervisors having conversations with their own employees about performance, attendance, attitude and conduct. Sales roleplay tools train reps to handle buyers and objections — different audience, different conversation, and there's a separate product with a similar name that does exactly that.",
+        },
+      },
+      {
+        faq: {
+          q: "How is this different from conversation practice tools for corporate managers?",
+          a: "Audience and vocabulary. Tools built for tech and professional-services managers cover managing up, scope negotiation and review cycles. This covers attendance, attitude, pushback on the floor, a standard slipping across a crew, and documentation afterwards. If your hard conversations happen in a conference room, use one of those. If they happen in a break room with somebody who's been standing for nine hours, use this.",
+        },
+      },
+      {
+        faq: {
+          q: "Can I practise out loud instead of typing?",
+          a: "Not yet — sessions are text today. Voice is on the roadmap, and it matters more for this audience than most: a supervisor on a floor can usually talk when they can't easily type. It'll land as a paid feature, because voice costs meaningfully more per minute to run than text.",
         },
       },
     ],

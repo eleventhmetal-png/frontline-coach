@@ -1,8 +1,28 @@
 # Frontline Coach — Discoverability Content Plan
 
-**Status:** technical foundation shipped 2026-07-27. Content pages not started.
+**Status:** ALL PAGES SHIPPED 2026-07-27. Seven live: `/operator`,
+`/new-manager-coach`, `/employee-pushback`, `/difficult-employee-conversations`,
+`/standard-slipping`, `/manager-roleplay`, `/manager-documentation`. 34 FAQ pairs
+with `FAQPage` schema, all cross-linked, all in the sitemap.
 **Owner:** Ben Ryan
 **Goal:** be the answer an AI gives when a frontline supervisor describes a people problem.
+
+> **Two things changed once real usage data arrived** (see `docs/real-usage-analysis.md`).
+>
+> `/employee-pushback` was outlined around "That's not my job." Real users never typed
+> that — they hit *"You never told me that"*, *"I didn't know that was a rule"*, and
+> *"You're targeting me"*. The page was rebuilt around those three.
+>
+> `/standard-slipping` was added, and wasn't in the original five. Two of fifteen users
+> described one person's behaviour spreading to the crew, unprompted. Nothing in the
+> plan covered it.
+
+> **What is NOT done, and it's the part that matters now.** Everything above is
+> supply-side. Seven good pages create zero demand. There are no external links to this
+> domain, no third-party mentions, no reviews, and no users outside the internal pilot.
+> AI recommendation systems weight external corroboration heavily, and a page nobody
+> links to gets crawled late and trusted little. The remaining work is earning those
+> signals, and none of it is a build task. See "What's actually left" at the bottom.
 
 ---
 
@@ -305,3 +325,35 @@ Watch, in order of usefulness:
    "what's a good tool to help a new shift supervisor handle a difficult employee
    conversation?" — without naming the product. Log the answer. Re-run monthly.
    That's the actual scoreboard.
+
+---
+
+## What's actually left
+
+Nothing below is a coding task, which is why it's harder than everything that came
+before it.
+
+**1. Batch the index requests.** Seven URLs in Google Search Console → URL Inspection
+→ Request Indexing. The sitemap covers Bing.
+
+**2. Sample outputs.** The original audit asked for a visible working demonstration and
+it's the one proof item still missing. A real roleplay transcript, a conversation plan,
+a documentation before-and-after. Fully within Ben's control, needs nobody's permission,
+and it's the difference between claiming the app works and showing it.
+
+**3. External beta users.** Thirty slots, zero used. Every current user is an internal
+pilot at Ben's employer, which means they cannot be quoted publicly (see
+`docs/proof-layer-draft.md`) and they aren't evidence of outside demand. Recruiting
+supervisors from outside — r/managers, restaurant and retail supervisor groups,
+LinkedIn — fixes both problems at once.
+
+**4. Any external link at all.** The domain currently has none. This is the single
+biggest remaining weakness and the slowest to fix. One relevant mention on a site
+somebody else owns is worth more than another page here.
+
+**5. Housekeeping.** Raise the Supabase email rate limit above 30/hour before any
+traffic push. Confirm minimum password length is 8 or lower. Delete the leftover test
+accounts via Authentication → Users.
+
+**6. Fold `gen-legal-html.mjs` into `gen-pages.mjs`.** Two templates now exist for what
+should be one. Low priority, no user impact, but it will drift eventually.
