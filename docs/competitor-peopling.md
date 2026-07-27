@@ -91,6 +91,33 @@ Phase 4 billing work rather than ahead of it.
 **Sequence:** billing → voice on paid → then it's a differentiator rather than a cost
 problem. Attempting it on the free tier first is the version that fails.
 
+### Voice as the paid anchor (Ben's call, 2026-07-27)
+
+Ben's read: paid-only voice is a good selling point. Agreed, and for a better reason
+than most upgrade triggers — the value is legible. "Practise out loud" needs no
+explanation, unlike "more messages" or "a better model." It's also an honest paywall:
+voice actually costs money per minute, so it isn't artificial scarcity around something
+free to serve. That distinction affects how people feel about paying.
+
+**Give a taste before the wall.** The conversion moment for voice is experiencing it,
+not reading about it. Somebody who has never spoken to an AI employee doesn't know they
+want to — it sounds gimmicky until the thing pushes back out loud. First session free,
+then paid. Costs one session of API spend per user and converts far better than
+paid-from-zero.
+
+**Voice shouldn't be the entire paid tier.** One feature is a thin subscription. Voice
+as the headline, bundled with higher daily limits and more roleplay sessions, is a real
+tier — and those also cost money, so the pricing stays honest.
+
+**Price ceiling is set by who pays.** Frontline supervisors often buy personally rather
+than on a company card, which is a lower ceiling than a tech manager expensing $40/mo.
+Personal probably means single digits. More than that implies an employer-bought B2B
+motion, which pulls in the MSA/DPA work already noted in Phase 4.
+
+**Side benefit:** voice + saved coaching context + roleplay scoring history is exactly
+the "capability ChatGPT lacks natively" bar OpenAI wants for a published plugin. The
+plugin question deferred earlier gets unblocked by shipping voice.
+
 Interim: `/manager-roleplay` now says voice is on the roadmap and explains why it
 matters for this audience. Honest, and it stops the page reading as though text is the
 intended end state.

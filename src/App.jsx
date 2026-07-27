@@ -3,12 +3,16 @@ import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase, Clock
+  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase, Clock, Sparkles
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
 import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
+import { getPointsUsedToday, planFromSession } from "./lib/usage";
+import {
+  remainingPoints, pillValue, describeRemaining, secondsUntilReset, REFERENCE_COSTS,
+} from "./lib/credits";
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // The proxy requires a valid Supabase session, so every call carries the signed-in
@@ -25,13 +29,36 @@ async function authHeaders() {
 // Maps a non-OK proxy response to a typed error with a user-facing message, so
 // tools can tell an expired session (401) apart from a rate limit (429) or a
 // server error, instead of showing one vague "try again" for everything.
-function proxyError(status) {
+// `body` is the parsed error payload when we managed to read one. A 429 means
+// two very different things now — out of daily credits, or genuinely rate
+// limited — and telling a user to "try again in a few seconds" when they're out
+// of credits for the day is worse than saying nothing.
+function proxyError(status, body) {
   const e = new Error(`proxy ${status}`);
   e.status = status;
+  e.code = body?.code || null;
   if (status === 401) e.userMessage = "Your session expired. Sign in again to keep going.";
+  else if (status === 429 && body?.code === "OUT_OF_CREDITS") {
+    e.userMessage = "You're out of AI credits for today. They reset overnight.";
+    e.outOfCredits = true;
+  }
   else if (status === 429) e.userMessage = "The coach is busy right now. Give it a few seconds and try again.";
   else if (status >= 500) e.userMessage = "Something went wrong on our end. Try again in a moment.";
   return e;
+}
+
+// Reads a JSON error body without throwing if it isn't JSON.
+async function safeJson(res) {
+  try { return await res.json(); } catch { return null; }
+}
+
+// Lets the meter pill refresh the moment a call is charged, instead of waiting
+// for a poll. The proxy returns the cost in X-Credits-Cost on every response.
+let onCreditsSpent = null;
+export function setCreditsListener(fn) { onCreditsSpent = fn; }
+function noteSpend(res) {
+  const n = Number(res.headers.get("X-Credits-Cost"));
+  if (n > 0 && typeof onCreditsSpent === "function") onCreditsSpent(n);
 }
 function errMessage(e, fallback) {
   return e && e.userMessage ? e.userMessage : fallback;
@@ -59,8 +86,9 @@ async function rawClaude(messages, { model, system, max_tokens, temperature } = 
   });
   if (!res.ok) {
     if (res.status === 401) handleAuthFailure();
-    throw proxyError(res.status);
+    throw proxyError(res.status, await safeJson(res));
   }
+  noteSpend(res);
   const data = await res.json();
   return (data.content || [])
     .filter((b) => b.type === "text")
@@ -152,8 +180,9 @@ async function streamClaude(messages, { model, system, max_tokens, temperature, 
   });
   if (!res.ok) {
     if (res.status === 401) handleAuthFailure();
-    throw proxyError(res.status);
+    throw proxyError(res.status, await safeJson(res));
   }
+  noteSpend(res);
   if (!res.body) throw new Error("stream unavailable");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -1975,6 +2004,127 @@ function MoreView({ go, session, signOut }) {
     </div>
   );
 }
+// =====================================================
+// CREDITS PILL — free-tier AI usage meter
+// =====================================================
+// Home header only, free plan only. Shows a 0–100 scale rather than raw points
+// so the number means the same thing on any plan. Tap to expand the real
+// figures, the "that's about X role plays" translation, and the reset timer.
+//
+// Deliberately not a progress bar: a bar that empties reads as punishment. A
+// number that counts down reads as a budget, which is what it is.
+function CreditsPill({ session }) {
+  const [used, setUsed] = useState(null);
+  const [open, setOpen] = useState(false);
+  const plan = planFromSession(session);
+  const uid = session?.user?.id;
+
+  // Initial read, then a live decrement whenever the proxy charges a call —
+  // the cost comes back on the response header, so the pill moves immediately
+  // instead of waiting for the next poll.
+  useEffect(() => {
+    let alive = true;
+    if (uid) getPointsUsedToday(uid).then((p) => { if (alive) setUsed(p); });
+    setCreditsListener((cost) => {
+      if (alive) setUsed((prev) => (prev == null ? prev : prev + cost));
+    });
+    return () => { alive = false; setCreditsListener(null); };
+  }, [uid]);
+
+  // Paid plans don't see a meter. Nor does anyone whose meter we couldn't read —
+  // showing a wrong number is worse than showing none.
+  if (plan !== "free" || used == null) return null;
+
+  const left = remainingPoints(used, plan);
+  const pct = pillValue(used, plan);
+  const empty = left <= 0;
+  const low = pct <= 20;
+  const resetHrs = Math.max(1, Math.round(secondsUntilReset() / 3600));
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label={`${left} AI credits left today`}
+        className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors"
+        style={{
+          borderColor: empty ? "#7f1d1d" : low ? `${ACCENT}80` : "#2a2a2a",
+          backgroundColor: empty ? "rgba(127,29,29,0.15)" : low ? "rgba(232,146,60,0.12)" : "#141414",
+          // The glow. Strongest when there's plenty, dimming as it drains, red
+          // when it's gone — so the pill reads at a glance without a label.
+          boxShadow: empty
+            ? "0 0 10px -2px rgba(127,29,29,0.7)"
+            : `0 0 ${low ? 8 : 14}px -3px ${ACCENT}${low ? "99" : "cc"}`,
+        }}
+      >
+        <Sparkles
+          size={13}
+          className={empty ? "" : "shrink-0"}
+          style={{
+            color: empty ? "#b45454" : ACCENT,
+            filter: empty ? "none" : `drop-shadow(0 0 4px ${ACCENT})`,
+          }}
+        />
+        <span
+          className="text-[11px] font-bold tabular-nums"
+          style={{ color: empty ? "#b45454" : low ? ACCENT : "#d4d4d4" }}
+        >
+          {pct}
+        </span>
+      </button>
+
+      {open && (
+        <>
+          {/* Click-away. Sits under the card, over everything else. */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5 shadow-2xl shadow-black/60">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
+                AI credits
+              </span>
+              <button onClick={() => setOpen(false)} className="text-neutral-600 hover:text-neutral-300">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="flex items-baseline gap-1.5 mb-1">
+              <span className="text-2xl font-extrabold tabular-nums" style={{ color: empty ? "#b45454" : ACCENT }}>
+                {pct}
+              </span>
+              <span className="text-xs text-neutral-500">/ 100 today</span>
+            </div>
+
+            <p className="text-[13px] text-neutral-300 leading-snug mb-2">
+              {describeRemaining(left)}
+            </p>
+            <p className="text-[11px] text-neutral-500 mb-3">
+              Resets to 100 in about {resetHrs}h.
+            </p>
+
+            <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-2.5 mb-3 space-y-1">
+              {[
+                ["Role play", REFERENCE_COSTS.roleplaySession],
+                ["Coach me through it", REFERENCE_COSTS.coach],
+                ["Prepare a conversation", REFERENCE_COSTS.convo],
+                ["Handle pushback", REFERENCE_COSTS.pushback],
+              ].map(([label, cost]) => (
+                <div key={label} className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] text-neutral-500">{label}</span>
+                  <span className="text-[11px] text-neutral-400 tabular-nums shrink-0">{cost}</span>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-neutral-500 leading-snug">
+              Role play runs on a heavier model, so it costs more. Everything else is cheap.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ToolHeader({ title, sub }) {
   return (
     <div className="mb-4">
@@ -2268,14 +2418,20 @@ export default function FrontlineCoach({ session, signOut } = {}) {
               <ChevronLeft size={18} /> Home
             </button>
           ) : (
+            // BETA moved in next to the wordmark so the right side belongs to the
+            // credits pill. On non-home screens the back button holds the left,
+            // and the pill isn't shown — it's a Home-only readout.
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
                 <Zap size={16} className="text-neutral-950" />
               </div>
               <span className="font-extrabold uppercase tracking-tight">Frontline Coach</span>
+              <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
             </div>
           )}
-          <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
+          {tab === "home"
+            ? <CreditsPill session={session} />
+            : <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>}
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           <ErrorBoundary resetKey={tab}>

@@ -3,6 +3,15 @@
   publish = "dist"
   functions = "netlify/functions"
 
+# Pinned on purpose. claude.mjs imports ../../src/lib/credits.js so the usage
+# meter's cost model is shared with the client instead of duplicated — the number
+# a user sees and the number they're charged can't drift apart. esbuild follows
+# relative imports outside the functions directory; the legacy zisi bundler
+# handles them less predictably, and a bundling failure here takes down every AI
+# call in the app. Don't remove this without re-testing the proxy.
+[functions]
+  node_bundler = "esbuild"
+
 # Route the app's /api/claude call to the function.
 [[redirects]]
   from = "/api/claude"
