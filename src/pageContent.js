@@ -28,8 +28,10 @@ export const PAGES = [
   {
     slug: "operator",
     title: "Why I Built Frontline Coach — Ben Ryan, Own The Shift",
+    // Keep descriptions between 120 and 158 characters. Bing's SEO checker
+    // errors outside that range and Google truncates the overflow.
     description:
-      "Eighteen years of frontline leadership, learned the wrong way first. A Navy veteran on why newly promoted supervisors get no training, why knowing a standard and teaching one are different skills, and why he built an AI coach for the conversation you're dreading.",
+      "Why I built Frontline Coach. Eighteen years of frontline leadership learned the wrong way first, and what I got wrong about teaching a standard.",
     h1: "Why I Built This",
     // Extra JSON-LD nodes for this page, merged into the graph by the generator.
     schema: [
