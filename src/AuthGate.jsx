@@ -8,6 +8,21 @@ import { TERMS_SECTIONS, PRIVACY_SECTIONS, LAST_UPDATED } from "./legalContent";
 
 const ACCENT = "#E8923C";
 
+// Minimum password length enforced in the UI. Keep this >= the "Minimum password
+// length" setting in Supabase (Authentication → Sign In / Providers → Email), or
+// the server will reject passwords this form accepted and the user sees a raw
+// API error instead of our message.
+const MIN_PASSWORD = 8;
+
+// Supabase's recovery link lands on "/" with the tokens in the URL hash, e.g.
+// #access_token=...&type=recovery. supabase-js consumes and strips that hash as
+// soon as it processes the URL, which can happen before our onAuthStateChange
+// listener attaches — so the PASSWORD_RECOVERY event alone is not reliable.
+// Capturing the hash at module load gives us a second, durable signal. Both are
+// used; either one puts the app into recovery mode.
+const IS_RECOVERY_LINK =
+  typeof window !== "undefined" && /[#&]type=recovery/.test(window.location.hash || "");
+
 const FEATURES = [
   { icon: MessageSquare, title: "AI Coach", desc: "Describe a people problem on your shift. Get a plan you can run today." },
   { icon: Shield, title: "Pushback Coach", desc: "Get the exact words when an employee pushes back, live." },
@@ -102,6 +117,13 @@ export default function AuthGate({ children }) {
   const [wlBusy, setWlBusy] = useState(false);
   const [wlDone, setWlDone] = useState(false);
   const [wlError, setWlError] = useState("");
+  // Password recovery. `recovery` seeds from the URL hash so a missed
+  // PASSWORD_RECOVERY event can't strand the user inside the app with no way to
+  // set a new password.
+  const [recovery, setRecovery] = useState(IS_RECOVERY_LINK);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
+  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     if (!supabaseReady) {
@@ -109,7 +131,8 @@ export default function AuthGate({ children }) {
       return;
     }
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
       setSession(sess);
     });
     supabase
@@ -122,6 +145,37 @@ export default function AuthGate({ children }) {
   }, []);
 
   const signupClosed = !!(betaStatus && (betaStatus.is_full || betaStatus.is_closed));
+
+  // Declared above the early returns on purpose: the recovery screen renders
+  // before the `if (session)` hand-off to the app, and a const referenced by
+  // JSX that returns earlier than its own declaration throws on render.
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (newPassword.length < MIN_PASSWORD) {
+      setError(`Password must be at least ${MIN_PASSWORD} characters.`);
+      return;
+    }
+    if (newPassword !== newPassword2) {
+      setError("Those passwords don't match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      // The recovery link already established a valid session, so clearing the
+      // recovery flag drops straight into the app — no second sign-in needed.
+      setNewPassword("");
+      setNewPassword2("");
+      setRecovery(false);
+    } catch (err) {
+      setError(err.message || "Couldn't update your password. Request a new reset link and try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!supabaseReady) {
     return (
@@ -142,6 +196,78 @@ export default function AuthGate({ children }) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <Loader2 className="animate-spin text-neutral-600" size={28} />
+      </div>
+    );
+  }
+
+  // Password recovery takes precedence over the normal signed-in render. Clicking
+  // a reset link creates a real session, so without this check the user would be
+  // dropped into the app with no way to actually set a new password.
+  if (recovery) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center px-6">
+        <div className="w-full max-w-xs">
+          <div className="flex items-center gap-2 mb-8 justify-center">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: ACCENT }}>
+              <Zap size={16} className="text-neutral-950" />
+            </div>
+            <span className="font-extrabold tracking-tight text-sm">
+              Own The Shift <span className="text-neutral-600 mx-0.5">—</span> Frontline Coach
+            </span>
+          </div>
+
+          <h1 className="text-lg font-bold text-center mb-2">Set a new password</h1>
+          <p className="text-[12px] text-neutral-500 text-center leading-snug mb-6">
+            At least {MIN_PASSWORD} characters. You'll go straight into the app once it's saved.
+          </p>
+
+          <form onSubmit={handleSetPassword} className="space-y-3">
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={16} />
+              <input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neutral-600"
+              />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={16} />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={newPassword2}
+                onChange={(e) => setNewPassword2(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neutral-600"
+              />
+            </div>
+
+            {error && <p className="text-[12px] text-red-400">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              style={{ backgroundColor: ACCENT }}
+            >
+              {busy && <Loader2 className="animate-spin" size={16} />}
+              Save password
+            </button>
+          </form>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setRecovery(false);
+              setError("");
+              try { await supabase.auth.signOut(); } catch (err) { /* ignore */ }
+            }}
+            className="w-full text-center text-[11px] text-neutral-600 mt-5 underline"
+          >
+            Cancel and sign in instead
+          </button>
+        </div>
       </div>
     );
   }
@@ -242,6 +368,34 @@ export default function AuthGate({ children }) {
     } catch (err) {
       setError(err.message || "Google sign-in failed.");
       setBusy(false);
+    }
+  };
+
+  // Sends the password-reset email. redirectTo must be listed under
+  // Authentication → URL Configuration → Redirect URLs in Supabase, or the link
+  // in the email silently bounces the user to the Site URL with no recovery
+  // tokens and the reset appears to do nothing.
+  //
+  // Deliberately reports success even when the address has no account: telling a
+  // stranger which emails are registered is an account-enumeration leak.
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    resetFeedback();
+    const addr = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
+      setError("Enter the email address on your account.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await supabase.auth.resetPasswordForEmail(addr, {
+        redirectTo: window.location.origin + "/",
+      });
+    } catch (err) {
+      /* swallowed on purpose — see enumeration note above */
+    } finally {
+      setBusy(false);
+      setResetSent(true);
     }
   };
 
@@ -395,7 +549,7 @@ export default function AuthGate({ children }) {
           {["signin", "signup"].map((m) => (
             <button
               key={m}
-              onClick={() => { setMode(m); resetFeedback(); }}
+              onClick={() => { setMode(m); setResetSent(false); resetFeedback(); }}
               className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${
                 mode === m ? "bg-neutral-800 text-neutral-100" : "text-neutral-500"
               }`}
@@ -405,10 +559,57 @@ export default function AuthGate({ children }) {
           ))}
         </div>
 
-        {/* Signups closed or full: show the waitlist instead of a row of dead,
-            disabled buttons. Discovery traffic that can't sign up should leave an
-            email behind rather than bounce. */}
-        {mode === "signup" && signupClosed ? (
+        {/* Forgot-password request. Reached from the link under the sign-in form;
+            either tab above exits back out of it. */}
+        {mode === "forgot" ? (
+          <div>
+            {resetSent ? (
+              <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-3 py-3 text-[12px] text-emerald-400 leading-snug flex items-start gap-2">
+                <Check size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  If an account exists for {email.trim()}, a reset link is on its way. It
+                  expires in an hour — check your spam folder if you don't see it.
+                </span>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot} className="space-y-3">
+                <p className="text-[12px] text-neutral-500 leading-snug">
+                  Enter the email on your account and we'll send a link to set a new password.
+                </p>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={16} />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neutral-600"
+                  />
+                </div>
+
+                {error && <p className="text-[12px] text-red-400">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                  style={{ backgroundColor: ACCENT }}
+                >
+                  {busy && <Loader2 className="animate-spin" size={16} />}
+                  Send reset link
+                </button>
+              </form>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { setMode("signin"); setResetSent(false); resetFeedback(); }}
+              className="w-full text-center text-[11px] text-neutral-600 mt-5 underline"
+            >
+              Back to sign in
+            </button>
+          </div>
+        ) : mode === "signup" && signupClosed ? (
           <div>
             <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
               {betaStatus?.is_closed
@@ -549,6 +750,16 @@ export default function AuthGate({ children }) {
             {mode === "signin" ? "Sign In" : "Create Account"}
           </button>
         </form>
+
+        {mode === "signin" && (
+          <button
+            type="button"
+            onClick={() => { setMode("forgot"); setResetSent(false); resetFeedback(); }}
+            className="w-full text-center text-[11px] text-neutral-500 mt-4 underline"
+          >
+            Forgot your password?
+          </button>
+        )}
           </>
         )}
       </div>
