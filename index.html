@@ -176,11 +176,21 @@
       and shift leads. Get the exact words for a hard conversation, rehearse it before it happens,
       and document it after. Sign in or create a free account at frontline-coach.com to get started.
     </noscript>
-    <!-- Netlify Forms detection — must exist in static HTML at build time -->
+    <!-- Netlify Forms detection — must exist in static HTML at build time.
+         Netlify scans the built HTML for data-netlify forms and registers them;
+         a form the scanner never saw will silently reject every POST. Field
+         names here must match the URLSearchParams keys in the code that posts:
+         submitFeedback() in src/App.jsx, handleWaitlist() in src/AuthGate.jsx. -->
     <form name="tool-feedback" data-netlify="true" hidden>
       <input type="text" name="tool" />
       <input type="text" name="rating" />
       <input type="text" name="input" />
+      <input type="text" name="timestamp" />
+    </form>
+    <form name="beta-waitlist" data-netlify="true" hidden>
+      <input type="email" name="email" />
+      <input type="text" name="role" />
+      <input type="text" name="reason" />
       <input type="text" name="timestamp" />
     </form>
     <script type="module" src="/src/main.jsx"></script>

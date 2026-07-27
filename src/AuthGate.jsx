@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  Zap, Loader2, Mail, Lock, AlertTriangle, X,
+  Zap, Loader2, Mail, Lock, AlertTriangle, X, Check, Briefcase,
   MessageSquare, Shield, Play, ClipboardList, Target, FileText,
 } from "lucide-react";
 import { supabase, supabaseReady } from "./lib/supabaseClient";
@@ -95,6 +95,13 @@ export default function AuthGate({ children }) {
   // Fails open (stays null / non-blocking) if the RPC call itself errors, so a
   // network hiccup here never wrongly locks out sign-in for existing users.
   const [betaStatus, setBetaStatus] = useState(null);
+  // Waitlist state, kept separate from the auth form's email/password/error so a
+  // failed signup attempt can't clobber a waitlist submission or vice versa.
+  const [wlEmail, setWlEmail] = useState("");
+  const [wlRole, setWlRole] = useState("");
+  const [wlBusy, setWlBusy] = useState(false);
+  const [wlDone, setWlDone] = useState(false);
+  const [wlError, setWlError] = useState("");
 
   useEffect(() => {
     if (!supabaseReady) {
@@ -238,6 +245,43 @@ export default function AuthGate({ children }) {
     }
   };
 
+  // Beta waitlist. Posts to Netlify Forms using the same urlencoded pattern as
+  // submitFeedback() in App.jsx -- the matching hidden <form name="beta-waitlist">
+  // must exist in index.html at build time or Netlify won't register the form and
+  // every submission silently 404s. Unlike submitFeedback this checks res.ok and
+  // surfaces failures, because a visitor who thinks they joined the list and
+  // didn't is worse than one who knows to retry.
+  const handleWaitlist = async (e) => {
+    e.preventDefault();
+    setWlError("");
+    const addr = wlEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
+      setWlError("Enter a valid email address.");
+      return;
+    }
+    setWlBusy(true);
+    try {
+      const body = new URLSearchParams({
+        "form-name": "beta-waitlist",
+        email: addr,
+        role: wlRole.trim().slice(0, 120),
+        reason: betaStatus?.is_closed ? "signups-closed" : "beta-full",
+        timestamp: new Date().toISOString(),
+      });
+      const res = await fetch("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!res.ok) throw new Error(`form post ${res.status}`);
+      setWlDone(true);
+    } catch (err) {
+      setWlError("Couldn't add you to the list. Try again in a moment.");
+    } finally {
+      setWlBusy(false);
+    }
+  };
+
   return (
     <div
       className="h-full overflow-y-auto bg-neutral-950 text-neutral-100"
@@ -361,17 +405,81 @@ export default function AuthGate({ children }) {
           ))}
         </div>
 
-        {mode === "signup" && signupClosed && (
-          <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
-            {betaStatus?.is_closed
-              ? "Beta signups are closed. Already have an account? Switch to Sign In."
-              : "Beta is full right now. Already have an account? Switch to Sign In."}
-          </div>
-        )}
+        {/* Signups closed or full: show the waitlist instead of a row of dead,
+            disabled buttons. Discovery traffic that can't sign up should leave an
+            email behind rather than bounce. */}
+        {mode === "signup" && signupClosed ? (
+          <div>
+            <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
+              {betaStatus?.is_closed
+                ? "Beta signups are closed right now."
+                : "The beta is full right now."}{" "}
+              Leave your email and we'll tell you the moment a spot opens. Already have an
+              account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("signin"); resetFeedback(); }}
+                className="underline font-semibold"
+              >
+                Sign in
+              </button>
+              .
+            </div>
 
+            {wlDone ? (
+              <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-3 py-3 text-[12px] text-emerald-400 leading-snug flex items-start gap-2">
+                <Check size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  You're on the list. We'll email {wlEmail.trim()} when a spot opens — nothing
+                  else, ever.
+                </span>
+              </div>
+            ) : (
+              <form onSubmit={handleWaitlist} className="space-y-3">
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={16} />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={wlEmail}
+                    onChange={(e) => setWlEmail(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neutral-600"
+                  />
+                </div>
+                <div className="relative">
+                  <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Your role (optional) — e.g. shift lead, GM"
+                    value={wlRole}
+                    onChange={(e) => setWlRole(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neutral-600"
+                  />
+                </div>
+
+                {wlError && <p className="text-[12px] text-red-400">{wlError}</p>}
+
+                <button
+                  type="submit"
+                  disabled={wlBusy}
+                  className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                  style={{ backgroundColor: ACCENT }}
+                >
+                  {wlBusy && <Loader2 className="animate-spin" size={16} />}
+                  Join the waitlist
+                </button>
+
+                <p className="text-[11px] text-neutral-600 leading-snug">
+                  One email when a spot opens. No newsletter, no sharing your address.
+                </p>
+              </form>
+            )}
+          </div>
+        ) : (
+          <>
         <button
           onClick={handleGoogle}
-          disabled={busy || (mode === "signup" && signupClosed)}
+          disabled={busy}
           className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30"
         >
           <GoogleMark /> Continue with Google
@@ -433,7 +541,7 @@ export default function AuthGate({ children }) {
 
           <button
             type="submit"
-            disabled={busy || (mode === "signup" && signupClosed)}
+            disabled={busy}
             className="w-full rounded-lg py-2.5 font-semibold text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
             style={{ backgroundColor: ACCENT }}
           >
@@ -441,6 +549,8 @@ export default function AuthGate({ children }) {
             {mode === "signin" ? "Sign In" : "Create Account"}
           </button>
         </form>
+          </>
+        )}
       </div>
       </div>
       {showLegal && <LegalModal onClose={() => setShowLegal(false)} />}
