@@ -46,13 +46,29 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Frontline Coach" />
 
-    <!-- Structured data. Two graph nodes: the product, and the company behind it.
+    <!-- Structured data. Three graph nodes: the site, the product, and the company.
          "disambiguatingDescription" exists specifically to separate this from the
-         similarly named sales-enablement product at frontline.coach. -->
+         similarly named sales-enablement product at frontline.coach.
+
+         The WebSite node is what Google reads to decide the site name it prints
+         above homepage search results (developers.google.com/search/docs/appearance/site-names).
+         It only works on the homepage and only for the root domain, not subdomains
+         or subdirectories. Google still decides algorithmically — this is a strong
+         hint, not a guarantee — and it can take a few crawls to update. -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://frontline-coach.com/#website",
+          "name": "Frontline Coach by Own The Shift",
+          "alternateName": ["Frontline Coach", "Own The Shift — Frontline Coach"],
+          "url": "https://frontline-coach.com/",
+          "publisher": { "@id": "https://otsowntheshift.com/#org" },
+          "about": { "@id": "https://frontline-coach.com/#app" },
+          "inLanguage": "en-US"
+        },
         {
           "@type": "SoftwareApplication",
           "@id": "https://frontline-coach.com/#app",
