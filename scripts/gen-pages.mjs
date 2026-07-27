@@ -81,6 +81,29 @@ function renderBlock(b) {
   throw new Error(`Unknown block type: ${JSON.stringify(b)}`);
 }
 
+// "Read next" links, generated from each page's `related` slug list. Exists so no
+// page is reachable only via the sitemap — a page with no inbound internal links
+// gets crawled late and carries no weight. Also stops this from being a hand-wired
+// N-by-N linking job every time a page is added.
+function relatedBlock(p) {
+  if (!p.related || p.related.length === 0) return "";
+  const items = p.related
+    .map((slug) => {
+      const target = PAGES.find((x) => x.slug === slug);
+      if (!target) throw new Error(`related: no page with slug "${slug}" (on /${p.slug})`);
+      return `      <li><a href="/${esc(slug)}">${esc(target.navLabel || target.h1)}</a></li>`;
+    })
+    .join("\n");
+  return `
+  <div class="related">
+    <h2>Read next</h2>
+    <ul>
+${items}
+    </ul>
+  </div>
+`;
+}
+
 function page(p) {
   const url = `${SITE}/${p.slug}`;
 
@@ -212,6 +235,11 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
 
   .faq { margin-bottom:8px; }
   .faq h3 { margin-top:28px; margin-bottom:8px; font-size:16px; }
+
+  .related ul { list-style:none; padding:0; }
+  .related li { margin-bottom:12px; }
+  .related a { text-decoration:none; font-weight:600; }
+  .related a:hover { text-decoration:underline; }
   .cta {
     margin-top:56px; padding-top:32px; border-top:1px solid #1f1f1f;
   }
@@ -246,7 +274,7 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
   <h1>${esc(p.h1)}</h1>
 
 ${p.blocks.map(renderBlock).join("\n")}
-
+${relatedBlock(p)}
   <div class="cta">
     <a class="btn" href="/">Try Frontline Coach</a>
     <p class="fine">

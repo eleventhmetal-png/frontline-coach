@@ -27,6 +27,8 @@ export const PERSON_ID = "https://otsowntheshift.com/#ben-ryan";
 export const PAGES = [
   {
     slug: "operator",
+    navLabel: "Why I built Frontline Coach",
+    related: ["new-manager-coach", "difficult-employee-conversations"],
     title: "Why I Built Frontline Coach — Ben Ryan, Own The Shift",
     // Keep descriptions between 120 and 158 characters. Bing's SEO checker
     // errors outside that range and Google truncates the overflow.
@@ -206,6 +208,8 @@ export const PAGES = [
 
   {
     slug: "new-manager-coach",
+    navLabel: "You got promoted. Nobody trained you.",
+    related: ["employee-pushback", "difficult-employee-conversations", "manager-roleplay"],
     title: "AI Coaching for Newly Promoted Managers and Shift Leads",
     description:
       "Just promoted and nobody trained you? What first-time supervisors get wrong, what to say instead, and the exact words for your first hard conversation.",
@@ -413,6 +417,8 @@ export const PAGES = [
 
   {
     slug: "employee-pushback",
+    navLabel: "What to say when an employee pushes back",
+    related: ["difficult-employee-conversations", "standard-slipping", "manager-roleplay"],
     title: "What to Say When an Employee Pushes Back",
     description:
       "You gave a direction and they pushed. The three things supervisors actually hear, why arguing loses either way, and the words that hold the standard.",
@@ -629,6 +635,742 @@ export const PAGES = [
         faq: {
           q: "What if I lose my temper?",
           a: "Go back and own it, specifically and without a speech. \"I raised my voice at you on the floor yesterday. That was wrong of me and it won't happen again. The thing I needed hasn't changed.\" Owning it costs you far less authority than pretending it didn't happen, and the crew saw it either way.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "difficult-employee-conversations",
+    navLabel: "How to prepare for a difficult conversation",
+    related: ["manager-roleplay", "manager-documentation", "employee-pushback"],
+    title: "How to Prepare for a Difficult Employee Conversation",
+    description:
+      "You've been putting it off and it got worse. How to plan a hard conversation in three parts, what to say, and what to do when you already had it once.",
+    h1: "How to Prepare for a Difficult Employee Conversation",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/difficult-employee-conversations#article`,
+        headline: "How to Prepare for a Difficult Employee Conversation",
+        description:
+          "Planning a hard conversation in three parts, and what to do when the first one didn't work.",
+        url: `${SITE}/difficult-employee-conversations`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "You've known about it for two weeks. You've rehearsed it in your head in the truck. You've almost started it twice and found a reason not to.",
+      },
+      {
+        p: "Meanwhile it got worse, other people noticed, and now the conversation is bigger than it needed to be. That's the real cost of putting it off — not that the problem grows, but that the conversation does.",
+      },
+
+      { h2: "Three ways supervisors get this wrong" },
+      {
+        p: "The first is winging it. You know roughly what you want to say, you trust yourself to find the words, and then they say something you didn't expect and you're improvising about somebody's job.",
+      },
+      {
+        p: "The second is over-preparing into a script. You write it out, you deliver it, and it comes out sounding like a statement being read into a record. They can hear that it's rehearsed, which tells them this is a procedure rather than a conversation, and they respond accordingly.",
+      },
+      {
+        p: "The third is the compliment sandwich, and it's the most common piece of bad advice in management. Praise, criticism, praise. Everybody over the age of twenty recognises it, and all it does is teach people that your compliments are a warning sign. It also buries the one thing you needed them to hear in the middle of the two things you didn't.",
+      },
+
+      { h2: "Plan three things, not a script" },
+      {
+        p: "You need to walk in knowing three things. Not sentences to recite — decisions to have already made.",
+      },
+      {
+        ul: [
+          "Your opening line. The first sentence, word for word. This is the only part worth memorising, because it's the part you'll fumble under pressure and it sets the temperature for everything after.",
+          "Your observable facts. Specific, dated, what you saw or heard. Not your interpretation of it.",
+          "The one thing you need different. One. If you have four, pick the one that matters most and save the rest.",
+        ],
+      },
+      {
+        p: "Everything else you handle live, because you can't plan their half of it and pretending you can is what makes you brittle.",
+      },
+
+      { h2: "What that sounds like" },
+      {
+        p: "Take a real one: somebody who's been on the job a few months has started drifting. Tasks half done, corners cut, nothing dramatic.",
+      },
+      {
+        line: {
+          kind: "bad",
+          label: "Winging it",
+          text: "Hey, so, I've been meaning to talk to you — I feel like maybe the effort hasn't quite been there lately? I don't know, maybe it's just me, but it seems like something's off.",
+        },
+      },
+      {
+        p: "Nothing here is arguable because nothing here is specific. You've told them you're unhappy and given them no idea what to do about it. Most people leave this conversation anxious and unchanged.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "Planned",
+          text: "I want to talk about the closing routine. Tuesday and Thursday the back area wasn't wiped down and the mats didn't get pulled. Two months ago that wasn't happening. What's changed?",
+        },
+      },
+      {
+        p: "Specific, dated, observable. It names the standard by implication rather than lecture. And it ends with a real question instead of a verdict, which is what turns it into a conversation rather than a delivery.",
+      },
+      {
+        p: "Then stop talking. The silence after that question is the most useful part of the whole exchange and it will feel unbearable. Let it sit.",
+      },
+
+      { h2: "The one nobody writes about: you already had this conversation" },
+      {
+        p: "This is the most common thing supervisors bring to Frontline Coach, and it's almost absent from the leadership writing out there. You had the conversation. They agreed. Nothing changed.",
+      },
+      {
+        p: "The instinct is to have the same conversation again, louder. Don't. Repeating it teaches them that the conversation is the consequence — and a conversation they've already survived once isn't much of a consequence.",
+      },
+      {
+        p: "The second one is a different conversation. It has to name the fact that there was a first one.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "The second conversation",
+          text: "We talked about this on the twelfth and you told me you'd have it handled. It's the same today. So either something is in the way that I don't know about, or this isn't a priority for you. I need to know which, because those have different answers.",
+        },
+      },
+      {
+        p: "That question is genuine and you have to be willing to hear either answer. If something is in the way — they don't actually know how to do part of it, the schedule makes it impossible, something at home — then you have a problem you can solve. If it isn't a priority for them, you have a different problem, and it now needs a date and a consequence attached rather than another chat.",
+      },
+      {
+        p: "Ask about the barrier before you assume the attitude. I spent years assuming the attitude, and it cost people their jobs when the real answer was that nobody had ever shown them how.",
+        links: [["cost people their jobs", "/operator"]],
+      },
+
+      { h2: "Rehearse it against resistance" },
+      {
+        p: "The reason planning fails is that you rehearse in your head, and in your head they agree with you. In reality they get defensive, or deflect, or bring up something from four months ago you'd forgotten about.",
+      },
+      {
+        p: "The first time you say these words out loud should not be to the person they're about.",
+        links: [],
+      },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        ul: [
+          "Conversation Builder — turns what you're dealing with into an opening line, your observable facts, and the one thing you need different.",
+          "Practice — rehearse it against an AI employee who pushes back and deflects, so the real one isn't the first attempt.",
+          "Skill vs. Will Diagnostic — for exactly the second-conversation problem: is it a skill gap, a motivation gap, or something you caused.",
+          "Pushback Coach — for when it goes sideways mid-conversation.",
+          "Documentation Assistant — turn it into a factual record afterwards, while you still remember what was said.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator.",
+        links: [["Navy veteran and eighteen-year frontline operator", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer. It doesn't know your company's policies, your union contract, or your state's employment law, and it will never tell you to discipline or terminate anybody. If the conversation touches a medical issue, a disability, a leave request, harassment, or anything protected, stop and go to HR before you have it. Every decision stays yours and your company's process governs.",
+      },
+
+      { h2: "Questions supervisors actually ask" },
+      {
+        faq: {
+          q: "How do I tell an employee they need to improve?",
+          a: "Lead with a specific, dated observation rather than a judgement, then ask a real question. \"Tuesday and Thursday the closing checklist wasn't finished. Two months ago that wasn't happening. What's changed?\" Name one thing you need different, not four, and stop talking after the question.",
+        },
+      },
+      {
+        faq: {
+          q: "I keep putting off a hard conversation. How do I actually start it?",
+          a: "Write your first sentence and nothing else. Most avoidance is about the opening, not the conversation — once you're twenty seconds in, you'll handle it. Then pick a time today. The cost of waiting isn't that the problem grows, it's that the conversation does.",
+        },
+      },
+      {
+        faq: {
+          q: "What if I already talked to them and nothing changed?",
+          a: "Don't repeat the first conversation. Name that there was one, then ask whether something is in the way or whether this isn't a priority for them, because those have different answers. If it's a barrier, solve it. If it isn't, the next step needs a date and a consequence rather than another conversation.",
+        },
+      },
+      {
+        faq: {
+          q: "How do I talk to an employee about their attitude?",
+          a: "Don't talk about the attitude — talk about the behaviour that made you call it an attitude. \"You have an attitude problem\" is an opinion and people defend themselves against opinions. \"When I asked you to redo the mats you rolled your eyes and walked away\" is a fact, and it's about something they can actually change.",
+        },
+      },
+      {
+        faq: {
+          q: "Should I use the compliment sandwich?",
+          a: "No. Everybody recognises it, and the only lasting effect is that your compliments start to read as a warning. If somebody deserves praise, give it on its own another day so it means something. If you need to raise a problem, raise the problem.",
+        },
+      },
+      {
+        faq: {
+          q: "Should I have this conversation in front of other people?",
+          a: "No. Take it off the floor, even if it's just outside or in the back for two minutes. An audience turns a correction into a performance, and it forces the other person to defend their standing in front of their coworkers instead of listening to you.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "standard-slipping",
+    navLabel: "When one person's slipping starts spreading",
+    related: ["difficult-employee-conversations", "employee-pushback", "manager-documentation"],
+    title: "When One Person's Slipping Starts Spreading",
+    description:
+      "Your best performer is quietly skipping a step and now the crew is too. Why blanket reminders fail, and how to fix the standard without punishing everyone.",
+    h1: "When One Person's Slipping Starts Spreading",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/standard-slipping#article`,
+        headline: "When One Person's Slipping Starts Spreading",
+        description:
+          "How a single unaddressed shortcut becomes the crew's new normal, and what to do about it.",
+        url: `${SITE}/standard-slipping`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "A supervisor described this almost word for word: his assistant manager is excellent with customers, genuinely liked, and keeps letting the closing checklist slide. The team has started copying him and skipping steps too.",
+      },
+      {
+        p: "If you've got a version of that, you don't have a checklist problem. You have a crew that has learned which parts of the job are optional, and they learned it by watching somebody get away with it.",
+      },
+
+      { h2: "Why this one sits unaddressed for months" },
+      {
+        p: "Because the person is good. That's the whole reason.",
+      },
+      {
+        p: "If they were bad at the job you'd have dealt with it. But they're strong where it's visible — customers love them, they show up, they carry the shift — so raising a back-of-house checklist feels petty. Ungrateful, even. So you let it go, and then you let it go again, and by the third month you'd have to explain why you're bringing up something you clearly haven't minded for a quarter.",
+      },
+      { em: "The standard is the floor, not the ceiling." },
+      {
+        p: "Being excellent at the visible part of the job doesn't buy an exemption from the rest of it. That isn't harshness — it's the only version of fair that survives contact with a crew who can see what's happening.",
+      },
+
+      { h2: "The mistake: talking to everybody" },
+      {
+        p: "Here's what almost everyone does. They bring it up in the huddle. \"Team, we need to be better about closing procedures.\" General, blameless, nobody singled out.",
+      },
+      {
+        p: "It fails every time, for three reasons.",
+      },
+      {
+        ul: [
+          "The people already doing it right hear that they're being criticised for something they didn't do. That's the fastest way to lose your best people's respect.",
+          "The person actually responsible either doesn't realise it's about them, or knows exactly that it is and now knows you won't say it to their face.",
+          "The crew watches you address a specific person's behaviour by talking to a room. They draw the obvious conclusion about what you'll do when it's them.",
+        ],
+      },
+      {
+        p: "A blanket reminder is a way of having a hard conversation without having it. It feels like leadership and it costs you more than doing nothing.",
+      },
+
+      { h2: "Go to the source first, and privately" },
+      {
+        p: "Start with the person, off the floor, and be specific about both halves — the thing itself and the fact that it's spreading.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "The conversation",
+          text: "You're the best person I've got with customers and I'm not being cute when I say that. And the closing checklist hasn't been finished on your shifts eight of the last ten. Here's why I'm raising it now: two other people have stopped doing it too, and they didn't decide that on their own. They're following you. I need the checklist done, and I need it done by you specifically, because they're watching what you do more than they're listening to what I say.",
+        },
+      },
+      {
+        p: "That last part is the whole conversation. You're not accusing them of poor performance — you're telling them their influence is real and currently pointed the wrong way. For somebody who's good at their job and knows it, that lands differently than a correction does. Most people in that position are quietly proud of the influence and hadn't thought about which direction it was going.",
+      },
+
+      { h2: "Then reset the standard, without a manhunt" },
+      {
+        p: "Once the source is handled, you can re-state the standard to the group — but do it as a standard going forward, not as a complaint about the past, and never in a way that invites people to work out who it was about.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "To the crew",
+          text: "Closing checklist gets completed and initialled every shift, starting tonight. If something on it doesn't make sense or takes too long, tell me and I'll look at it. But until it changes, it gets done.",
+        },
+      },
+      {
+        p: "Note the middle sentence. Half of all quietly abandoned procedures are abandoned because they're genuinely stupid, and nobody felt able to say so. Opening that door costs you nothing and occasionally saves you from defending a step that shouldn't exist.",
+      },
+
+      { h2: "How to tell it's already spread" },
+      {
+        p: "Some tells, in roughly the order they show up:",
+      },
+      {
+        ul: [
+          "You find yourself checking whether something got done instead of assuming it did.",
+          "The shortcut has a name. Somebody has started calling it something, which means it's now a practice rather than a lapse.",
+          "New hires are doing it. That's the serious one — it means the shortcut is being taught, and it's the crew's standard now, not yours.",
+          "Somebody asks whether they still have to do it. That's not insubordination, that's an honest question about what the real rule is.",
+        ],
+      },
+      {
+        p: "Once new people are learning the shortcut as the way, you're not correcting a person any more. You're re-establishing a standard, and that takes longer than the conversation you should have had in month one.",
+      },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        ul: [
+          "AI Coach — describe the situation, including that it's spreading, and get a plan for the specific person and the crew reset.",
+          "Conversation Builder — plan the hard half: raising a problem with somebody who's genuinely good at their job.",
+          "Practice — rehearse it, because this one goes wrong when the person you respect gets defensive and you back off.",
+          "Skill vs. Will Diagnostic — work out whether the step is being skipped because it's unclear, because it's badly designed, or because nobody's been asked to do it.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator.",
+        links: [["Navy veteran and eighteen-year frontline operator", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer. It doesn't know your company's policies, your union contract, or your state's employment law, and it will never tell you to discipline or demote anybody. If the skipped step is a safety or compliance requirement, treat it as that first and follow your company's process — that is not a coaching conversation. Every decision stays yours.",
+      },
+
+      { h2: "Questions supervisors actually ask" },
+      {
+        faq: {
+          q: "My best employee keeps skipping a step and now others are too. What do I do?",
+          a: "Go to them privately and name both halves: the step, and the fact that people are following them. Frame it as influence rather than performance — they're good, people watch them, and right now that's working against the standard. Then reset the standard with the crew as a going-forward rule, not a complaint about the past.",
+        },
+      },
+      {
+        faq: {
+          q: "Should I just remind the whole team instead of calling one person out?",
+          a: "No. Blanket reminders criticise the people doing it right, let the responsible person off the hook, and show the crew you won't address things directly. Handle the source privately first, then state the standard to the group without making it a guessing game about who it was about.",
+        },
+      },
+      {
+        faq: {
+          q: "How do I correct someone who's better at parts of the job than I am?",
+          a: "Say that out loud first, because it's true and they know it. Then be specific about the gap. Being excellent at one part of the job doesn't exempt anybody from the rest, and a good performer can hear that when it's said plainly and without you pretending to be superior.",
+        },
+      },
+      {
+        faq: {
+          q: "What if the step they're skipping is genuinely pointless?",
+          a: "That's worth finding out, and asking costs you nothing. Plenty of abandoned procedures were abandoned because they don't make sense and nobody felt able to say so. Hold the standard until it changes, but be honest that you'll look at it — then actually look at it.",
+        },
+      },
+      {
+        faq: {
+          q: "How long do I have before it becomes the new normal?",
+          a: "The clearest marker is new hires. Once somebody who joined after the drift is doing it too, the shortcut is being taught rather than tolerated, and you're re-establishing a standard rather than correcting a person. That takes considerably longer.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "manager-roleplay",
+    navLabel: "Practise the conversation before you have it",
+    related: ["difficult-employee-conversations", "new-manager-coach", "employee-pushback"],
+    title: "AI Roleplay for Difficult Manager Conversations",
+    description:
+      "Rehearsing in your head doesn't work, because in your head they agree with you. Practise against an AI employee who pushes back before you do it live.",
+    h1: "Practise the Conversation Before You Have It",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/manager-roleplay#article`,
+        headline: "Practise the Conversation Before You Have It",
+        description:
+          "Why mental rehearsal fails and what practising against realistic resistance actually changes.",
+        url: `${SITE}/manager-roleplay`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "This is for shift leads, supervisors and managers rehearsing a conversation with an employee. If you landed here looking for sales call practice, this isn't that — there's a separate product with a similar name that does sales and customer experience roleplay.",
+      },
+      {
+        p: "Here it's the conversation you're dreading with somebody on your crew.",
+      },
+
+      { h2: "Rehearsing in your head doesn't work" },
+      {
+        p: "Everybody rehearses. In the truck on the way in, in the shower, lying awake at two in the morning. And it feels like preparation.",
+      },
+      { em: "The problem is that in your head, they agree with you." },
+      {
+        p: "You deliver your line, imaginary-them nods, accepts the point, and says they'll fix it. You run that a few times, feel ready, and walk in. Then the real person gets defensive, or goes quiet, or says \"you never told me that,\" or brings up something from four months ago that you'd completely forgotten — and none of your rehearsal covered any of it, because you were the one writing their lines.",
+      },
+      {
+        p: "You didn't practise the conversation. You practised your half of a conversation that was never going to happen.",
+      },
+
+      { h2: "What practising against resistance changes" },
+      {
+        p: "Three things, and the third is the one that matters most.",
+      },
+      {
+        ul: [
+          "You find out where your opening lands wrong. Most bad conversations are decided in the first sentence, and you can't hear how yours sounds until something responds to it.",
+          "You get the deflections out of the way. If somebody's going to say \"nobody told me,\" better the first time you hear it is in practice, where you can think for ten seconds instead of two.",
+          "You stop needing the script. Once you've been knocked off your plan a few times and found your way back, you're not delivering a rehearsed piece any more — you're having a conversation with a standard you're clear about. That's the actual goal, and it's the opposite of what over-preparation produces.",
+        ],
+      },
+
+      { h2: "What a session looks like" },
+      {
+        p: "You describe the situation in your own words — the same way you'd tell a colleague. Then you talk to an AI employee who behaves like the person you described, and you go at it.",
+      },
+      {
+        line: {
+          kind: "plain",
+          label: "You set it up",
+          text: "My prep has been clocking in five or six minutes late most shifts. She's friendly, she's been here longer than I have, and I got promoted over her four months ago.",
+        },
+      },
+      {
+        line: {
+          kind: "plain",
+          label: "You open",
+          text: "Hey, can I grab you for a second? I wanted to talk about start times.",
+        },
+      },
+      {
+        line: {
+          kind: "plain",
+          label: "The AI employee",
+          text: "Sure. Is this about the clock thing? Because I've been covering the end of Marcus's shift half the week and nobody's said anything about that.",
+        },
+      },
+      {
+        p: "There it is. That's the move you didn't plan for — a deflection that also happens to contain a legitimate point. In your head she said \"sorry, I'll fix it.\" Here you have to decide in real time whether to hold the line, address the Marcus thing, or do both and in which order.",
+      },
+      {
+        p: "Get that wrong in practice and it costs you nothing. Get it wrong live and you've either dismissed something real or lost the thread entirely.",
+      },
+
+      { h2: "The ones worth rehearsing" },
+      {
+        p: "Not everything needs practice. These do:",
+      },
+      {
+        ul: [
+          "Anything where you're nervous about your own reaction. If you think you might get short with somebody, rehearse it.",
+          "Managing a former peer, especially somebody you were promoted over.",
+          "The second conversation, when the first one didn't work and you can't just repeat it.",
+          "Anything you've been putting off for more than a week. The avoidance is usually about the opening, and practice kills that specifically.",
+          "Your first few conversations as a new supervisor, full stop.",
+        ],
+      },
+      {
+        p: "Recognition conversations, for what it's worth, mostly don't need it. If somebody did well, tell them. That one doesn't go sideways.",
+      },
+
+      { h2: "How it's different from asking a chatbot" },
+      {
+        p: "You can ask any AI what to say to a late employee and get reasonable advice. What you can't easily get is something that stays in character as a specific difficult person while you fumble, pushes back the way a frontline employee actually pushes back, and holds the thread across a whole conversation instead of handing you a bulleted list.",
+      },
+      {
+        p: "Frontline Coach also remembers who you've coached and what you covered, so the follow-up two weeks later builds on the last conversation rather than starting from nothing. That was a Team Lead's suggestion and it shipped.",
+      },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        ul: [
+          "Practice — rehearse against an AI employee that stays in character and pushes back.",
+          "Conversation Builder — plan the three things first, then take them into practice.",
+          "Pushback Coach — for when the live version goes somewhere you didn't rehearse.",
+          "Documentation Assistant — turn the real conversation into a factual record afterwards.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator.",
+        links: [["Navy veteran and eighteen-year frontline operator", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer, and an AI employee isn't your employee. It rehearses your delivery and your thinking — it can't predict what a specific person will actually say. If the conversation touches a medical issue, a disability, a leave request, harassment, or anything protected, stop and go to HR rather than practising your way into it. Every decision stays yours and your company's process governs.",
+      },
+
+      { h2: "Questions supervisors actually ask" },
+      {
+        faq: {
+          q: "How do I practise a difficult conversation with an employee?",
+          a: "Describe the situation and the person in your own words, then have the conversation out loud against something that responds in character. The point is to get knocked off your plan and find your way back, so practise against resistance rather than agreement. Rehearsing in your head doesn't work because you write both halves.",
+        },
+      },
+      {
+        faq: {
+          q: "Isn't roleplaying with an AI a bit awkward?",
+          a: "The first two minutes are. Then you're arguing with it, which is the point. It's considerably less awkward than discovering mid-conversation with a real person that your opening line came out wrong.",
+        },
+      },
+      {
+        faq: {
+          q: "How many times should I practise before the real conversation?",
+          a: "Usually two or three. Once to find out your opening is wrong, once to handle the deflection you didn't expect, and once that goes reasonably. Beyond that you start memorising, which makes you sound rehearsed and brittle when the real person goes off-script.",
+        },
+      },
+      {
+        faq: {
+          q: "Can I practise firing someone?",
+          a: "You can rehearse how you'll speak and how you'll hold up. But termination is a process question before it's a conversation question, and it needs to run through HR and your company's policy first. Practise the delivery, not the decision.",
+        },
+      },
+      {
+        faq: {
+          q: "Is this the same as sales roleplay software?",
+          a: "No. This is for supervisors having conversations with their own employees about performance, attendance, attitude and conduct. Sales roleplay tools train reps to handle buyers and objections — different audience, different conversation, and there's a separate product with a similar name that does exactly that.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "manager-documentation",
+    navLabel: "How to document an employee conversation",
+    related: ["difficult-employee-conversations", "standard-slipping", "operator"],
+    title: "How Managers Document Employee Conversations Factually",
+    description:
+      "Four months from now it matters and your memory is a feeling. How to write observable facts instead of opinions, and where documentation stops being yours.",
+    h1: "How to Document an Employee Conversation",
+    schema: [
+      {
+        "@type": "Article",
+        "@id": `${SITE}/manager-documentation#article`,
+        headline: "How to Document an Employee Conversation",
+        description:
+          "Writing observable facts rather than conclusions, and the guardrails around manager documentation.",
+        url: `${SITE}/manager-documentation`,
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": ORG_ID },
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+        datePublished: "2026-07-27",
+      },
+      {
+        "@type": "Person",
+        "@id": PERSON_ID,
+        name: "Ben Ryan",
+        jobTitle: "Founder",
+        url: `${SITE}/operator`,
+        worksFor: { "@id": ORG_ID },
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "Read this part first, because it shapes everything else on the page.",
+      },
+      {
+        p: "This is about writing down what happened accurately. It is not legal advice, it isn't a substitute for your company's disciplinary process, and nothing here tells you what action to take. Your HR team and your company's policy decide that. What follows is about the quality of the record itself.",
+      },
+
+      { h2: "Why the record matters" },
+      {
+        p: "Something happens on a Tuesday. You handle it, it goes fine, you move on. Four months later it matters — a pattern, a promotion decision, a termination, occasionally a claim — and what you have is a feeling. You remember being frustrated. You don't remember the date, the words, or who else was standing there.",
+      },
+      {
+        p: "A feeling is not a record. And the version of events you reconstruct four months later will be shaped by how you feel about that person now, which is exactly the thing documentation is supposed to protect against.",
+      },
+
+      { h2: "The mistake: writing conclusions" },
+      {
+        p: "Almost every weak note has the same flaw. It records what the supervisor concluded rather than what the supervisor observed.",
+      },
+      {
+        line: {
+          kind: "bad",
+          label: "A conclusion",
+          text: "Spoke with employee about ongoing attitude problem and lack of respect for authority. Employee was defensive and uncooperative. Will continue to monitor.",
+        },
+      },
+      {
+        p: "Every load-bearing word there is an opinion. Attitude problem, lack of respect, defensive, uncooperative — those are your interpretations, and none of them can be verified by anybody who wasn't in your head. If that note is ever read by someone who wasn't there, it tells them about you rather than about the employee.",
+      },
+      {
+        line: {
+          kind: "good",
+          label: "An observation",
+          text: "22 July, approx. 4:15pm. I asked [employee] to redo the mats in bay two. He said \"I already did those, do them yourself,\" and walked to the break room. Two other team members were within hearing distance. I followed up at 4:30pm off the floor and restated that mats are part of the closing routine. He said he understood. Mats were completed by end of shift.",
+        },
+      },
+      {
+        p: "Nothing there is arguable. Date, time, what was asked, what was said in quotes, who could hear it, what you did next, how it ended. Anybody reading it four months from now sees the same event you saw.",
+      },
+
+      { h2: "What belongs in a note" },
+      {
+        ul: [
+          "Date and approximate time. Both, always. \"Last week\" is worthless in four months.",
+          "What you asked or observed, specifically.",
+          "What was said, in quotation marks where you're confident of the words. If you're paraphrasing, say so.",
+          "Who else was present or within earshot.",
+          "What you did about it, and what was agreed.",
+          "The outcome, if there was one by end of shift.",
+        ],
+      },
+      {
+        p: "Write it the same day. Not because of any rule — because your recall of the actual words is gone by tomorrow, and approximate quotes are worse than no quotes.",
+      },
+
+      { h2: "What to keep out" },
+      {
+        ul: [
+          "Characterisations. Attitude, lazy, disrespectful, difficult, bad fit. All conclusions.",
+          "Speculation about why. You don't know what's going on in somebody's life and guessing in writing is how a note becomes evidence against you.",
+          "Anything medical, or anything about a disability, pregnancy, religion, or family situation. If that's genuinely relevant, it belongs with HR and not in your notes.",
+          "Sarcasm and editorialising. It reads exactly as badly as you'd expect when someone else reads it later.",
+          "Comparisons to other employees by name.",
+        ],
+      },
+      {
+        p: "The test is simple. Could a stranger read this note and see the event rather than your opinion of the person? If not, rewrite it.",
+      },
+
+      { h2: "Where this stops being yours" },
+      {
+        p: "Documentation is a supervisor's job. Deciding what happens next mostly isn't.",
+      },
+      {
+        p: "Go to HR before you write or act, not after, if any of this is in play: a medical condition or disability, a leave or accommodation request, a safety refusal, a harassment or discrimination allegation, anything involving a protected characteristic, anything union-related, or a pattern that's heading towards termination.",
+      },
+      {
+        p: "And follow your own company's process for anything formal. A verbal warning, a written warning and a performance plan all mean specific things at your company with specific steps attached. This page doesn't know what those are — your policy does, and your policy governs.",
+      },
+
+      { h2: "How Frontline Coach helps" },
+      {
+        p: "Documentation Assistant takes what you actually remember — messy, out of order, half-sentences typed on a phone in the break room — and turns it into a clean factual record with the conclusions stripped out.",
+      },
+      {
+        p: "It organises and it removes editorialising. It doesn't decide anything, it doesn't recommend discipline, and it doesn't know your policy.",
+      },
+      {
+        ul: [
+          "Documentation Assistant — rough notes to a factual record, same day, while you still have the words.",
+          "Conversation Builder — plan it beforehand so there's something clean to document.",
+          "AI Coach — work out what to do about the underlying problem.",
+        ],
+      },
+      {
+        p: "Free to start. Built by a Navy veteran and eighteen-year frontline operator who spent years not documenting anything at all.",
+        links: [["not documenting anything at all", "/operator"]],
+      },
+
+      { h2: "What it won't do" },
+      {
+        p: "It isn't HR and it isn't a lawyer. It will never tell you to discipline, demote or fire anybody, and it doesn't know your company's policies, your union contract, or your state's employment law. It helps you write down what happened. Everything downstream of that is your decision and your company's process.",
+      },
+
+      { h2: "Questions supervisors actually ask" },
+      {
+        faq: {
+          q: "How do I document a verbal warning?",
+          a: "Record the date and time, what standard you restated, what you said, what the employee said, anyone present, and what was agreed. Keep it to observable facts and write it the same day. Then follow your company's process — at many companies a verbal warning is a defined step with its own form and requirements, and your policy governs that, not a template.",
+        },
+      },
+      {
+        faq: {
+          q: "What should I write instead of \"bad attitude\"?",
+          a: "Write what made you use that word. \"Rolled his eyes and walked away when asked to redo the mats\" is observable. \"Bad attitude\" is your conclusion about it, and a conclusion can be disputed by anyone who wasn't there. Describe the behaviour and let the reader draw the conclusion.",
+        },
+      },
+      {
+        faq: {
+          q: "Do I need to document a conversation that went well?",
+          a: "A short note is worth it for anything where you restated a standard or agreed on a change, even if the tone was good. That's the note that shows a pattern was addressed early and fairly. It also protects the employee, which is half the point.",
+        },
+      },
+      {
+        faq: {
+          q: "Should the employee see what I wrote?",
+          a: "That depends entirely on your company's policy and the type of documentation, so ask HR rather than deciding yourself. As a discipline though, write every note as if they will read it. It's a good filter for editorialising, and it keeps you honest about what you actually observed.",
+        },
+      },
+      {
+        faq: {
+          q: "How long should I keep my notes, and where?",
+          a: "Follow your company's policy — records retention and where employee records live are governed by it, and personal copies of employee information kept outside company systems can create real problems. If nobody has told you what the policy is, that's a question for HR before you build a filing habit.",
+        },
+      },
+      {
+        faq: {
+          q: "Can I use AI to write employee documentation?",
+          a: "To organise your own observations into clear factual language, yes. What it shouldn't do is invent detail, characterise the person, or decide the outcome. Review every word before it goes anywhere — you're accountable for the record, and it needs to reflect what you actually saw.",
         },
       },
     ],
