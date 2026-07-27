@@ -137,10 +137,43 @@ export function remainingPoints(pointsUsed, plan = "free") {
   return Math.max(0, limit - (pointsUsed || 0));
 }
 
-// Seconds until the next UTC midnight, for the "resets in ~Xh" line.
+// ── The usage day ───────────────────────────────────────────────────────────
+// Credits reset at 5am Central, not UTC midnight. UTC midnight lands at 7pm
+// Central — mid-evening for a frontline supervisor, so somebody working a close
+// got a reset partway through their shift. It also allowed a double-dip: spend
+// 100 at 6pm, get a fresh 100 at 7pm, spend those before midnight.
+//
+// A named zone rather than a fixed -6 offset, so the boundary stays at 5am local
+// through DST instead of drifting an hour twice a year.
+//
+// MUST match public.usage_day() in the SQL migration. If these disagree, the pill
+// reads a different row than the proxy writes and silently shows a wrong number.
+const RESET_TZ = "America/Chicago";
+const RESET_HOUR = 5;
+
+// Which usage day is it right now. Shift the instant back 5 hours, then render
+// the date in Chicago — the same operation the SQL performs on Chicago wall-clock.
+export function usageDay(now = new Date()) {
+  const shifted = new Date(now.getTime() - RESET_HOUR * 3600 * 1000);
+  // en-CA formats as YYYY-MM-DD, which is what the date column wants.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: RESET_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(shifted);
+}
+
+// Seconds until the next 5am Central, for the "resets in ~Xh" line. Derived from
+// the current Chicago wall-clock so it's correct without date arithmetic across
+// zones. On the two DST transition days this can be an hour out, which is
+// immaterial for a rounded "about Xh" display.
 export function secondsUntilReset(now = new Date()) {
-  const next = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0
-  ));
-  return Math.max(0, Math.floor((next - now) / 1000));
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: RESET_TZ, hour12: false,
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(now);
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value || 0);
+  // Some runtimes render midnight as hour 24 under hour12:false.
+  const secsNow = (get("hour") % 24) * 3600 + get("minute") * 60 + get("second");
+  let delta = RESET_HOUR * 3600 - secsNow;
+  if (delta <= 0) delta += 86400;
+  return delta;
 }

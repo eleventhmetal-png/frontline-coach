@@ -1,4 +1,5 @@
 import { supabase, supabaseReady } from "./supabaseClient";
+import { usageDay } from "./credits";
 
 // Client-side read of the usage meter. Read-only by design: the "usage: read own"
 // RLS policy grants SELECT and nothing else, so the browser can display the
@@ -8,9 +9,10 @@ import { supabase, supabaseReady } from "./supabaseClient";
 // netlify/functions/claude.mjs — keeping the Supabase dependency out of that file
 // so the function bundle stays small.
 
-function todayUtc() {
-  return new Date().toISOString().slice(0, 10);
-}
+// Deliberately NOT the UTC date. The usage day rolls at 5am Central, so between
+// 7pm Central and UTC midnight the UTC date is already tomorrow while the proxy
+// is still writing to today's row — the pill would read an empty row and show a
+// full meter. usageDay() is the shared definition; the SQL mirrors it exactly.
 
 // Points used today. Returns 0 when there's no row yet (a user who hasn't run
 // anything), and null when we genuinely couldn't read it — the caller uses null
@@ -22,7 +24,7 @@ export async function getPointsUsedToday(userId) {
       .from("usage_daily")
       .select("points")
       .eq("user_id", userId)
-      .eq("day", todayUtc())
+      .eq("day", usageDay())
       .maybeSingle();
     if (error) return null;
     return data?.points ?? 0;

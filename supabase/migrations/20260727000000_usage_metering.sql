@@ -84,8 +84,15 @@ $$;
 
 -- Only the proxy (service role) may spend or refund. Leaving these callable by
 -- `authenticated` would let a signed-in user refund themselves to zero.
+--
+-- GOTCHA (hit on first deploy, 2026-07-27): service_role inherits its EXECUTE
+-- grant from PUBLIC. Revoking from PUBLIC therefore strips it from service_role
+-- as well, and the proxy fails with "permission denied for function
+-- consume_credits". The explicit grants below are required, not decorative.
 revoke execute on function public.consume_credits(uuid, integer) from public, anon, authenticated;
 revoke execute on function public.refund_credits(uuid, integer)  from public, anon, authenticated;
+grant  execute on function public.consume_credits(uuid, integer) to service_role;
+grant  execute on function public.refund_credits(uuid, integer)  to service_role;
 
 -- Housekeeping: usage rows older than 60 days are dead weight. The
 -- synthesize-memory function already runs on cron and can call this.
@@ -100,3 +107,4 @@ as $$
 $$;
 
 revoke execute on function public.prune_usage_daily() from public, anon, authenticated;
+grant  execute on function public.prune_usage_daily() to service_role;
