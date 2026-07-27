@@ -126,13 +126,16 @@
   .cta {
     margin-top:56px; padding-top:32px; border-top:1px solid #1f1f1f;
   }
-  .cta a {
+  /* Scoped to .btn on purpose. A bare ".cta a" also matches the Terms and
+     Privacy links in the fine print below the button, which rendered them as
+     full-size orange blocks. */
+  .cta a.btn {
     display:inline-block; background:var(--accent); color:#0a0a0a;
     text-decoration:none; font-weight:600; font-size:15px;
     padding:13px 30px; border-radius:9px;
   }
-  .fine { font-size:12px; color:#6b6b6b; margin-top:28px; }
-  .fine a { color:var(--accent); }
+  .fine { font-size:12px; color:#6b6b6b; margin-top:28px; line-height:1.6; }
+  .fine a { color:var(--accent); text-decoration:underline; }
   @media (max-width:520px) {
     h1 { font-size:28px; }
     p { font-size:16px; }
@@ -197,7 +200,7 @@
   <p class="sig">— Ben Ryan</p>
 
   <div class="cta">
-    <a href="/">Try Frontline Coach</a>
+    <a class="btn" href="/">Try Frontline Coach</a>
     <p class="fine">
       Coaching guidance only &mdash; not legal or HR advice. Always follow your
       company's policies. See our <a href="/terms.html">Terms</a> and
