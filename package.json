@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "gen:pages": "node scripts/gen-pages.mjs",
+    "gen:legal": "node scripts/gen-legal-html.mjs",
+    "build": "node scripts/gen-pages.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
