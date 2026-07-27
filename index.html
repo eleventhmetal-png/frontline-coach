@@ -3,22 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Own The Shift — Frontline Coach</title>
-    <meta name="description" content="Frontline Coach is an AI leadership-coaching app for newly promoted managers and shift leads. Get the exact words for a hard conversation, rehearse it before it happens, and document it after — built by an operator, not a corporate HR vendor." />
+
+    <!-- Title leads with the product name and qualifies it with the audience, so
+         an AI search system can tell this apart from frontline.coach (a separate,
+         unrelated sales/CX roleplay product on the unhyphenated domain). The
+         on-page brand text in AuthGate.jsx still reads "Own The Shift — Frontline
+         Coach" to match the Google OAuth consent screen's App name field exactly
+         — do not change that string without updating the consent screen too. -->
+    <title>Frontline Coach by Own The Shift | AI Coach for New Managers &amp; Shift Leads</title>
+    <meta name="description" content="AI coaching for newly promoted managers, supervisors, team leads, and shift leads. Prepare a hard conversation, rehearse it against an AI employee, handle pushback in the moment, and turn rough notes into a factual record. Built by an operator who runs shifts for a living, not a corporate HR vendor." />
     <link rel="canonical" href="https://frontline-coach.com/" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
 
     <!-- Open Graph / Facebook, LinkedIn, iMessage, etc. -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Frontline Coach by Own The Shift" />
     <meta property="og:url" content="https://frontline-coach.com/" />
-    <meta property="og:title" content="Frontline Coach — AI Leadership Coaching for Shift Leads & New Managers" />
+    <meta property="og:title" content="Frontline Coach by Own The Shift | AI Coach for New Managers &amp; Shift Leads" />
     <meta property="og:description" content="Get the exact words for a hard conversation, rehearse it before it happens, and document it after — built by an operator, not a corporate HR vendor." />
     <meta property="og:image" content="https://frontline-coach.com/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Frontline Coach — AI leadership coaching for shift leads and new managers" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Frontline Coach — AI Leadership Coaching for Shift Leads & New Managers" />
+    <meta name="twitter:title" content="Frontline Coach by Own The Shift | AI Coach for New Managers &amp; Shift Leads" />
     <meta name="twitter:description" content="Get the exact words for a hard conversation, rehearse it before it happens, and document it after — built by an operator, not a corporate HR vendor." />
     <meta name="twitter:image" content="https://frontline-coach.com/og-image.png" />
 
@@ -35,9 +45,132 @@
          and a correctly sized window. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Frontline Coach" />
+
+    <!-- Structured data. Two graph nodes: the product, and the company behind it.
+         "disambiguatingDescription" exists specifically to separate this from the
+         similarly named sales-enablement product at frontline.coach. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://frontline-coach.com/#app",
+          "name": "Frontline Coach by Own The Shift",
+          "alternateName": "Frontline Coach",
+          "url": "https://frontline-coach.com/",
+          "applicationCategory": "BusinessApplication",
+          "applicationSubCategory": "Leadership and Management Coaching",
+          "operatingSystem": "Web browser, iOS and Android (installable PWA)",
+          "description": "An AI leadership-coaching app for newly promoted managers and shift leads. Describe a people problem on your shift and get a plan you can run today, get the exact words when an employee pushes back, rehearse a hard conversation against an AI employee, diagnose whether a performance issue is skill or will, and turn rough notes into a clean factual record.",
+          "disambiguatingDescription": "Frontline Coach by Own The Shift coaches frontline supervisors and shift leads in hourly-workforce operations through employee conversations, performance issues, and documentation. It is a separate and unrelated product from the sales and customer-experience roleplay platform at frontline.coach.",
+          "featureList": [
+            "AI Coach — describe a people problem on your shift and get a plan you can run today",
+            "Pushback Coach — the exact words to use when an employee pushes back, in the moment",
+            "Practice — rehearse a hard conversation against an AI employee before the real one",
+            "Conversation Builder — walk into any conversation with a plan instead of winging it",
+            "Skill vs. Will Diagnostic — determine whether it is a skill problem, a will problem, or yours",
+            "Documentation Assistant — turn rough notes into a clean, factual record"
+          ],
+          "audience": {
+            "@type": "Audience",
+            "audienceType": "Newly promoted managers, first-time supervisors, shift leads, team leads, crew chiefs, and assistant managers in hourly and frontline operations"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "description": "Free account with a daily AI usage allowance."
+          },
+          "publisher": { "@id": "https://otsowntheshift.com/#org" },
+          "isAccessibleForFree": true
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://otsowntheshift.com/#org",
+          "name": "Own The Shift",
+          "legalName": "OTS Media LLC",
+          "url": "https://otsowntheshift.com/",
+          "description": "Own The Shift builds leadership tools and writing for frontline supervisors and the operators who develop them. Veteran-owned and operated.",
+          "sameAs": ["https://frontline-coach.com/"]
+        }
+      ]
+    }
+    </script>
+
+    <!-- Critical CSS for the prerendered landing copy below. Scoped to #prerender
+         so it cannot leak into the React app's Tailwind styles. -->
+    <style>
+      /* index.css sets body{overflow:hidden} and #root{height:100dvh}, so this
+         block needs to own its own scroll or it gets clipped in the moment
+         before React mounts and replaces it. */
+      #prerender { background:#0a0a0a; color:#e5e5e5; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; margin:0; padding:64px 24px 56px; height:100%; overflow-y:auto; box-sizing:border-box; }
+      #prerender .inner { max-width:640px; margin:0 auto; }
+      #prerender .brand { font-size:18px; font-weight:800; letter-spacing:-0.02em; text-align:center; margin-bottom:8px; }
+      #prerender .vet { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.18em; color:#a3a3a3; text-align:center; margin-bottom:40px; }
+      #prerender h1 { font-size:30px; line-height:1.2; font-weight:800; letter-spacing:-0.02em; text-align:center; margin:0 0 20px; }
+      #prerender h1 span { color:#E8923C; }
+      #prerender p { font-size:16px; line-height:1.65; color:#a3a3a3; text-align:center; max-width:34rem; margin:0 auto 32px; }
+      #prerender h2 { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:#f5f5f5; text-align:center; margin:44px 0 20px; }
+      #prerender ul { list-style:none; padding:0; margin:0 0 40px; }
+      #prerender li { border:1px solid #262626; background:#171717; border-radius:12px; padding:18px 20px; margin-bottom:12px; }
+      #prerender li b { display:block; font-size:14px; font-weight:600; color:#f5f5f5; margin-bottom:4px; }
+      #prerender li span { font-size:13px; line-height:1.5; color:#737373; }
+      #prerender .fine { font-size:11px; color:#6b6b6b; }
+      #prerender a { color:#E8923C; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The markup inside #root is a prerendered copy of the public landing page
+         in src/AuthGate.jsx. React replaces it the moment it mounts; its only job
+         is to put the real headline, positioning, and feature copy into the
+         initial HTML payload, so a crawler that does not execute JavaScript still
+         sees what the product is and who it is for. It is styled to match the
+         app's dark theme so there is no visible flash before hydration.
+
+         Keep this copy in sync with FEATURES and the landing markup in
+         src/AuthGate.jsx. If the two drift, this crawlable version is the one
+         that is wrong. -->
+    <div id="root">
+      <div id="prerender">
+        <div class="inner">
+          <div class="brand">Own The Shift — Frontline Coach</div>
+          <div class="vet">Veteran-Owned &amp; Operated</div>
+
+          <h1>Stop hoping your managers figure it out. <span>Give them a system.</span></h1>
+
+          <p>
+            Frontline Coach gives newly promoted managers and shift leads the exact words for a hard
+            conversation, a place to rehearse it first, and a clean record after — built by an
+            operator who runs shifts for a living, not a corporate HR vendor.
+          </p>
+
+          <p>
+            Most frontline managers get promoted and then left on their own — no coaching training,
+            no rehearsal, no plan for the conversation that's about to go sideways. Frontline Coach
+            is what closes that gap, one shift at a time.
+          </p>
+
+          <h2>What's inside</h2>
+          <ul>
+            <li><b>AI Coach</b><span>Describe a people problem on your shift. Get a plan you can run today.</span></li>
+            <li><b>Pushback Coach</b><span>Get the exact words when an employee pushes back, live.</span></li>
+            <li><b>Practice</b><span>Rehearse a hard conversation against an AI employee before the real one.</span></li>
+            <li><b>Conversation Builder</b><span>Walk into any conversation with a plan instead of winging it.</span></li>
+            <li><b>Skill vs. Will Diagnostic</b><span>Find out if it's a skill problem, a will problem — or yours.</span></li>
+            <li><b>Documentation Assistant</b><span>Turn rough notes into a clean, factual record.</span></li>
+          </ul>
+
+          <p class="fine">
+            Coaching guidance only — not legal or HR advice. Always follow your company's policies.
+            See our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.
+          </p>
+          <p class="fine">
+            Sign in or create a free account at frontline-coach.com to get started.
+          </p>
+        </div>
+      </div>
+    </div>
     <noscript>
       Own The Shift — Frontline Coach is an AI leadership-coaching app for newly promoted managers
       and shift leads. Get the exact words for a hard conversation, rehearse it before it happens,

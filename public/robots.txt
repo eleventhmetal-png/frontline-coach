@@ -1,0 +1,34 @@
+# Frontline Coach by Own The Shift — https://frontline-coach.com/
+# Crawling is welcome. The public landing page, Terms, and Privacy Policy are
+# all intended to be indexed. Build artifacts and the service worker are not.
+
+User-agent: *
+Allow: /
+Disallow: /assets/
+Disallow: /sw.js
+
+# OpenAI's search crawler — this is the one that feeds ChatGPT Search results.
+# Allowing it is required for normal inclusion; blocking it removes the site
+# from ChatGPT's search index entirely.
+User-agent: OAI-SearchBot
+Allow: /
+
+# OpenAI's model-training crawler. Separate from OAI-SearchBot: blocking GPTBot
+# does NOT affect ChatGPT Search visibility. Currently allowed — change to
+# "Disallow: /" if you'd rather the content not be used for model training.
+User-agent: GPTBot
+Allow: /
+
+# Anthropic's crawler (feeds Claude's web search).
+User-agent: ClaudeBot
+Allow: /
+
+# Perplexity.
+User-agent: PerplexityBot
+Allow: /
+
+# Bing, which also backs Copilot.
+User-agent: bingbot
+Allow: /
+
+Sitemap: https://frontline-coach.com/sitemap.xml

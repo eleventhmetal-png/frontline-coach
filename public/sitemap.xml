@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Frontline Coach by Own The Shift — sitemap.
+
+  Only pages that actually exist and return HTTP 200 are listed. Listing a URL
+  that 404s (or soft-404s back to the homepage) actively hurts crawl trust, so
+  add entries here ONLY as each real page ships. The five planned use-case pages
+  are deliberately absent until they exist.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://frontline-coach.com/</loc>
+    <lastmod>2026-07-27</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://frontline-coach.com/terms.html</loc>
+    <lastmod>2026-07-24</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://frontline-coach.com/privacy.html</loc>
+    <lastmod>2026-07-24</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>
