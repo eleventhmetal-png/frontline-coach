@@ -108,6 +108,25 @@ writes and never reads.** Only voice is blocked behind billing and November.
    `followUpQuestion` is a question to ask mid-conversation, not a dated action).
 2. **Team roster** — explicit list of your people. Free/Standard 3, Premium
    unlimited. Not a takeaway; no roster exists today.
+
+   **RECLASSIFIED 27 July — this is a correctness fix, not just a Premium feature.**
+   Employee records are keyed on `norm(name)` (lowercase-trimmed) in
+   `employeeMemory.js`, `followups.js` and 1:1 Prep. **Two employees with the same
+   first name share one history.** The failure isn't an empty result, it's a
+   confident prep describing a person who doesn't exist — blended from two people —
+   with no signal that anything went wrong. That's the single worst class of bug for
+   a tool whose pitch is that it remembers.
+
+   Mitigated, not fixed: the name fields now ask for first name + last initial, and
+   1:1 Prep shows a provenance line ("Building from 4 logged conversations, 12 Jun–21
+   Jul") with an **Ignore it** toggle that drops history and open items and flips the
+   tool into first-meeting mode. A merge is now visible before the call is spent
+   rather than silent. It still relies on the manager noticing.
+
+   Real fix is a roster with stable IDs and `sessions.employee_id`, plus a backfill
+   and a name-collision prompt at capture. Touches every tool that takes a name.
+   **Do this before any B2B motion** — a shared-name merge in a Documentation record
+   is a different order of problem from a bad coaching tip.
 3. ~~**1:1 Prep**~~ — **SHIPPED 27 July.** `prepSystem()` + `OneOnOnePrep` in
    App.jsx, `getOpenFollowUpsFor()` in followups.js. The compounding loop landed as
    the "Still open from last time" block with tick-to-complete rather than the

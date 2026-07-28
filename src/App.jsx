@@ -619,6 +619,14 @@ function Section({ label, children, accent }) {
   );
 }
 
+// "12 Jun" — no year, because every record in play is from the last few months and
+// the year is noise at a glance.
+function shortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 // 1:1 agenda blocks. The minutes are the point — a manager who can see that their
 // own agenda eats 18 of 25 minutes will cut something before they walk in, which is
 // the whole reason to write times down rather than a bare topic list.
@@ -1524,7 +1532,7 @@ function ConvoBuilder({ session } = {}) {
           ))}
         </div>
       </div>
-      <input value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => refreshPrior(e.target.value)} placeholder="Employee name (optional, lets it remember past talks)"
+      <input value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => refreshPrior(e.target.value)} placeholder="Employee name — first name + last initial (optional, lets it remember past talks)"
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-2" />
       {employees.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -1708,8 +1716,13 @@ function OneOnOnePrep({ session, go }) {
   const [sessionId, setSessionId] = useState(null);
   const [ticking, setTicking] = useState(null);
   const [hasHistory, setHasHistory] = useState(null); // null = not looked up yet
+  const [histMeta, setHistMeta] = useState(null);     // {count, from, to} for provenance
+  const [ignoreHistory, setIgnoreHistory] = useState(false);
   const uid = session?.user?.id;
-  const firstTime = name.trim() && hasHistory === false;
+  // Ignoring the history puts the tool in first-meeting mode on purpose: if the
+  // record belongs to a different Mary, the prep has nothing to go on and the
+  // form should be asking for real input rather than an optional note.
+  const firstTime = !!name.trim() && (hasHistory === false || ignoreHistory);
 
   useEffect(() => {
     let alive = true;
@@ -1726,10 +1739,22 @@ function OneOnOnePrep({ session, go }) {
   useEffect(() => {
     let alive = true;
     const n = name.trim();
-    if (!n) { setOpen([]); setHasHistory(null); return; }
+    setIgnoreHistory(false); // a new name is a new question about whose record this is
+    if (!n) { setOpen([]); setHasHistory(null); setHistMeta(null); return; }
     const t = setTimeout(() => {
       getOpenFollowUpsFor(uid, n).then((r) => { if (alive) setOpen(r); });
-      getEmployeeHistory(uid, n, 1).then((h) => { if (alive) setHasHistory(h.length > 0); });
+      getEmployeeHistory(uid, n, 6).then((h) => {
+        if (!alive) return;
+        setHasHistory(h.length > 0);
+        // Provenance for the card. Employee records are keyed on the NAME alone,
+        // so two people called Mary share one history and the prep would blend
+        // them into a confident description of a person who doesn't exist. Until
+        // there's a roster with real IDs, the mitigation is to show the manager
+        // what's being pulled BEFORE they spend a call, so a merge is visible
+        // instead of silent.
+        const dates = h.map((r) => r.created_at).filter(Boolean).sort();
+        setHistMeta(h.length ? { count: h.length, from: dates[0], to: dates[dates.length - 1] } : null);
+      });
     }, 400);
     return () => { alive = false; clearTimeout(t); };
   }, [uid, name]);
@@ -1743,9 +1768,11 @@ function OneOnOnePrep({ session, go }) {
   async function run() {
     if (!name.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null);
-    const hist = await getEmployeeHistory(uid, name, 6);
+    const hist = ignoreHistory ? [] : await getEmployeeHistory(uid, name, 6);
     const historyBlock = summarizeEmployeeHistory(hist);
-    const openBlock = open.map((o) => `- ${o.text} (from ${ageLabel(o.createdAt)})`).join("\n");
+    const openBlock = ignoreHistory
+      ? ""
+      : open.map((o) => `- ${o.text} (from ${ageLabel(o.createdAt)})`).join("\n");
     const user = `EMPLOYEE: ${name.trim()}\nANYTHING NEW SINCE LAST TIME: ${note.trim() || "nothing the manager flagged"}`;
     try {
       const r = await callClaudeStream(
@@ -1800,9 +1827,29 @@ function OneOnOnePrep({ session, go }) {
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Who are you meeting?"
+        placeholder="Who are you meeting? (first name + last initial)"
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-2"
       />
+
+      {/* Records are keyed on the name, so two people called Mary share one
+          history. Showing what's being pulled — and letting the manager drop it —
+          turns a silent wrong answer into a visible choice. */}
+      {histMeta && (
+        <div className="mb-2 flex items-start gap-2 text-[11px] text-neutral-500 leading-relaxed">
+          <span className="flex-1">
+            Building from {histMeta.count} logged {histMeta.count === 1 ? "conversation" : "conversations"}
+            {histMeta.from && ` (${shortDate(histMeta.from)}${histMeta.to !== histMeta.from ? `–${shortDate(histMeta.to)}` : ""})`}
+            . If that isn't the same person, use a fuller name.
+          </span>
+          <button
+            onClick={() => setIgnoreHistory((v) => !v)}
+            className="shrink-0 underline hover:text-neutral-300"
+            style={ignoreHistory ? { color: ACCENT } : undefined}
+          >
+            {ignoreHistory ? "Using none" : "Ignore it"}
+          </button>
+        </div>
+      )}
 
       {employees.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -1817,7 +1864,7 @@ function OneOnOnePrep({ session, go }) {
         </div>
       )}
 
-      {open.length > 0 && (
+      {open.length > 0 && !ignoreHistory && (
         <div className="mb-3 rounded-xl border p-3.5" style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.06)" }}>
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: ACCENT }}>
             Still open from last time
