@@ -236,6 +236,12 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
   .faq { margin-bottom:8px; }
   .faq h3 { margin-top:28px; margin-bottom:8px; font-size:16px; }
 
+  /* Sits BELOW the CTA on purpose. Above it, the most engaged reader on the page
+     gets offered another article right before being asked to try the product —
+     an exit ramp at the moment of highest intent. Convert first, then offer more
+     reading to the people who didn't. */
+  .related { margin-top:44px; padding-top:28px; border-top:1px solid #1f1f1f; }
+  .related h2 { margin-top:0; padding-top:0; border-top:none; }
   .related ul { list-style:none; padding:0; }
   .related li { margin-bottom:12px; }
   .related a { text-decoration:none; font-weight:600; }
@@ -274,7 +280,7 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
   <h1>${esc(p.h1)}</h1>
 
 ${p.blocks.map(renderBlock).join("\n")}
-${relatedBlock(p)}
+
   <div class="cta">
     <a class="btn" href="/">Try Frontline Coach</a>
     <p class="fine">
@@ -283,6 +289,7 @@ ${relatedBlock(p)}
       <a href="/privacy.html">Privacy Policy</a>.
     </p>
   </div>
+${relatedBlock(p)}
 </div>
 </body>
 </html>
