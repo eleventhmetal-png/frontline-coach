@@ -40,3 +40,54 @@ export function planFromSession(session) {
   const claimed = session?.user?.app_metadata?.plan;
   return claimed === "premium" ? "premium" : claimed === "paid" ? "paid" : "free";
 }
+
+// ── Usage summary: what you've DONE, not what you have left ─────────────────
+// The meter counts up rather than down, deliberately. A depleting allowance reads
+// as rationing — every action costs you something. An accumulating one reads as
+// evidence, and it's the exact input the paywall needs: Ben's July 25 spec says
+// fire the upgrade prompt right after a win ("you built 4 plans and ran 2 role
+// plays this week"), never a cold "trial expired." This is that number.
+//
+// Rolling 30 days rather than calendar month, so somebody opening the app on the
+// 2nd doesn't see a summary of nothing.
+
+// Tools grouped by what the manager would call the output, not by internal id.
+// pushback and skill_will are quick hits rather than artefacts, so they roll into
+// the total without getting their own headline.
+const BUCKET = {
+  coach: "plans",
+  convo: "plans",
+  practice: "roleplays",
+  document: "records",
+  pushback: "quick",
+  skill_will: "quick",
+};
+
+export async function getUsageSummary(userId, days = 30) {
+  if (!supabaseReady || !userId) return null;
+  try {
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("tool, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", since)
+      .limit(500);
+    if (error || !data) return null;
+
+    const counts = { plans: 0, roleplays: 0, records: 0, quick: 0 };
+    for (const row of data) {
+      const b = BUCKET[row.tool];
+      if (b) counts[b] += 1;
+    }
+    const total = data.length;
+    // First session in the window, so the card can say "since 28 June" rather
+    // than an abstract "last 30 days" for somebody who only just joined.
+    const firstAt = data.length
+      ? data.reduce((a, r) => (r.created_at < a ? r.created_at : a), data[0].created_at)
+      : null;
+    return { ...counts, total, firstAt, days };
+  } catch {
+    return null;
+  }
+}

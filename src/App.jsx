@@ -9,13 +9,11 @@ import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "
 import { getLatestMemory } from "./lib/memory";
 import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
-import { getPointsUsedToday, planFromSession } from "./lib/usage";
+import { getUsageSummary, planFromSession } from "./lib/usage";
 import {
   getOpenFollowUps, getOpenFollowUpCount, markFollowUpDone, ageLabel, isStale,
 } from "./lib/followups";
-import {
-  remainingPoints, pillValue, describeRemaining, secondsUntilReset, REFERENCE_COSTS,
-} from "./lib/credits";
+
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
 // The proxy requires a valid Supabase session, so every call carries the signed-in
@@ -2145,82 +2143,98 @@ function FollowUps({ session, go }) {
 }
 
 // =====================================================
-// CREDITS PILL — free-tier AI usage meter
+// USAGE PILL — what you've done, not what's left
 // =====================================================
-// Home header only, free plan only. Shows a 0–100 scale rather than raw points
-// so the number means the same thing on any plan. Tap to expand the real
-// figures, the "that's about X role plays" translation, and the reset timer.
+// Counts UP, deliberately. The first version of this counted down from 100 and
+// read as rationing: every action visibly cost you something. Under the current
+// model there's no permanent free allowance to ration anyway — beta is unlimited,
+// the trial is full access, and paid is fair-use — so a depleting meter had no
+// audience.
 //
-// Deliberately not a progress bar: a bar that empties reads as punishment. A
-// number that counts down reads as a budget, which is what it is.
-function CreditsPill({ session }) {
-  const [used, setUsed] = useState(null);
+// Accumulation has one. It's the same data with the opposite emotional register,
+// and it's exactly what the paywall needs: the July 25 spec says fire the upgrade
+// prompt right after a win ("you built 4 plans and ran 2 role plays this week"),
+// never a cold "trial expired." This is that number, visible all the time instead
+// of only at the moment you're asked for money.
+//
+// TRIAL HOOK: when the 7-day trial gate lands, pass `trialDaysLeft` and the pill
+// shows that instead of the total — days remaining is the more urgent number for
+// somebody mid-trial. The card keeps the breakdown either way.
+function UsagePill({ session, trialDaysLeft = null }) {
+  const [sum, setSum] = useState(null);
   const [open, setOpen] = useState(false);
   const plan = planFromSession(session);
   const uid = session?.user?.id;
 
-  // Initial read, then a live decrement whenever the proxy charges a call —
-  // the cost comes back on the response header, so the pill moves immediately
-  // instead of waiting for the next poll.
-  useEffect(() => {
-    let alive = true;
-    if (uid) getPointsUsedToday(uid).then((p) => { if (alive) setUsed(p); });
-    setCreditsListener((cost) => {
-      if (alive) setUsed((prev) => (prev == null ? prev : prev + cost));
-    });
-    return () => { alive = false; setCreditsListener(null); };
+  const load = React.useCallback(() => {
+    if (uid) getUsageSummary(uid).then(setSum);
   }, [uid]);
 
-  // Paid plans don't see a meter. Nor does anyone whose meter we couldn't read —
-  // showing a wrong number is worse than showing none.
-  if (plan !== "free" || used == null) return null;
+  // Refresh on mount, and again whenever the proxy charges a call so the number
+  // moves as soon as something completes rather than on next app open.
+  useEffect(() => {
+    let alive = true;
+    if (uid) getUsageSummary(uid).then((s) => { if (alive) setSum(s); });
+    setCreditsListener(() => { if (alive) load(); });
+    return () => { alive = false; setCreditsListener(null); };
+  }, [uid, load]);
 
-  const left = remainingPoints(used, plan);
-  const pct = pillValue(used, plan);
-  const empty = left <= 0;
-  const low = pct <= 20;
-  const resetHrs = Math.max(1, Math.round(secondsUntilReset() / 3600));
+  // Nothing to show before the first session — a pill reading "0" on day one is
+  // discouraging rather than informative.
+  if (!sum || sum.total === 0) return null;
+
+  const onTrial = typeof trialDaysLeft === "number";
+  const pillNum = onTrial ? trialDaysLeft : sum.total;
+  const urgent = onTrial && trialDaysLeft <= 2;
+
+  const since = sum.firstAt
+    ? new Date(sum.firstAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+
+  const lines = [
+    ["Conversation plans", sum.plans],
+    ["Role plays", sum.roleplays],
+    ["Records written", sum.records],
+    ["Quick answers", sum.quick],
+  ].filter(([, n]) => n > 0);
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label={`${left} AI credits left today`}
+        aria-label={onTrial ? `${trialDaysLeft} days left in trial` : `${sum.total} coaching sessions in the last 30 days`}
         className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors"
         style={{
-          borderColor: empty ? "#7f1d1d" : low ? `${ACCENT}80` : "#2a2a2a",
-          backgroundColor: empty ? "rgba(127,29,29,0.15)" : low ? "rgba(232,146,60,0.12)" : "#141414",
-          // The glow. Strongest when there's plenty, dimming as it drains, red
-          // when it's gone — so the pill reads at a glance without a label.
-          boxShadow: empty
+          borderColor: urgent ? "#7f1d1d" : "#2a2a2a",
+          backgroundColor: urgent ? "rgba(127,29,29,0.15)" : "#141414",
+          boxShadow: urgent
             ? "0 0 10px -2px rgba(127,29,29,0.7)"
-            : `0 0 ${low ? 8 : 14}px -3px ${ACCENT}${low ? "99" : "cc"}`,
+            : `0 0 14px -3px ${ACCENT}cc`,
         }}
       >
         <Sparkles
           size={13}
-          className={empty ? "" : "shrink-0"}
+          className="shrink-0"
           style={{
-            color: empty ? "#b45454" : ACCENT,
-            filter: empty ? "none" : `drop-shadow(0 0 4px ${ACCENT})`,
+            color: urgent ? "#b45454" : ACCENT,
+            filter: urgent ? "none" : `drop-shadow(0 0 4px ${ACCENT})`,
           }}
         />
         <span
           className="text-[11px] font-bold tabular-nums"
-          style={{ color: empty ? "#b45454" : low ? ACCENT : "#d4d4d4" }}
+          style={{ color: urgent ? "#b45454" : "#d4d4d4" }}
         >
-          {pct}
+          {pillNum}{onTrial ? "d" : ""}
         </span>
       </button>
 
       {open && (
         <>
-          {/* Click-away. Sits under the card, over everything else. */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5 shadow-2xl shadow-black/60">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
-                AI credits
+                Your work
               </span>
               <button onClick={() => setOpen(false)} className="text-neutral-600 hover:text-neutral-300">
                 <X size={14} />
@@ -2228,36 +2242,40 @@ function CreditsPill({ session }) {
             </div>
 
             <div className="flex items-baseline gap-1.5 mb-1">
-              <span className="text-2xl font-extrabold tabular-nums" style={{ color: empty ? "#b45454" : ACCENT }}>
-                {pct}
+              <span className="text-2xl font-extrabold tabular-nums" style={{ color: ACCENT }}>
+                {sum.total}
               </span>
-              <span className="text-xs text-neutral-500">/ 100 today</span>
+              <span className="text-xs text-neutral-500">
+                {sum.total === 1 ? "session" : "sessions"}{since ? ` since ${since}` : ""}
+              </span>
             </div>
 
-            <p className="text-[13px] text-neutral-300 leading-snug mb-2">
-              {describeRemaining(left)}
-            </p>
-            <p className="text-[11px] text-neutral-500 mb-3">
-              Resets to 100 in about {resetHrs}h.
-            </p>
-
-            <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-2.5 mb-3 space-y-1">
-              {[
-                ["Role play", REFERENCE_COSTS.roleplaySession],
-                ["Coach me through it", REFERENCE_COSTS.coach],
-                ["Prepare a conversation", REFERENCE_COSTS.convo],
-                ["Handle pushback", REFERENCE_COSTS.pushback],
-              ].map(([label, cost]) => (
+            <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-2.5 my-3 space-y-1">
+              {lines.map(([label, n]) => (
                 <div key={label} className="flex items-baseline justify-between gap-2">
                   <span className="text-[11px] text-neutral-500">{label}</span>
-                  <span className="text-[11px] text-neutral-400 tabular-nums shrink-0">{cost}</span>
+                  <span className="text-[11px] text-neutral-300 tabular-nums shrink-0 font-semibold">{n}</span>
                 </div>
               ))}
             </div>
 
-            <p className="text-[11px] text-neutral-500 leading-snug">
-              Role play runs on a heavier model, so it costs more. Everything else is cheap.
-            </p>
+            {onTrial ? (
+              <p className="text-[12px] text-neutral-300 leading-snug">
+                {trialDaysLeft === 0
+                  ? "Last day of your trial."
+                  : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left in your trial.`}{" "}
+                Everything above stays yours either way.
+              </p>
+            ) : plan === "free" ? (
+              <p className="text-[12px] text-neutral-500 leading-snug">
+                Free and unmetered while the beta runs. Nothing here counts against you.
+              </p>
+            ) : (
+              <p className="text-[12px] text-neutral-500 leading-snug">
+                No limits on your plan. Fair use applies to role play, which runs on a
+                heavier model.
+              </p>
+            )}
           </div>
         </>
       )}
@@ -2594,7 +2612,7 @@ export default function FrontlineCoach({ session, signOut } = {}) {
             </div>
           )}
           {tab === "home"
-            ? <CreditsPill session={session} />
+            ? <UsagePill session={session} />
             : <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>}
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
