@@ -12,6 +12,18 @@ import { supabase, supabaseReady } from "./supabaseClient";
 // not a permanent growing dossier. The employee name lives in the session input
 // the Conversation Builder already logs, so no schema change is needed.
 
+// Tools that capture an employee name in their input, and therefore contribute to
+// that person's history.
+//
+// 'prep' was missing until 28 July and the omission made 1:1 Prep write-only: it
+// logged a session nobody ever read, so prepping for Mary twice produced "first
+// time prepping for Mary" on the second run and she never appeared in the Recent
+// chips. The compounding loop — the entire reason the tool exists — was broken by
+// a filter in a different file.
+//
+// Anything added here must be handled in summarizeEmployeeHistory below.
+const NAMED_TOOLS = ["convo", "prep"];
+
 const norm = (s) => (s || "").trim().toLowerCase();
 
 const nameOf = (row) =>
@@ -26,7 +38,7 @@ export async function getCoachedEmployees(userId, limit = 8) {
       .from("sessions")
       .select("input, created_at")
       .eq("user_id", userId)
-      .eq("tool", "convo")
+      .in("tool", NAMED_TOOLS)
       .order("created_at", { ascending: false })
       .limit(60);
     if (error || !data) return [];
@@ -52,9 +64,9 @@ export async function getEmployeeHistory(userId, employeeName, max = 2) {
   try {
     const { data, error } = await supabase
       .from("sessions")
-      .select("input, output, created_at")
+      .select("tool, input, output, created_at")
       .eq("user_id", userId)
-      .eq("tool", "convo")
+      .in("tool", NAMED_TOOLS)
       .order("created_at", { ascending: false })
       .limit(40);
     if (error || !data) return [];
@@ -77,14 +89,26 @@ export function summarizeEmployeeHistory(sessions) {
       const when = s.created_at
         ? new Date(s.created_at).toLocaleDateString()
         : "a prior date";
-      const type = inp.type || "conversation";
-      const situation = (inp.situation || "").trim();
-      const agreed = (out.agreement || out.agreedAction || "").trim();
-      const followUp = (out.followUpPlan || "").trim();
+      // A 1:1 and a planned conversation are different events and the model has to
+      // be able to tell them apart — "we had a one-on-one" reads very differently
+      // from "I corrected you." Their fields don't line up either, so each shape is
+      // read on its own terms rather than through one generic mapping.
+      const isPrep = s.tool === "prep";
+      const type = isPrep ? "1:1" : inp.type || "conversation";
+      const situation = (isPrep ? inp.note : inp.situation || "").trim();
+      const agreed = (isPrep ? out.landOn : out.agreement || out.agreedAction || "").trim();
+      const followUp = (isPrep ? out.afterwards : out.followUpPlan || "").trim();
+      // Most of these fields already end in a period, so appending one produced
+      // "Friday.." throughout the history block. Cosmetic in isolation, but this
+      // string is prompt input — sloppy punctuation is what the model imitates.
+      const end = (t) => t.replace(/\s*\.*\s*$/, "") + ".";
       let line = `- ${when} (${type})`;
-      if (situation) line += `: ${situation}`;
-      if (agreed) line += ` Agreed: ${agreed}.`;
-      if (followUp) line += ` Follow-up plan was: ${followUp}.`;
+      if (situation) line += `: ${end(situation)}`;
+      if (agreed) line += ` Agreed: ${end(agreed)}`;
+      if (followUp) line += isPrep ? ` Next step: ${end(followUp)}` : ` Follow-up plan was: ${end(followUp)}`;
+      // The read carries forward — it's the one field that lets a later prep say
+      // "you've thought this about them twice now."
+      if (isPrep && out.readOnThem) line += ` Your read then: ${out.readOnThem}`;
       return line;
     })
     .join("\n");

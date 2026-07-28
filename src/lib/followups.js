@@ -22,6 +22,11 @@ const COMMITMENT_FIELD = {
   convo: "followUpPlan",
   document: "followUpDate",
   skill_will: "followUpInterval",
+  // 1:1 Prep's "landOn" is the commitment the manager went in to get. Without this
+  // line a prep could tell you to land a commitment and then never ask whether you
+  // did — and the next prep would surface nothing as open, which is the exact
+  // failure the follow-through tracker exists to prevent.
+  prep: "landOn",
 };
 
 const TOOL_LABEL = {
@@ -29,6 +34,7 @@ const TOOL_LABEL = {
   convo: "Conversation Builder",
   document: "Documentation",
   skill_will: "Skill vs. Will",
+  prep: "1:1",
 };
 
 // Employee name, where the tool captured one. Only Conversation Builder asks for
