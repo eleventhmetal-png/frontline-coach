@@ -1221,7 +1221,7 @@ export const PAGES = [
     related: ["new-manager-coach", "manager-roleplay", "operator"],
     title: "Pricing — Frontline Coach by Own The Shift",
     description:
-      "Free to start, no card needed. Standard is $14.99 a month or $119 a year for unlimited coaching. Built for frontline supervisors and priced for them.",
+      "Free for everyone during the beta. After that, seven days free with no card, then $14.99 a month or $119 a year. Priced for frontline supervisors.",
     h1: "Pricing",
     schema: [
       {
@@ -1242,44 +1242,38 @@ export const PAGES = [
       },
     ],
     blocks: [
+      { em: "Free for everyone during the beta. No card, no limits, no countdown." },
       {
-        p: "Start free, no card. Most people never need to pay — if you have one hard conversation a week, the free tier covers it.",
+        p: "The beta runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you.",
       },
 
-      { h2: "What you get" },
+      { h2: "After the beta" },
       {
-        // Premium is deliberately absent until its features exist. A tier you can
-        // read about but not buy invites "when?" with no good answer, and it gives
-        // somebody a reason to wait instead of taking Standard today.
-        table: {
-          head: ["", "Free", "Standard"],
-          highlight: 2,
-          rows: [
-            ["Monthly", "$0", "$14.99"],
-            ["Yearly", "—", "$119"],
-            ["Coaching sessions a day", "About 3", "Unlimited"],
-            ["Rehearse against an AI employee", "2 a day", "Unlimited"],
-            ["Get the words while they're in front of you", "yes", "yes"],
-            ["Plan a conversation start to finish", "yes", "yes"],
-            ["Turn rough notes into a factual record", "yes", "yes"],
-            ["Remembers who you've coached", "yes", "yes"],
-            ["Speaks your industry's language", "yes", "yes"],
-          ],
-        },
+        p: "Seven days free, then $14.99 a month or $119 a year. Still no card up front — you sign up, you use it for a week, and you decide at the end. If it hasn't earned it by then, walk away and nothing happens.",
       },
       {
-        p: "Every tool is in the free tier. What you're buying is volume — no daily ceiling, and role play whenever you need it rather than twice.",
+        p: "Seven days rather than thirty because of how this actually gets used. Nobody opens a coaching app daily; you open it when something happens on a shift, which is two or three times a week. A week is long enough to hit two or three real situations and see whether the app helped. A month is long enough to forget you signed up.",
       },
 
-      { h2: "Why the free tier is actually usable" },
+      { h2: "What's included" },
       {
-        p: "A lot of free tiers exist to be frustrating. This one doesn't, and there's a self-interested reason: most of the people who find this app arrive from a search at 6am on a Saturday with a real problem. If the thing that helps them is behind a paywall, they leave and don't come back.",
+        p: "Everything. There's no cut-down version — the paid plan is the whole product, because a coaching tool that withholds the tool you need at 6am on a Saturday isn't worth paying for either.",
       },
       {
-        p: "So free gets a daily allowance of AI credits — enough for two full role plays, or three coaching plans plus a handful of quick pushback answers. Credits reset at 5am, before your shift starts rather than in the middle of it. There's a meter in the app so you always know where you stand.",
+        ul: [
+          "Describe a people problem on your shift and get a plan you can run today",
+          "The exact words when somebody pushes back while you're standing there",
+          "Rehearse a hard conversation against an AI employee who argues back",
+          "Plan a conversation start to finish, with the opening line written out",
+          "Work out whether it's a skill problem, a will problem, or yours",
+          "Turn rough notes into a clean, factual record",
+          "Remembers who you've coached and what you covered, so follow-ups build on the last talk",
+          "Tracks what you said you'd check, so nothing gets quietly dropped",
+          "Speaks your industry's language — restaurant, retail, warehouse, hospitality, healthcare, field service, car wash, or any frontline team",
+        ],
       },
       {
-        p: "Role play costs more credits than everything else because it runs on a heavier model that stays in character and pushes back properly. That's a real cost difference, not a pricing trick.",
+        p: "Fair use applies rather than a hard ceiling: role play runs on a heavier model that stays in character properly, so it costs real money to serve. Use it like a supervisor and you'll never notice a limit.",
       },
 
       { h2: "Founding members" },
@@ -1297,13 +1291,13 @@ export const PAGES = [
       {
         faq: {
           q: "Do I need a credit card to start?",
-          a: "No. The free tier needs an email address or a Google account and nothing else. There's no trial clock counting down and no card on file to forget about.",
+          a: "No. Signing up takes an email address or a Google account and nothing else. That's true during the beta and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end.",
         },
       },
       {
         faq: {
-          q: "What happens when I run out of credits?",
-          a: "The tools stop until the next reset at 5am. Nothing is deleted, nothing is locked, and your saved conversations and history stay exactly where they were. The meter in the app shows what's left before you hit it.",
+          q: "What happens at the end of the seven days?",
+          a: "The tools stop and you're asked whether you want to continue. Nothing is deleted — your conversations, your history and everything the app remembers about your people stay exactly where they are. Subscribe later and it's all still there.",
         },
       },
       {
@@ -1326,8 +1320,14 @@ export const PAGES = [
       },
       {
         faq: {
-          q: "What does a role play actually cost me in credits?",
-          a: "A full session — around ten exchanges plus the debrief — is roughly a third of a free day's credits. A coaching plan is about a tenth. Handling pushback or cleaning up documentation is a fiftieth, so those are effectively unlimited even on free.",
+          q: "Why only seven days?",
+          a: "Because a coaching app isn't used daily — you open it when something happens on a shift, two or three times a week. Seven days is long enough to hit two or three real situations and find out whether it helped. Thirty days is long enough to sign up, forget, and get charged for something you never opened.",
+        },
+      },
+      {
+        faq: {
+          q: "Is it really free during the beta?",
+          a: "Yes, and with no limits. Beta testers get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating.",
         },
       },
     ],

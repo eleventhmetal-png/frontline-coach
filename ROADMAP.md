@@ -58,9 +58,27 @@ outcome-phrased labels, `table` block type added to the generator.
 its features exist. A tier you can read about but not buy invites "when?" with no
 good answer, and gives somebody a reason to wait instead of taking Standard today.
 
-Prices settled: Free $0 · **Founding $7.99/mo** grandfathered for the beta cohort ·
-**Standard $14.99/mo or $119/yr** · **Premium $24.99/mo** when it opens. Premium
-annual not yet set — decide against real voice usage rather than by analogy.
+**MODEL CHANGED 27 July — no permanent free tier.** Completely free for everyone
+during beta (to 15 Nov), then a **7-day free trial**, then $14.99/mo or $119/yr.
+Founding $7.99/mo grandfathered for the beta cohort. Premium $24.99 when it opens.
+
+Why: frontline managers use this episodically, 2–3x/week. A free tier at 100
+points/day handed a ten-session-a-month user a ninety-session allowance — they'd
+never hit the ceiling, never feel constrained, never pay. Daily limits don't bite on
+episodic users.
+
+**Stripe "Trials" stays empty.** The 7 days is gated in-app; Stripe is touched only
+at purchase. A card wall at signup would kill cold search traffic, which is the
+whole point of the eight content pages.
+
+### Open consequence — the credits pill has no audience
+
+It was built to show a free tier's daily allowance. Under the new model beta users
+are unlimited, trial users get full access, and paid users get fair-use — nobody
+should see a 0–100 daily meter. Either hide it or repurpose the same header slot to
+show **trial days remaining**, which is the more useful number now. The metering
+*recording* stays valuable either way; it's still gathering real cost data. Decide
+before the trial ships.
 
 ---
 
