@@ -1257,7 +1257,7 @@ export const PAGES = [
 
       { h2: "What's included" },
       {
-        p: "Everything. There's no cut-down version — the paid plan is the whole product, because a coaching tool that withholds the tool you need at 6am on a Saturday isn't worth paying for either.",
+        p: "Every tool for handling the conversation in front of you. Nothing about the thing you actually came here for is held back or unlocked separately, because a coaching tool that withholds the tool you need at 6am on a Saturday isn't worth paying for.",
       },
       {
         ul: [
@@ -1268,9 +1268,11 @@ export const PAGES = [
           "Work out whether it's a skill problem, a will problem, or yours",
           "Turn rough notes into a clean, factual record",
           "Remembers who you've coached and what you covered, so follow-ups build on the last talk",
-          "Tracks what you said you'd check, so nothing gets quietly dropped",
           "Speaks your industry's language — restaurant, retail, warehouse, hospitality, healthcare, field service, car wash, or any frontline team",
         ],
+      },
+      {
+        p: "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens when the beta closes on 15 November. Both tools are live and free for every beta user until then. Saying so now rather than surprising anyone in November.",
       },
       {
         p: "Fair use applies rather than a hard ceiling: role play runs on a heavier model that stays in character properly, so it costs real money to serve. Use it like a supervisor and you'll never notice a limit.",

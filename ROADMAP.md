@@ -103,24 +103,52 @@ writes and never reads.** Only voice is blocked behind billing and November.
 
 **Build order:**
 
-1. **Follow-through tracker** — every tool already writes a `followUp` / `nextSteps`
-   field with a date and nothing surfaces them. Cheapest to build, highest retention
-   value, and it's the feature that makes a supervisor look competent to their own
-   boss.
+1. ~~**Follow-through tracker**~~ — **SHIPPED 27 July.** `followups_done` table,
+   `src/lib/followups.js`, `FollowUps` view. Pushback deliberately excluded (its
+   `followUpQuestion` is a question to ask mid-conversation, not a dated action).
 2. **Team roster** — explicit list of your people. Free/Standard 3, Premium
    unlimited. Not a takeaway; no roster exists today.
-3. **1:1 Prep** — the headline. One tap on a name produces a prep card from every
-   logged conversation about them. Every input already exists:
-   `getEmployeeHistory()`, the stored `agreement` and `followUpPlan` fields,
-   `getLatestMemory()`, session dates. The compounding mechanic is the opening
-   block — *"On 12 July you agreed X. Has that held? [Yes / Partly / No]"* — one tap
-   that feeds the next card.
+3. ~~**1:1 Prep**~~ — **SHIPPED 27 July.** `prepSystem()` + `OneOnOnePrep` in
+   App.jsx, `getOpenFollowUpsFor()` in followups.js. The compounding loop landed as
+   the "Still open from last time" block with tick-to-complete rather than the
+   spec'd Yes/Partly/No. Required a migration: `sessions.tool` had a CHECK
+   constraint and `prep` wasn't in it, so every log would have failed silently.
 4. **Deeper history** — `getEmployeeHistory()` returns 2 for everyone today; Premium
    gets 6. One-line default change.
 5. **Voice** — 120 min/mo, gated behind billing. The expensive one.
 
-**Worth deciding:** whether Premium opens on 1–4 at a lower price with voice raising
-it later, rather than holding the whole tier hostage to the hardest feature.
+> **DECIDED 27 July — 1:1 Prep and Follow-through are PREMIUM after the beta.**
+> Ben's call, and it's the right one. Both are "run a team over time" features,
+> which is the exact sentence that defines the Premium split — they were specced
+> into Premium and belong there. Claude initially argued against on takeaway-risk
+> grounds and was wrong: *everything* is free during beta, so prep is no more of a
+> takeaway than anything else, and Premium without them is voice plus two small
+> items, which is not a tier anyone buys.
+>
+> **They stay fully open through the beta** — beta users are the test, and a
+> throttled test is a worse test.
+>
+> **Implemented as label-now, enforce-later**, the same pattern as
+> `METERING_ENFORCE`. `PREMIUM_AFTER_BETA` in App.jsx is the single source of truth
+> (`prep`, `followups`); it drives a `PremiumBadge` on the Tools list plus a line
+> saying they're free until 15 November. Nothing is gated today. The four months of
+> notice cost nothing and turn a November takeaway into a preview that ended.
+
+**Still worth deciding:** whether Premium opens on prep + follow-through + roster +
+deeper history at a lower price, with voice raising it later — rather than holding
+the whole tier hostage to the hardest feature. With today's two features in it,
+Premium is now substantial enough to ship without voice.
+
+### Known limitation of 1:1 Prep — history is thinner than it looks
+
+`getEmployeeHistory()` only reads sessions where `tool = 'convo'`, because
+Conversation Builder is the only tool that captures an employee name. Coach,
+Documentation and Skill-vs-Will sessions about the same person are invisible to
+prep. So the no-history path is the COMMON path, not the edge case — handled with a
+distinct first-meeting prompt branch and a form that asks for real input rather than
+an optional note. Widening this means capturing a name in the other tools, which is
+a bigger change than it sounds: it adds a field to three forms that currently open
+straight into a text box.
 
 **Hard rule:** Premium may only contain NEW capability. Nothing in Free or Standard
 moves up. Per-employee memory is already live for everyone and the pricing page
@@ -196,6 +224,12 @@ employer-bought B2B motion — it's the first question a buyer's legal team asks
 
 ## 6. Dated — 15 November 2026, beta closes
 
+- **Gate the Premium tools.** `PREMIUM_AFTER_BETA` in App.jsx already names them
+  (`prep`, `followups`) and badges them; nothing enforces it. Enforcement needs a
+  plan check in `netlify/functions/claude.mjs` for `tool: "prep"` — client-side
+  hiding alone is a suggestion, same reasoning as the trial gate. Follow-through
+  reads Supabase directly rather than the proxy, so it needs either an RLS-level
+  check or acceptance that it's UI-gated only.
 - Flip `METERING_ENFORCE=true` in Netlify env. Recording has run since 27 July; two
   months of real per-user cost data should replace the estimates in `credits.js`
   before enforcement starts.

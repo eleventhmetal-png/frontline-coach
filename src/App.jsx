@@ -1573,7 +1573,12 @@ function ConvoBuilder({ session } = {}) {
 // time you use it.
 const prepSystem = (ind, gen, history, openItems) => `${voiceFor(ind)}
 ${REGISTER}${generationLayer(gen)}
-${history ? `\nPRIOR CONVERSATIONS WITH THIS EMPLOYEE (most recent first). This is the entire factual record you have — do NOT invent anything that isn't here:\n${history}\n` : "\nNO PRIOR CONVERSATIONS ON FILE for this employee. Say so plainly in sinceLastTime rather than pretending there's history. Build the prep from what the manager tells you about today.\n"}
+${history ? `\nPRIOR CONVERSATIONS WITH THIS EMPLOYEE (most recent first). This is the entire factual record you have — do NOT invent anything that isn't here:\n${history}\n` : `\nNO PRIOR CONVERSATIONS ON FILE for this employee. This is the manager's first logged one-on-one with them, so everything you have is what the manager typed below.
+Handle it like a first meeting, not a thin version of a normal prep:
+- Set "sinceLastTime" to "" (empty string). Do NOT write "no history available" — the manager knows, and a card that opens by announcing what it doesn't know reads as useless.
+- "whereTheyStand" is a read of what the manager described, stated as their account rather than as fact. Hedge honestly: "going off what you've said" beats a confident verdict on somebody you've never seen.
+- Weight "coverThese" toward finding things out. The most valuable first one-on-one is one where the manager talks less than half the time.
+- "landOn" should set up the NEXT conversation — a specific thing to revisit — because that's what turns this into a record worth keeping.\n`}
 ${openItems ? `\nCOMMITMENTS FROM LAST TIME THAT ARE STILL OPEN:\n${openItems}\n` : ""}
 A manager has a one-on-one with this person shortly and wants to walk in prepared. Give them a prep card they can read in ninety seconds standing in a break room.
 Hard rules for this output:
@@ -1607,7 +1612,9 @@ function OneOnOnePrep({ session, go }) {
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
   const [ticking, setTicking] = useState(null);
+  const [hasHistory, setHasHistory] = useState(null); // null = not looked up yet
   const uid = session?.user?.id;
+  const firstTime = name.trim() && hasHistory === false;
 
   useEffect(() => {
     let alive = true;
@@ -1615,13 +1622,21 @@ function OneOnOnePrep({ session, go }) {
     return () => { alive = false; };
   }, [uid]);
 
-  // Open commitments for whoever's selected, shown before generating so the
-  // manager can see what's outstanding without spending a call.
+  // Open commitments and whether there's any history at all, both fetched when a
+  // name is picked. `hasHistory` drives the input copy: with nothing on file the
+  // model has only what the manager types, so the form has to ask for substance
+  // instead of an optional afterthought.
+  // Debounced: both lookups hit Supabase, and firing them per keystroke means
+  // ~14 round trips to type "Marcus Delgado" for one useful answer.
   useEffect(() => {
     let alive = true;
-    if (name.trim()) getOpenFollowUpsFor(uid, name).then((r) => { if (alive) setOpen(r); });
-    else setOpen([]);
-    return () => { alive = false; };
+    const n = name.trim();
+    if (!n) { setOpen([]); setHasHistory(null); return; }
+    const t = setTimeout(() => {
+      getOpenFollowUpsFor(uid, n).then((r) => { if (alive) setOpen(r); });
+      getEmployeeHistory(uid, n, 1).then((h) => { if (alive) setHasHistory(h.length > 0); });
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
   }, [uid, name]);
 
   async function tick(id) {
@@ -1712,16 +1727,38 @@ function OneOnOnePrep({ session, go }) {
         </div>
       )}
 
+      {/* First prep for this person: there's no record to draw on, so what the
+          manager types IS the input. Asking for it as an optional afterthought
+          would produce a generic card and teach them the tool doesn't work. */}
+      {firstTime && (
+        <p className="text-[12px] text-neutral-400 leading-relaxed mb-2">
+          First time prepping for {name.trim()}. Nothing logged yet, so tell me what
+          you've got — how they're doing, what you want out of this one, anything
+          you've been putting off saying.
+        </p>
+      )}
+
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        rows={2}
-        placeholder="Anything new since last time? (optional)"
+        rows={firstTime ? 4 : 2}
+        placeholder={
+          firstTime
+            ? "How are they doing, and what do you want to get out of this one?"
+            : "Anything new since last time? (optional)"
+        }
         className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3"
       />
 
       <GenerationPicker value={generation} onChange={setGeneration} />
-      <SmartGenerateButton onClick={run} loading={loading} label="Prep me" disabled={!name.trim()} />
+      {/* With no history AND no note there is genuinely nothing to prep from —
+          better to block the button than spend a call on a horoscope. */}
+      <SmartGenerateButton
+        onClick={run}
+        loading={loading}
+        label="Prep me"
+        disabled={!name.trim() || (firstTime && note.trim().length < 10)}
+      />
       <ErrorNote msg={error} />
 
       {result && (
@@ -2150,6 +2187,17 @@ function Roleplay({ session } = {}) {
 // =====================================================
 // MORE — tools menu
 // =====================================================
+// Tools that become Premium when the beta closes on 15 Nov 2026. Flagged here and
+// nowhere else, so the badge and the eventual gate read the same list.
+//
+// LABEL NOW, ENFORCE LATER — the same pattern as METERING_ENFORCE. Both tools stay
+// fully open through the beta because beta users are the test. What the badge buys
+// is that nobody is surprised in November: a feature marked Premium from the day it
+// shipped is a preview that ended, while an unmarked one that vanishes is a
+// takeaway. Same event, different feeling, and the difference is four months of
+// notice that costs nothing to give.
+export const PREMIUM_AFTER_BETA = new Set(["prep", "followups"]);
+
 function MoreView({ go, session, signOut }) {
   const tools = [
     { id: "prep", label: "1:1 Prep", desc: "Ninety seconds before you walk in", icon: Clock },
@@ -2158,6 +2206,7 @@ function MoreView({ go, session, signOut }) {
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
     { id: "diagnose", label: "Skill vs. Will Diagnostic", desc: "Find the real root cause", icon: Target },
   ];
+  const anyPremium = tools.some((t) => PREMIUM_AFTER_BETA.has(t.id));
   return (
     <div>
       <ToolHeader title="Tools" sub="The rest of the kit." />
@@ -2166,14 +2215,23 @@ function MoreView({ go, session, signOut }) {
           <button key={t.id} onClick={() => go(t.id)}
             className="w-full flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-left hover:border-neutral-600 transition-colors">
             <t.icon size={22} style={{ color: ACCENT }} />
-            <div>
-              <div className="font-semibold text-neutral-100">{t.label}</div>
+            <div className="min-w-0">
+              <div className="font-semibold text-neutral-100 flex items-center gap-1.5 flex-wrap">
+                {t.label}
+                {PREMIUM_AFTER_BETA.has(t.id) && <PremiumBadge />}
+              </div>
               <div className="text-xs text-neutral-500">{t.desc}</div>
             </div>
-            <ArrowRight size={18} className="ml-auto text-neutral-600" />
+            <ArrowRight size={18} className="ml-auto shrink-0 text-neutral-600" />
           </button>
         ))}
       </div>
+      {anyPremium && (
+        <p className="text-[11px] text-neutral-500 mt-3 leading-relaxed">
+          Premium tools are free for everyone through the beta. Use them as much as you
+          like — that's what the beta is for. They move to the Premium plan on 15 November.
+        </p>
+      )}
       <div className="mt-6">
         <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Settings</div>
         <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
@@ -2607,6 +2665,19 @@ function ToolHeader({ title, sub }) {
       <h2 className="text-2xl font-extrabold uppercase tracking-tight text-neutral-50">{title}</h2>
       <p className="text-sm text-neutral-400 mt-1">{sub}</p>
     </div>
+  );
+}
+
+// Outline rather than a filled orange chip: this marks a tier, not a warning, and a
+// solid accent badge would pull the eye harder than the tool name it sits beside.
+function PremiumBadge() {
+  return (
+    <span
+      className="text-[9px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded border leading-none"
+      style={{ color: ACCENT, borderColor: "rgba(232,146,60,0.45)" }}
+    >
+      Premium
+    </span>
   );
 }
 // =====================================================
