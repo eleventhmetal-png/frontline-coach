@@ -9,7 +9,7 @@ import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "
 import { getLatestMemory } from "./lib/memory";
 import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
-import { getUsageSummary, planFromSession } from "./lib/usage";
+import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout } from "./lib/usage";
 import {
   getOpenFollowUps, getOpenFollowUpCount, markFollowUpDone, ageLabel, isStale,
 } from "./lib/followups";
@@ -38,7 +38,14 @@ function proxyError(status, body) {
   const e = new Error(`proxy ${status}`);
   e.status = status;
   e.code = body?.code || null;
-  if (status === 401) e.userMessage = "Your session expired. Sign in again to keep going.";
+  if (status === 402 && body?.code === "TRIAL_ENDED") {
+    // Handled by the paywall screen rather than an inline error — see
+    // TRIAL_ENDED handling in FrontlineCoach. The message is a fallback for any
+    // call path that doesn't route through it.
+    e.userMessage = "Your free trial has ended.";
+    e.trialEnded = true;
+  }
+  else if (status === 401) e.userMessage = "Your session expired. Sign in again to keep going.";
   else if (status === 429 && body?.code === "OUT_OF_CREDITS") {
     e.userMessage = "You're out of AI credits for today. They reset overnight.";
     e.outOfCredits = true;
@@ -60,6 +67,16 @@ export function setCreditsListener(fn) { onCreditsSpent = fn; }
 function noteSpend(res) {
   const n = Number(res.headers.get("X-Credits-Cost"));
   if (n > 0 && typeof onCreditsSpent === "function") onCreditsSpent(n);
+}
+
+// A trial expiry can surface from any of the six tools, and each one catches its
+// own errors locally. Rather than teach all of them about paywalls, the shell
+// registers here and swaps the whole screen — one place to handle it, and the
+// user gets a paywall instead of a red error box inside a tool they can't use.
+let onTrialEnded = null;
+export function setTrialEndedListener(fn) { onTrialEnded = fn; }
+function noteTrialEnd(e) {
+  if (e?.trialEnded && typeof onTrialEnded === "function") onTrialEnded();
 }
 function errMessage(e, fallback) {
   return e && e.userMessage ? e.userMessage : fallback;
@@ -87,7 +104,9 @@ async function rawClaude(messages, { model, system, max_tokens, temperature } = 
   });
   if (!res.ok) {
     if (res.status === 401) handleAuthFailure();
-    throw proxyError(res.status, await safeJson(res));
+    const e = proxyError(res.status, await safeJson(res));
+    noteTrialEnd(e);
+    throw e;
   }
   noteSpend(res);
   const data = await res.json();
@@ -181,7 +200,9 @@ async function streamClaude(messages, { model, system, max_tokens, temperature, 
   });
   if (!res.ok) {
     if (res.status === 401) handleAuthFailure();
-    throw proxyError(res.status, await safeJson(res));
+    const e = proxyError(res.status, await safeJson(res));
+    noteTrialEnd(e);
+    throw e;
   }
   noteSpend(res);
   if (!res.body) throw new Error("stream unavailable");
@@ -231,8 +252,10 @@ async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
     if (parsed) return scrubVoice(parsed);
     throw new Error("bad JSON");
   } catch (e) {
-    // Don't fire a second doomed request for auth/rate-limit — let it surface.
-    if (e && (e.status === 401 || e.status === 429)) throw e;
+    // Don't fire a second doomed request for auth, rate-limit, or an expired
+    // trial — a retry can't succeed and it just doubles the wait before the
+    // paywall appears.
+    if (e && (e.status === 401 || e.status === 402 || e.status === 429)) throw e;
     return await callClaude(system, user, opts);
   }
 }
@@ -2143,6 +2166,117 @@ function FollowUps({ session, go }) {
 }
 
 // =====================================================
+// PAYWALL — shown when the trial has run out
+// =====================================================
+// Deliberately leads with what they DID, not with what they've lost. The July 25
+// spec was explicit: fire the upgrade prompt right after a win, never a cold
+// "trial expired." By the time somebody sees this they've had seven days and run
+// real conversations — those numbers are the argument, so they go first and the
+// price goes last.
+//
+// No card was ever taken, so nothing has been charged and nothing auto-renews.
+// Saying so plainly matters: a supervisor paying out of their own pocket needs to
+// know the wall is a choice, not a bill that already landed.
+function Paywall({ session }) {
+  const [sum, setSum] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const uid = session?.user?.id;
+
+  useEffect(() => {
+    let alive = true;
+    if (uid) getUsageSummary(uid, 60).then((s) => { if (alive) setSum(s); });
+    return () => { alive = false; };
+  }, [uid]);
+
+  async function go(priceId) {
+    setBusy(true); setErr("");
+    const { error } = await startCheckout(priceId);
+    if (error) { setErr(error); setBusy(false); }
+    // On success the browser navigates to Stripe, so no need to clear busy.
+  }
+
+  const did = [
+    ["conversation plan", sum?.plans],
+    ["role play", sum?.roleplays],
+    ["record", sum?.records],
+  ].filter(([, n]) => n > 0);
+
+  return (
+    <div className="max-w-sm mx-auto py-6">
+      <div className="text-[11px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: ACCENT }}>
+        Your trial has ended
+      </div>
+
+      {did.length > 0 ? (
+        <>
+          <h2 className="text-2xl font-extrabold leading-tight text-neutral-50 mb-3">
+            You did the work.
+          </h2>
+          <p className="text-[15px] text-neutral-300 leading-relaxed mb-4">
+            In the last week you ran{" "}
+            {did.map(([label, n], i) => (
+              <span key={label}>
+                {i > 0 && i === did.length - 1 ? " and " : i > 0 ? ", " : ""}
+                <span className="font-bold" style={{ color: ACCENT }}>{n}</span> {label}
+                {n === 1 ? "" : "s"}
+              </span>
+            ))}
+            . That's {sum.total} conversation{sum.total === 1 ? "" : "s"} you walked into with a
+            plan instead of winging it.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2 className="text-2xl font-extrabold leading-tight text-neutral-50 mb-3">
+            Seven days are up.
+          </h2>
+          <p className="text-[15px] text-neutral-300 leading-relaxed mb-4">
+            You didn't get much of a run at it. If something got in the way, tell me and I'll
+            sort it out — otherwise the door's open whenever you need it.
+          </p>
+        </>
+      )}
+
+      <p className="text-[13px] text-neutral-500 leading-relaxed mb-5">
+        Nothing has been charged. You never gave us a card, so there's no renewal to cancel and
+        no bill coming. Everything you've written stays exactly where it is.
+      </p>
+
+      <button
+        onClick={() => go()}
+        disabled={busy}
+        className="w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        style={{ backgroundColor: ACCENT }}
+      >
+        {busy && <Loader2 size={16} className="animate-spin" />}
+        Keep going — $14.99/mo
+      </button>
+
+      <p className="text-[12px] text-neutral-500 text-center mt-3">
+        Or $119 a year. Cancel any time.
+      </p>
+
+      {err && <p className="text-[12px] text-red-400 text-center mt-3">{err}</p>}
+
+      <div className="mt-6 pt-5 border-t border-neutral-800">
+        <p className="text-[12px] text-neutral-500 leading-relaxed">
+          Not ready? Nothing disappears. Your conversations, your history and everything the
+          coach remembers about your people are still here whenever you come back.
+        </p>
+        <a
+          href="/pricing"
+          className="inline-block text-[12px] underline mt-2"
+          style={{ color: ACCENT }}
+        >
+          What's included
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
 // USAGE PILL — what you've done, not what's left
 // =====================================================
 // Counts UP, deliberately. The first version of this counted down from 100 and
@@ -2562,6 +2696,21 @@ class ErrorBoundary extends React.Component {
 }
 export default function FrontlineCoach({ session, signOut } = {}) {
   const [tab, setTab] = useState("home");
+  // Trial state. `expired` flips when any tool gets a 402 from the proxy, which
+  // is the authoritative answer — daysLeft is only for the countdown display and
+  // a stale client clock must never be what decides access.
+  const [trialDays, setTrialDays] = useState(null);
+  const [expired, setExpired] = useState(false);
+  const plan = planFromSession(session);
+
+  useEffect(() => {
+    let alive = true;
+    if (session?.user?.id && plan === "free") {
+      getTrialDaysLeft(session.user.id).then((d) => { if (alive) setTrialDays(d); });
+    }
+    setTrialEndedListener(() => { if (alive) setExpired(true); });
+    return () => { alive = false; setTrialEndedListener(null); };
+  }, [session?.user?.id, plan]);
   // Industry setting — persisted to localStorage until Phase 3 auth moves it to the profile.
   const [industry, setIndustryState] = useState(() => {
     try {
@@ -2612,11 +2761,12 @@ export default function FrontlineCoach({ session, signOut } = {}) {
             </div>
           )}
           {tab === "home"
-            ? <UsagePill session={session} />
+            ? <UsagePill session={session} trialDaysLeft={plan === "free" ? trialDays : null} />
             : <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>}
         </header>
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           <ErrorBoundary resetKey={tab}>
+          {expired ? <Paywall session={session} /> : <>
           {tab === "home" && <HomeView go={go} session={session} />}
           {tab === "coach" && <AICoach session={session} />}
           {tab === "pushback" && <PushbackCoach session={session} />}
@@ -2629,6 +2779,7 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           {tab === "convo" && <ConvoBuilder session={session} />}
           {tab === "followups" && <FollowUps session={session} go={go} />}
           {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
+          </>}
           </ErrorBoundary>
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">

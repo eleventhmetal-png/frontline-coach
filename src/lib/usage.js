@@ -41,6 +41,45 @@ export function planFromSession(session) {
   return claimed === "premium" ? "premium" : claimed === "paid" ? "paid" : "free";
 }
 
+// ── Trial ───────────────────────────────────────────────────────────────────
+// Whole days left before profiles.trial_ends_at. Display only — the real gate is
+// in netlify/functions/claude.mjs, because a client-side check is a suggestion
+// rather than a wall. Returns null when there's no trial set or we can't read it,
+// and the UI hides the countdown rather than guessing.
+export async function getTrialDaysLeft(userId) {
+  if (!supabaseReady || !userId) return null;
+  try {
+    const { data, error } = await supabase.rpc("trial_days_left");
+    if (error || data == null) return null;
+    return Number(data);
+  } catch {
+    return null;
+  }
+}
+
+// Kicks off Stripe Checkout. The function validates the price against its own
+// allowlist, so a tampered priceId is rejected server-side rather than trusted.
+export async function startCheckout(priceId) {
+  try {
+    const { data } = (await supabase?.auth?.getSession?.()) ?? { data: null };
+    const token = data?.session?.access_token;
+    const res = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(priceId ? { priceId } : {}),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.url) return { error: body?.error || "Couldn't start checkout." };
+    window.location.href = body.url;
+    return {};
+  } catch (e) {
+    return { error: "Couldn't reach checkout. Try again." };
+  }
+}
+
 // ── Usage summary: what you've DONE, not what you have left ─────────────────
 // The meter counts up rather than down, deliberately. A depleting allowance reads
 // as rationing — every action costs you something. An accumulating one reads as

@@ -79,6 +79,37 @@ export default async (req) => {
 
     if (serviceRoleKey) {
       admin = createClient(supabaseUrl, serviceRoleKey);
+
+      // --- Trial gate ---------------------------------------------------------
+      // Unpaid accounts get access until profiles.trial_ends_at. During the beta
+      // that's 15 Nov 2026 for everybody; afterwards it's signup + 7 days.
+      //
+      // Checked HERE rather than in the client because the client is the thing
+      // being gated. A React check is a suggestion; this is the wall.
+      //
+      // Nobody is charged when it expires — there's no card on file. The call is
+      // refused, the app shows a paywall, and the user chooses. That's the whole
+      // point of the no-card model.
+      if (plan === "free") {
+        const { data: prof, error: profErr } = await admin
+          .from("profiles")
+          .select("trial_ends_at")
+          .eq("id", userId)
+          .maybeSingle();
+
+        // Fail OPEN on a read error. A database hiccup must not lock a paying-
+        // adjacent user out of a coaching conversation they're mid-way through.
+        if (!profErr && prof?.trial_ends_at && new Date(prof.trial_ends_at) < new Date()) {
+          return json(
+            {
+              error: "Your free trial has ended.",
+              code: "TRIAL_ENDED",
+              trialEndedAt: prof.trial_ends_at,
+            },
+            402
+          );
+        }
+      }
       const { data: total, error: spendErr } = await admin.rpc("consume_credits", {
         p_user_id: userId,
         p_points: cost,
