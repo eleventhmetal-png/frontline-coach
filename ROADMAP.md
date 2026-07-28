@@ -71,14 +71,23 @@ episodic users.
 at purchase. A card wall at signup would kill cold search traffic, which is the
 whole point of the eight content pages.
 
-### Open consequence — the credits pill has no audience
+### ~~Trial gate~~ — SHIPPED 27 July
 
-It was built to show a free tier's daily allowance. Under the new model beta users
-are unlimited, trial users get full access, and paid users get fair-use — nobody
-should see a 0–100 daily meter. Either hide it or repurpose the same header slot to
-show **trial days remaining**, which is the more useful number now. The metering
-*recording* stays valuable either way; it's still gathering real cost data. Decide
-before the trial ships.
+`profiles.trial_ends_at`, a 402 `TRIAL_ENDED` refusal in the proxy, the paywall
+screen, and Stripe Checkout wiring. Existing accounts backfilled to 15 November, so
+nothing changes visibly until the beta ends. The usage pill now counts **up** rather
+than down and accepts `trialDaysLeft` for the countdown.
+
+**To verify the paywall renders** (nobody is near expiry, so it can't be seen
+otherwise):
+
+```sql
+update public.profiles set trial_ends_at = now() - interval '1 day'
+ where email = 'YOUR_TEST_EMAIL';
+-- run any tool, then put it back:
+update public.profiles set trial_ends_at = timestamptz '2026-11-15 05:00:00-06'
+ where email = 'YOUR_TEST_EMAIL';
+```
 
 ---
 

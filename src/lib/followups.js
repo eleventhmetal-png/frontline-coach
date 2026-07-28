@@ -97,6 +97,16 @@ export async function getOpenFollowUps(userId, limit = 25) {
   }
 }
 
+// Open commitments for one person. Powers the "since last time" block on the 1:1
+// prep card — the loop that makes prep compound instead of just summarising: the
+// card asks whether last time's commitment held, and ticking it feeds the next one.
+export async function getOpenFollowUpsFor(userId, employeeName) {
+  const name = (employeeName || "").trim().toLowerCase();
+  if (!name) return [];
+  const all = await getOpenFollowUps(userId, 99);
+  return all.filter((f) => (f.name || "").trim().toLowerCase() === name);
+}
+
 // Count only — for the badge on Home. Same logic, no payload shaping.
 export async function getOpenFollowUpCount(userId) {
   const list = await getOpenFollowUps(userId, 99);

@@ -96,6 +96,7 @@ export async function startCheckout(priceId) {
 const BUCKET = {
   coach: "plans",
   convo: "plans",
+  prep: "plans",
   practice: "roleplays",
   document: "records",
   pushback: "quick",

@@ -11,7 +11,8 @@ import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } fro
 import { supabase } from "./lib/supabaseClient";
 import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout } from "./lib/usage";
 import {
-  getOpenFollowUps, getOpenFollowUpCount, markFollowUpDone, ageLabel, isStale,
+  getOpenFollowUps, getOpenFollowUpCount, getOpenFollowUpsFor, markFollowUpDone,
+  ageLabel, isStale,
 } from "./lib/followups";
 
 // ---------- Claude API helpers ----------
@@ -1559,6 +1560,188 @@ function ConvoBuilder({ session } = {}) {
   );
 }
 // =====================================================
+// FEATURE 7 — 1:1 PREP
+// =====================================================
+// The only tool that gets better the longer you use the product. Everything it
+// needs was already being written and never read: prior Conversation Builder
+// sessions for this person, the agreements and follow-up plans stored in their
+// output, and the manager's own pattern from Practice reps.
+//
+// The compounding loop is the "since last time" block. It surfaces the open
+// commitments from the last talk with a Done button — ticking one feeds the next
+// card. Without that, this would be a summariser; with it, prep improves every
+// time you use it.
+const prepSystem = (ind, gen, history, openItems) => `${voiceFor(ind)}
+${REGISTER}${generationLayer(gen)}
+${history ? `\nPRIOR CONVERSATIONS WITH THIS EMPLOYEE (most recent first). This is the entire factual record you have — do NOT invent anything that isn't here:\n${history}\n` : "\nNO PRIOR CONVERSATIONS ON FILE for this employee. Say so plainly in sinceLastTime rather than pretending there's history. Build the prep from what the manager tells you about today.\n"}
+${openItems ? `\nCOMMITMENTS FROM LAST TIME THAT ARE STILL OPEN:\n${openItems}\n` : ""}
+A manager has a one-on-one with this person shortly and wants to walk in prepared. Give them a prep card they can read in ninety seconds standing in a break room.
+Hard rules for this output:
+- LEAD WITH THE UNFINISHED BUSINESS. If there's an open commitment from last time, that comes first and the manager checks whether it held before anything else. A follow-up that never gets followed up teaches the employee the standard is optional.
+- "coverThese" is 2-3 items, ordered by what matters most, not by what's easiest. Three is the maximum a person holds in their head walking into a room. If there are more, pick the three and drop the rest.
+- Do NOT make the whole conversation about the problem. If this person has been corrected twice already, the third talk needs something else in it or you're just grinding them down. Look for what they've actually done well and put it in.
+- "openWith" is the spoken first sentence, in their voice. Not a description of how to open.
+- "whereTheyStand" is an honest read of the pattern, including when the pattern is that the manager keeps having the same conversation without changing anything.
+- "dont" names the single trap specific to THIS person and THIS history, not general advice.
+- Never invent a date, a quote, or a prior conversation that isn't in the record above.
+Return ONLY valid JSON, no markdown. Keep every field tight — this is read standing up. Schema:
+{
+ "sinceLastTime": "what was agreed last time and what to verify, or a plain statement that there's no history yet",
+ "whereTheyStand": "honest read of the pattern across what you can see",
+ "coverThese": ["2-3 items, most important first"],
+ "openWith": "the exact first sentence, spoken",
+ "watchFor": "what to read in them during this conversation",
+ "landOn": "the specific commitment to get before you finish",
+ "dont": "the one trap specific to this person"
+}`;
+
+function OneOnOnePrep({ session, go }) {
+  const { industry } = useIndustry();
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
+  const [generation, setGeneration] = useState("");
+  const [employees, setEmployees] = useState([]);
+  const [open, setOpen] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(null);
+  const [ticking, setTicking] = useState(null);
+  const uid = session?.user?.id;
+
+  useEffect(() => {
+    let alive = true;
+    getCoachedEmployees(uid).then((l) => { if (alive) setEmployees(l); });
+    return () => { alive = false; };
+  }, [uid]);
+
+  // Open commitments for whoever's selected, shown before generating so the
+  // manager can see what's outstanding without spending a call.
+  useEffect(() => {
+    let alive = true;
+    if (name.trim()) getOpenFollowUpsFor(uid, name).then((r) => { if (alive) setOpen(r); });
+    else setOpen([]);
+    return () => { alive = false; };
+  }, [uid, name]);
+
+  async function tick(id) {
+    setTicking(id);
+    if (await markFollowUpDone(uid, id)) setOpen((c) => c.filter((x) => x.id !== id));
+    setTicking(null);
+  }
+
+  async function run() {
+    if (!name.trim()) return;
+    setLoading(true); setError(""); setResult(null); setSessionId(null);
+    const hist = await getEmployeeHistory(uid, name, 6);
+    const historyBlock = summarizeEmployeeHistory(hist);
+    const openBlock = open.map((o) => `- ${o.text} (from ${ageLabel(o.createdAt)})`).join("\n");
+    const user = `EMPLOYEE: ${name.trim()}\nANYTHING NEW SINCE LAST TIME: ${note.trim() || "nothing the manager flagged"}`;
+    try {
+      const r = await callClaudeStream(
+        prepSystem(industry, generation, historyBlock, openBlock),
+        user,
+        { onPartial: setResult, max_tokens: 1600 }
+      );
+      setResult(r);
+      setSessionId(await logSession({
+        userId: uid, tool: "prep",
+        input: { name: name.trim(), note, generation }, output: r, model: MODEL_SMART,
+      }));
+    } catch (e) {
+      setError(errMessage(e, "Couldn't build the prep. Try again."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const copyAll = () => result ? [
+    `1:1 PREP — ${name.trim()}`,
+    `SINCE LAST TIME\n${result.sinceLastTime}`,
+    `WHERE THEY STAND\n${result.whereTheyStand}`,
+    `COVER THESE\n- ${(result.coverThese || []).join("\n- ")}`,
+    `OPEN WITH\n${result.openWith}`,
+    `WATCH FOR\n${result.watchFor}`,
+    `LAND ON\n${result.landOn}`,
+    `DON'T\n${result.dont}`,
+  ].join("\n\n") : "";
+
+  return (
+    <div>
+      <ToolHeader title="1:1 Prep" sub="Ninety seconds before you walk in." />
+
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Who are you meeting?"
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 mb-2"
+      />
+
+      {employees.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-neutral-500 mr-0.5">Recent:</span>
+          {employees.map((e) => (
+            <button key={e} onClick={() => setName(e)}
+              className="text-xs rounded-full px-2.5 py-1 border text-neutral-300 hover:border-neutral-600 transition-colors"
+              style={name.trim().toLowerCase() === e.toLowerCase() ? { borderColor: ACCENT, color: ACCENT } : { borderColor: "#2a2a2a" }}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open.length > 0 && (
+        <div className="mb-3 rounded-xl border p-3.5" style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.06)" }}>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: ACCENT }}>
+            Still open from last time
+          </div>
+          {open.map((o) => (
+            <div key={o.id} className="flex items-start gap-2 mb-2 last:mb-0">
+              <button
+                onClick={() => tick(o.id)}
+                disabled={ticking === o.id}
+                className="mt-0.5 shrink-0 text-neutral-500 hover:text-neutral-100 disabled:opacity-40"
+                aria-label="Mark as done"
+              >
+                {ticking === o.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              </button>
+              <span className="text-[13px] text-neutral-300 leading-snug flex-1">{o.text}</span>
+            </div>
+          ))}
+          <p className="text-[11px] text-neutral-500 mt-2">Tick anything that's handled. The rest goes into the prep.</p>
+        </div>
+      )}
+
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={2}
+        placeholder="Anything new since last time? (optional)"
+        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none mb-3"
+      />
+
+      <GenerationPicker value={generation} onChange={setGeneration} />
+      <SmartGenerateButton onClick={run} loading={loading} label="Prep me" disabled={!name.trim()} />
+      <ErrorNote msg={error} />
+
+      {result && (
+        <ResultCard>
+          <div className="flex justify-end mb-1"><CopyBtn getText={copyAll} /></div>
+          {result.sinceLastTime && <Section label="Since last time" accent>{result.sinceLastTime}</Section>}
+          {result.whereTheyStand && <Section label="Where they stand">{result.whereTheyStand}</Section>}
+          {result.coverThese?.length > 0 && <Section label="Cover these" accent><BulletList items={result.coverThese} /></Section>}
+          {result.openWith && <Section label="Open with" accent><Quote>{result.openWith}</Quote></Section>}
+          {result.watchFor && <Section label="Watch for">{result.watchFor}</Section>}
+          {result.landOn && <Section label="Land on">{result.landOn}</Section>}
+          {result.dont && <Section label="Don't">{result.dont}</Section>}
+          {!loading && <FeedbackRow tool="1:1 Prep" inputSummary={name} userId={uid} sessionId={sessionId} />}
+        </ResultCard>
+      )}
+    </div>
+  );
+}
+
+// =====================================================
 // FEATURE 5 — SKILL VS WILL DIAGNOSTIC
 // =====================================================
 const DIAG_QUESTIONS = [
@@ -1969,6 +2152,7 @@ function Roleplay({ session } = {}) {
 // =====================================================
 function MoreView({ go, session, signOut }) {
   const tools = [
+    { id: "prep", label: "1:1 Prep", desc: "Ninety seconds before you walk in", icon: Clock },
     { id: "followups", label: "Follow-through", desc: "What you said you'd check", icon: Check },
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
@@ -2475,6 +2659,7 @@ function getTodayFocus() {
 const TOOL_LABELS = {
   coach: "Coach", pushback: "Pushback", practice: "Practice",
   convo: "Conversation Builder", skill_will: "Skill vs. Will", document: "Documentation",
+  prep: "1:1 Prep",
 };
 const FOCUS_BY_TOOL = {
   coach: [
@@ -2502,6 +2687,11 @@ const FOCUS_BY_TOOL = {
     "You diagnosed a root cause last time — check if you actually acted on it, or just noted it and moved on.",
     "Revisit your last Skill vs. Will diagnosis. If it landed on 'Leadership,' that's on you to fix, not them.",
     "Follow up on the accountability action from your last diagnostic. Diagnosis without action changes nothing.",
+  ],
+  prep: [
+    "You prepped a one-on-one — did you run it, and did you land the commitment you went in for?",
+    "Check the one-on-one you prepped for. A plan you didn't use is just a document.",
+    "Follow up on what you agreed in that one-on-one. The prep only counts if the commitment holds.",
   ],
   document: [
     "You documented something last time — make sure the follow-up date on that file actually happened.",
@@ -2778,13 +2968,14 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           {tab === "document" && <DocAssistant session={session} />}
           {tab === "convo" && <ConvoBuilder session={session} />}
           {tab === "followups" && <FollowUps session={session} go={go} />}
+          {tab === "prep" && <OneOnOnePrep session={session} go={go} />}
           {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
           </>}
           </ErrorBoundary>
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
-            const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo", "followups"].includes(tab));
+            const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo", "followups", "prep"].includes(tab));
             return (
               <button key={n.id} onClick={() => go(n.id)} className="flex flex-col items-center gap-1 py-2.5">
                 <n.icon size={20} style={{ color: active ? ACCENT : "#6b6b6b" }} />
