@@ -70,6 +70,38 @@ function renderBlock(b) {
       `    <blockquote>${esc(b.line.text)}</blockquote>\n` +
       `  </figure>`
     );
+  // Plan comparison. { table: { head: [...], rows: [[...], ...], highlight: n } }
+  // `highlight` marks one column (0-indexed within `head`) as the recommended plan.
+  // A cell of "yes" renders a tick, "no" renders a dash — everything else prints
+  // as written, so a row can say "120 min/mo" instead of being forced binary.
+  if (b.table) {
+    const { head, rows, highlight } = b.table;
+    const cell = (v) =>
+      v === "yes" ? '<span class="y">&#10003;</span>'
+      : v === "no" ? '<span class="n">&mdash;</span>'
+      : esc(v);
+    const th = head
+      .map((h, i) => `<th${i === highlight ? ' class="hi"' : ""}>${esc(h)}</th>`)
+      .join("");
+    const tr = rows
+      .map(
+        (r) =>
+          "        <tr>" +
+          r
+            .map((c, i) =>
+              i === 0
+                ? `<th scope="row">${esc(c)}</th>`
+                : `<td${i === highlight ? ' class="hi"' : ""}>${cell(c)}</td>`
+            )
+            .join("") +
+          "</tr>"
+      )
+      .join("\n");
+    return (
+      `  <div class="tablewrap">\n    <table>\n      <thead><tr>${th}</tr></thead>\n` +
+      `      <tbody>\n${tr}\n      </tbody>\n    </table>\n  </div>`
+    );
+  }
   // FAQ pair. Also harvested into FAQPage JSON-LD by page().
   if (b.faq)
     return (
@@ -235,6 +267,30 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
 
   .faq { margin-bottom:8px; }
   .faq h3 { margin-top:28px; margin-bottom:8px; font-size:16px; }
+
+  /* Comparison table. Scrolls sideways on a phone rather than crushing four
+     columns into 320px — a squashed table is unreadable, a scrolling one isn't. */
+  .tablewrap { overflow-x:auto; margin:0 0 28px; -webkit-overflow-scrolling:touch; }
+  table { border-collapse:collapse; width:100%; min-width:520px; font-size:14px; }
+  thead th {
+    text-align:center; font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.1em; color:#a3a3a3; padding:10px 12px;
+    border-bottom:1px solid #262626; white-space:nowrap;
+  }
+  thead th:first-child { text-align:left; }
+  tbody th {
+    text-align:left; font-weight:500; color:#d4d4d4; padding:11px 12px;
+    border-bottom:1px solid #1a1a1a; font-size:14px;
+  }
+  tbody td {
+    text-align:center; color:#b3b3b3; padding:11px 12px;
+    border-bottom:1px solid #1a1a1a; white-space:nowrap;
+  }
+  /* The recommended column, tinted top to bottom so the eye lands on it. */
+  th.hi, td.hi { background:rgba(232,146,60,0.07); }
+  thead th.hi { color:var(--accent); }
+  .y { color:var(--accent); font-weight:700; }
+  .n { color:#525252; }
 
   /* Sits BELOW the CTA on purpose. Above it, the most engaged reader on the page
      gets offered another article right before being asked to try the product —

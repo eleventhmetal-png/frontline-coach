@@ -28,7 +28,7 @@ export const PAGES = [
   {
     slug: "operator",
     navLabel: "Why I built Frontline Coach",
-    related: ["new-manager-coach", "difficult-employee-conversations"],
+    related: ["new-manager-coach", "difficult-employee-conversations", "pricing"],
     title: "Why I Built Frontline Coach — Ben Ryan, Own The Shift",
     // Keep descriptions between 120 and 158 characters. Bing's SEO checker
     // errors outside that range and Google truncates the overflow.
@@ -1014,7 +1014,7 @@ export const PAGES = [
   {
     slug: "manager-roleplay",
     navLabel: "Practise the conversation before you have it",
-    related: ["difficult-employee-conversations", "new-manager-coach", "employee-pushback"],
+    related: ["difficult-employee-conversations", "new-manager-coach", "pricing"],
     title: "AI Roleplay for Difficult Manager Conversations",
     description:
       "Rehearsing in your head doesn't work, because in your head they agree with you. Practise against an AI employee who pushes back before you do it live.",
@@ -1210,6 +1210,124 @@ export const PAGES = [
         faq: {
           q: "Can I practise out loud instead of typing?",
           a: "Not yet — sessions are text today. Voice is on the roadmap, and it matters more for this audience than most: a supervisor on a floor can usually talk when they can't easily type. It'll land as a paid feature, because voice costs meaningfully more per minute to run than text.",
+        },
+      },
+    ],
+  },
+
+  {
+    slug: "pricing",
+    navLabel: "Pricing",
+    related: ["new-manager-coach", "manager-roleplay", "operator"],
+    title: "Pricing — Frontline Coach by Own The Shift",
+    description:
+      "Free to start, no card needed. Standard is $14.99 a month or $119 a year for unlimited coaching. Built for frontline supervisors and priced for them.",
+    h1: "Pricing",
+    schema: [
+      {
+        "@type": "WebPage",
+        "@id": `${SITE}/pricing#page`,
+        url: `${SITE}/pricing`,
+        name: "Pricing — Frontline Coach by Own The Shift",
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+      },
+      {
+        "@type": "Organization",
+        "@id": ORG_ID,
+        name: "Own The Shift",
+        legalName: "OTS Media LLC",
+        url: "https://otsowntheshift.com/",
+      },
+    ],
+    blocks: [
+      {
+        p: "Start free, no card. Most people never need to pay — if you have one hard conversation a week, the free tier covers it.",
+      },
+
+      { h2: "What you get" },
+      {
+        // Premium is deliberately absent until its features exist. A tier you can
+        // read about but not buy invites "when?" with no good answer, and it gives
+        // somebody a reason to wait instead of taking Standard today.
+        table: {
+          head: ["", "Free", "Standard"],
+          highlight: 2,
+          rows: [
+            ["Monthly", "$0", "$14.99"],
+            ["Yearly", "—", "$119"],
+            ["Coaching sessions a day", "About 3", "Unlimited"],
+            ["Rehearse against an AI employee", "2 a day", "Unlimited"],
+            ["Get the words while they're in front of you", "yes", "yes"],
+            ["Plan a conversation start to finish", "yes", "yes"],
+            ["Turn rough notes into a factual record", "yes", "yes"],
+            ["Remembers who you've coached", "yes", "yes"],
+            ["Speaks your industry's language", "yes", "yes"],
+          ],
+        },
+      },
+      {
+        p: "Every tool is in the free tier. What you're buying is volume — no daily ceiling, and role play whenever you need it rather than twice.",
+      },
+
+      { h2: "Why the free tier is actually usable" },
+      {
+        p: "A lot of free tiers exist to be frustrating. This one doesn't, and there's a self-interested reason: most of the people who find this app arrive from a search at 6am on a Saturday with a real problem. If the thing that helps them is behind a paywall, they leave and don't come back.",
+      },
+      {
+        p: "So free gets a daily allowance of AI credits — enough for two full role plays, or three coaching plans plus a handful of quick pushback answers. Credits reset at 5am, before your shift starts rather than in the middle of it. There's a meter in the app so you always know where you stand.",
+      },
+      {
+        p: "Role play costs more credits than everything else because it runs on a heavier model that stays in character and pushes back properly. That's a real cost difference, not a pricing trick.",
+      },
+
+      { h2: "Founding members" },
+      {
+        p: "The first thirty people in the beta get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds.",
+      },
+      {
+        p: "Being straight about what that covers: Founding locks the Standard price. If we add a higher tier later it'll be separate, and this rate won't include it. Better you know that now than feel misled down the line.",
+      },
+      {
+        p: "Cancel and the rate goes with you — you'd rejoin at $14.99. That's the trade for a price nobody else gets.",
+      },
+
+      { h2: "Questions about paying" },
+      {
+        faq: {
+          q: "Do I need a credit card to start?",
+          a: "No. The free tier needs an email address or a Google account and nothing else. There's no trial clock counting down and no card on file to forget about.",
+        },
+      },
+      {
+        faq: {
+          q: "What happens when I run out of credits?",
+          a: "The tools stop until the next reset at 5am. Nothing is deleted, nothing is locked, and your saved conversations and history stay exactly where they were. The meter in the app shows what's left before you hit it.",
+        },
+      },
+      {
+        faq: {
+          q: "Is $14.99 per person or per location?",
+          a: "Per person. One supervisor, one account. There's no team plan yet — if you want to put a whole management group on it, get in touch and we'll work something out rather than making you buy seats one at a time.",
+        },
+      },
+      {
+        faq: {
+          q: "Will my company pay for this?",
+          a: "Some will, plenty won't, and it's built so you don't need permission. Everything you learn is yours and goes with you if you change jobs. If you do want your employer to cover it, the yearly plan at $119 is usually easier to get approved than a monthly subscription.",
+        },
+      },
+      {
+        faq: {
+          q: "Can I cancel?",
+          a: "Any time, and you keep access until the end of the period you paid for. No cancellation flow designed to wear you down. One thing to know: if you're on the founding rate, cancelling gives it up permanently.",
+        },
+      },
+      {
+        faq: {
+          q: "What does a role play actually cost me in credits?",
+          a: "A full session — around ten exchanges plus the debrief — is roughly a third of a free day's credits. A coaching plan is about a tenth. Handling pushback or cleaning up documentation is a fiftieth, so those are effectively unlimited even on free.",
         },
       },
     ],

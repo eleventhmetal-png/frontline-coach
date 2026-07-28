@@ -594,6 +594,14 @@ export default function AuthGate({ children }) {
           .
         </p>
 
+        <p className="text-sm text-neutral-400 text-center mb-14 max-w-md mx-auto leading-relaxed">
+          Free to start, no card.{" "}
+          <a href="/pricing" className="underline font-semibold" style={{ color: ACCENT }}>
+            See what's in each plan
+          </a>
+          .
+        </p>
+
         <p className="text-[11px] text-neutral-600 text-center mb-14 max-w-sm mx-auto">
           Coaching guidance only — not legal or HR advice. Always follow your company's policies.
           See our{" "}
