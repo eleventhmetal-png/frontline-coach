@@ -334,6 +334,17 @@ Hotel / hospitality. The team works front desk, housekeeping, and guest services
       pushbackContext: "What's the situation? (optional — e.g. asked her to finish her room turns before end of shift, third time this week)",
     },
   },
+  healthcare: {
+    label: "Healthcare",
+    world: `WORLD — this is the setting, never deviate:
+Healthcare — a clinic, hospital unit, or care facility. The team is CNAs, medical assistants, techs, LPNs and RNs, with charge nurses, clinical supervisors, unit managers and practice managers over them. The operation runs on patient satisfaction, wait times and throughput, staffing ratios, chart completion, protocol compliance, and safety. Busy means a full waiting room, every bed occupied, call lights stacking up, running short-staffed. Slow means a light census. Employees talk about patients, rooms, the floor, census, charting, rounding, hand-off and report, call lights, PPE, protocols, supplies, and covering a callout. Never cars, lanes, tickets, pallets, or covers. Any reference to work activity is clinical or care work.
+
+SCOPE LIMIT for this setting: you coach the manager on managing PEOPLE. You never give clinical guidance, patient-care direction, triage advice, or any opinion on a medical decision. If the manager's problem is really a clinical or patient-safety question, say so plainly and point them to their clinical leadership, not to a coaching plan. Where a performance issue touches patient safety, licensure, or a reportable event, treat it as one for their compliance or risk process first.`,
+    examples: {
+      coach: "e.g. My most experienced CNA has started snapping at the new hires and rolling her eyes in report. The rest of the floor is pulling back from her.",
+      pushbackContext: "What's the situation? (optional — e.g. asked him to finish his charting before the end of shift, third time this week)",
+    },
+  },
   fieldservice: {
     label: "Field Service",
     world: `WORLD — this is the setting, never deviate:
