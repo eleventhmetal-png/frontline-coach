@@ -249,6 +249,12 @@ employer-bought B2B motion — it's the first question a buyer's legal team asks
   hiding alone is a suggestion, same reasoning as the trial gate. Follow-through
   reads Supabase directly rather than the proxy, so it needs either an RLS-level
   check or acceptance that it's UI-gated only.
+- **Add the Premium price IDs to the allowlist in
+  `netlify/functions/create-checkout-session`.** It validates `priceId` server-side
+  against its own list, so Premium checkout returns an error until both new IDs are
+  added — and the failure looks like a broken payment page, not a config gap.
+  Product `prod_UxxsgyIJ6LZeFL`, built 28 July: $24.99/mo and $199/yr, both
+  recurring, no Stripe trial (correct — the 7 days is gated in-app).
 - Flip `METERING_ENFORCE=true` in Netlify env. Recording has run since 27 July; two
   months of real per-user cost data should replace the estimates in `credits.js`
   before enforcement starts.

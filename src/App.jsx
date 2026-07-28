@@ -1837,9 +1837,12 @@ function OneOnOnePrep({ session, go }) {
       {histMeta && (
         <div className="mb-2 flex items-start gap-2 text-[11px] text-neutral-500 leading-relaxed">
           <span className="flex-1">
-            Building from {histMeta.count} logged {histMeta.count === 1 ? "conversation" : "conversations"}
+            {ignoreHistory ? "Ignoring " : "Building from "}
+            {histMeta.count} logged {histMeta.count === 1 ? "conversation" : "conversations"}
             {histMeta.from && ` (${shortDate(histMeta.from)}${histMeta.to !== histMeta.from ? `–${shortDate(histMeta.to)}` : ""})`}
-            . If that isn't the same person, use a fuller name.
+            {ignoreHistory
+              ? ". Prepping from your note only."
+              : ". If that isn't the same person, use a fuller name."}
           </span>
           <button
             onClick={() => setIgnoreHistory((v) => !v)}
