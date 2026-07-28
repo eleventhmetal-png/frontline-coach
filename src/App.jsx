@@ -601,6 +601,30 @@ function Section({ label, children, accent }) {
     </div>
   );
 }
+
+// Placeholder rows for a section that hasn't streamed in yet. Same label and
+// spacing as the real Section, so nothing jumps when the text replaces the bars.
+// Deliberately dim and unanimated apart from a slow pulse — a fast shimmer on
+// seven stacked rows reads as an error state.
+function SectionSkeleton({ label, lines = 2 }) {
+  const widths = ["100%", "92%", "68%", "84%"];
+  return (
+    <div className="border-b border-neutral-800 last:border-0 py-4">
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2 text-neutral-600">
+        {label}
+      </div>
+      <div className="animate-pulse space-y-2">
+        {Array.from({ length: lines }).map((_, i) => (
+          <div
+            key={i}
+            className="h-3 rounded bg-neutral-800"
+            style={{ width: widths[i % widths.length] }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 function BulletList({ items }) {
   return (
     <ul className="space-y-1.5">
@@ -1589,15 +1613,16 @@ Hard rules for this output:
 - "whereTheyStand" is an honest read of the pattern, including when the pattern is that the manager keeps having the same conversation without changing anything.
 - "dont" names the single trap specific to THIS person and THIS history, not general advice.
 - Never invent a date, a quote, or a prior conversation that isn't in the record above.
-Return ONLY valid JSON, no markdown. Keep every field tight — this is read standing up. Schema:
+LENGTH IS A HARD REQUIREMENT, not a style note. This card is read standing in a break room with two minutes to spare. A prep card that takes longer to read than the one-on-one takes to run has failed. Obey the per-field caps below exactly — going over is a worse answer, not a more thorough one.
+Return ONLY valid JSON, no markdown. Schema:
 {
- "sinceLastTime": "what was agreed last time and what to verify, or a plain statement that there's no history yet",
- "whereTheyStand": "honest read of the pattern across what you can see",
- "coverThese": ["2-3 items, most important first"],
- "openWith": "the exact first sentence, spoken",
- "watchFor": "what to read in them during this conversation",
- "landOn": "the specific commitment to get before you finish",
- "dont": "the one trap specific to this person"
+ "sinceLastTime": "MAX 2 sentences. What was agreed last time and what to verify.",
+ "whereTheyStand": "MAX 3 sentences. Honest read of the pattern across what you can see.",
+ "coverThese": ["2-3 items. Each one line, 15 words or fewer, most important first."],
+ "openWith": "ONE sentence, the exact words, spoken.",
+ "watchFor": "ONE sentence. What to read in them during this conversation.",
+ "landOn": "ONE sentence. The specific commitment to get before you finish.",
+ "dont": "ONE sentence. The single trap specific to this person."
 }`;
 
 function OneOnOnePrep({ session, go }) {
@@ -1656,7 +1681,11 @@ function OneOnOnePrep({ session, go }) {
       const r = await callClaudeStream(
         prepSystem(industry, generation, historyBlock, openBlock),
         user,
-        { onPartial: setResult, max_tokens: 1600 }
+        // 1600 was ~2.5x what the capped schema actually emits. The ceiling
+        // doesn't slow generation, but the metering reserve is 35% of it, so an
+        // inflated number over-charges the user up front until reconcile trues
+        // it back. 700 is comfortably above a full-length card.
+        { onPartial: setResult, max_tokens: 700 }
       );
       setResult(r);
       setSessionId(await logSession({
@@ -1761,17 +1790,40 @@ function OneOnOnePrep({ session, go }) {
       />
       <ErrorNote msg={error} />
 
-      {result && (
+      {/* Card appears the moment you tap, not when the first field lands.
+          extractPartialJson only emits a key once its CLOSING quote arrives, so a
+          long field shows nothing at all while it streams — and on a first prep
+          `sinceLastTime` is deliberately empty, which pushes first paint back
+          behind a second full paragraph. That read as a dead thirty seconds.
+          Now the labels are up instantly and each one fills in as it lands, so
+          the same wait shows visible progress. */}
+      {(result || loading) && (
         <ResultCard>
-          <div className="flex justify-end mb-1"><CopyBtn getText={copyAll} /></div>
-          {result.sinceLastTime && <Section label="Since last time" accent>{result.sinceLastTime}</Section>}
-          {result.whereTheyStand && <Section label="Where they stand">{result.whereTheyStand}</Section>}
-          {result.coverThese?.length > 0 && <Section label="Cover these" accent><BulletList items={result.coverThese} /></Section>}
-          {result.openWith && <Section label="Open with" accent><Quote>{result.openWith}</Quote></Section>}
-          {result.watchFor && <Section label="Watch for">{result.watchFor}</Section>}
-          {result.landOn && <Section label="Land on">{result.landOn}</Section>}
-          {result.dont && <Section label="Don't">{result.dont}</Section>}
-          {!loading && <FeedbackRow tool="1:1 Prep" inputSummary={name} userId={uid} sessionId={sessionId} />}
+          <div className="flex justify-end mb-1">{result && !loading && <CopyBtn getText={copyAll} />}</div>
+          {/* sinceLastTime is skipped entirely on a first prep — no skeleton for
+              it, or every first-timer waits on a row that never fills. */}
+          {result?.sinceLastTime
+            ? <Section label="Since last time" accent>{result.sinceLastTime}</Section>
+            : loading && !firstTime && <SectionSkeleton label="Since last time" lines={2} />}
+          {result?.whereTheyStand
+            ? <Section label="Where they stand">{result.whereTheyStand}</Section>
+            : loading && <SectionSkeleton label="Where they stand" lines={2} />}
+          {result?.coverThese?.length > 0
+            ? <Section label="Cover these" accent><BulletList items={result.coverThese} /></Section>
+            : loading && <SectionSkeleton label="Cover these" lines={3} />}
+          {result?.openWith
+            ? <Section label="Open with" accent><Quote>{result.openWith}</Quote></Section>
+            : loading && <SectionSkeleton label="Open with" lines={2} />}
+          {result?.watchFor
+            ? <Section label="Watch for">{result.watchFor}</Section>
+            : loading && <SectionSkeleton label="Watch for" lines={1} />}
+          {result?.landOn
+            ? <Section label="Land on">{result.landOn}</Section>
+            : loading && <SectionSkeleton label="Land on" lines={1} />}
+          {result?.dont
+            ? <Section label="Don't">{result.dont}</Section>
+            : loading && <SectionSkeleton label="Don't" lines={1} />}
+          {!loading && result && <FeedbackRow tool="1:1 Prep" inputSummary={name} userId={uid} sessionId={sessionId} />}
         </ResultCard>
       )}
     </div>
