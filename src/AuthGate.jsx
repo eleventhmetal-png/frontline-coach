@@ -595,7 +595,7 @@ export default function AuthGate({ children }) {
             {[
               { href: "/new-manager-coach", icon: Play, label: "Just promoted?", sub: "Where to start when nobody trained you" },
               { href: "/operator", icon: Shield, label: "Why I built it", sub: "Eighteen years, learned the wrong way first" },
-              { href: "/pricing", icon: ClipboardList, label: "What it costs", sub: "Free now, $14.99 after the beta" },
+              { href: "/pricing", icon: ClipboardList, label: "What it costs", sub: "Free now. 7-day trial, then $14.99" },
             ].map((l) => (
               <a
                 key={l.href}
