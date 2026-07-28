@@ -1,10 +1,14 @@
 # Roadmap — pick up here
 
 Last updated end of 27 July 2026. Supersedes `docs/ROADMAP.md`, which was written
-earlier the same day and predates the metering build and the Nov 15 pricing
-decision.
+earlier the same day and predates the metering build.
 
 Ordered by leverage. The first item is the only one that changes anything.
+
+**Shipped 27 July:** seven content pages + `/pricing` (eight total), `/operator`,
+healthcare as an eighth industry, the industries section on the landing page, AI
+usage metering with the credits pill, Resend transactional email, password reset,
+waitlist capture, and the employer domain literal removed from the client bundle.
 
 ---
 
@@ -45,53 +49,78 @@ employer Ben is keeping it separate from. Fine for product feedback. Not for pro
 
 ---
 
-## 2. Pricing page
+## 2. ~~Pricing page~~ — SHIPPED 27 July
 
-Unblocked. Build through `gen-pages.mjs` like every other page — eighth indexed
-page, and pricing queries are further down the funnel than advice queries.
+Live at `/pricing`, eighth indexed page. Two columns (Free, Standard), nine rows,
+outcome-phrased labels, `table` block type added to the generator.
 
-Include the plan comparison table. Ben's read on North's version was right: a
-pricing card is a list of claims, a table is a decision aid. Two things to copy
-exactly — row labels that describe outcomes ("Spot disengagement early") rather
-than feature names, and real checkmarks in the free column. One thing to do
-differently: North has thirteen rows and past about eight a comparison table stops
-being a decision aid and becomes an inventory.
+**Premium is deliberately absent from the live page.** Ben's call: hide it until all
+its features exist. A tier you can read about but not buy invites "when?" with no
+good answer, and gives somebody a reason to wait instead of taking Standard today.
 
-Needs a new `table` block type in the generator.
-
-**Tier structure as it stands:**
-
-| | Free | Founding $7.99 | Standard $14.99 | Premium $24.99 |
-|---|---|---|---|---|
-| Daily credits | 100 pts | Standard ceiling | 1,200 pts fair-use | 2,400 pts |
-| Voice | — | — | — | 120 min/mo |
-
-Annual on Standard is $119 (~$9.92/mo effective, "save $61"). Premium annual not
-yet priced — the obvious parallel is ~$199, but decide it against real voice usage
-rather than by analogy.
-
-The $10 gap between Standard and Premium is wide enough that Standard is a genuine
-choice rather than a decoy, which is what $19 would have made it.
-
-Founding is a **grandfathered monthly rate for the beta cohort**, locked while they
-stay subscribed — not a one-time lifetime purchase. Be explicit on the page that
-Founding locks the *Standard* price and Premium is separate, or founding members
-will feel cheated when voice lands behind a higher tier.
+Prices settled: Free $0 · **Founding $7.99/mo** grandfathered for the beta cohort ·
+**Standard $14.99/mo or $119/yr** · **Premium $24.99/mo** when it opens. Premium
+annual not yet set — decide against real voice usage rather than by analogy.
 
 ---
 
-## 3. Content — the wedge nobody else occupies
+## 3. Premium tier — the next real build
 
-**Healthcare as an eighth industry.** North covers it, we don't. Clinic and
-hospital supervisors are a large frontline audience with exactly these problems.
-Small job — one `world` block in `INDUSTRIES` matching the pattern of the other
-seven.
+Full spec in **`docs/spec-premium-tier.md`**. The split, as a sentence:
 
-**Per-industry public pages.** North's strongest content play and we're 80% built
-for it already: `INDUSTRIES` in `App.jsx` has general, carwash, restaurant, retail,
-warehouse, hospitality, fieldservice — each with its own `world` vocabulary and
-`examples`. That's the hard part, done and shipped, just not public. Six pages
-available without touching the car wash question.
+> **Standard helps you with today's conversation. Premium helps you run a team over
+> time.**
+
+Five features, and **four of them are buildable right now on data the app already
+writes and never reads.** Only voice is blocked behind billing and November.
+
+**Build order:**
+
+1. **Follow-through tracker** — every tool already writes a `followUp` / `nextSteps`
+   field with a date and nothing surfaces them. Cheapest to build, highest retention
+   value, and it's the feature that makes a supervisor look competent to their own
+   boss.
+2. **Team roster** — explicit list of your people. Free/Standard 3, Premium
+   unlimited. Not a takeaway; no roster exists today.
+3. **1:1 Prep** — the headline. One tap on a name produces a prep card from every
+   logged conversation about them. Every input already exists:
+   `getEmployeeHistory()`, the stored `agreement` and `followUpPlan` fields,
+   `getLatestMemory()`, session dates. The compounding mechanic is the opening
+   block — *"On 12 July you agreed X. Has that held? [Yes / Partly / No]"* — one tap
+   that feeds the next card.
+4. **Deeper history** — `getEmployeeHistory()` returns 2 for everyone today; Premium
+   gets 6. One-line default change.
+5. **Voice** — 120 min/mo, gated behind billing. The expensive one.
+
+**Worth deciding:** whether Premium opens on 1–4 at a lower price with voice raising
+it later, rather than holding the whole tier hostage to the hardest feature.
+
+**Hard rule:** Premium may only contain NEW capability. Nothing in Free or Standard
+moves up. Per-employee memory is already live for everyone and the pricing page
+promises it in both tiers — Premium extends the depth, it doesn't introduce the idea.
+
+---
+
+## 4. Content — the wedge nobody else occupies
+
+**~~Healthcare as an eighth industry~~ — SHIPPED 27 July.** `world` block written
+with an extra SCOPE LIMIT the other seven don't need: coach the manager on managing
+people, never give clinical guidance, triage advice or an opinion on a medical
+decision; if the real problem is clinical or patient-safety, say so and point at
+clinical leadership. It's the one industry where a coaching app could wander
+somewhere genuinely dangerous.
+
+**~~Industries section on the landing page~~ — SHIPPED 27 July.** Eight cards with
+the orange glow on hover, from `src/lib/industryCards.js`. Deliberately shows
+SITUATIONS ("Charting finished late, every shift") rather than KPIs the way North
+does — Frontline Coach tracks no metrics, so KPI chips would promise analytics that
+don't exist, and situations are the thing North structurally can't copy.
+
+**Per-industry public pages — still to do.** The landing section shows breadth; this
+is eight dedicated pages, one per setting, targeting "restaurant manager difficult
+conversation" style queries. `INDUSTRIES` in `App.jsx` already holds the vocabulary
+for all eight and `industryCards.js` holds the marketing copy, so both halves exist —
+this is assembling them into pages through `gen-pages.mjs`.
 
 > **RESOLVED 2026-07-27.** The rule is "don't tie this product to my employer,"
 > not "never mention the industry." Car wash ships as one of eight settings on the
@@ -105,15 +134,12 @@ do I coach a Gen Z employee" is high-volume, high-intent, badly served, and nobo
 has a product attached to it. Higher leverage than another conversation-type page
 because there's no competitor on the query.
 
-**NEEDS CLARIFICATION — per-industry examples with the glow.** Ben asked for
-"voice for every industry examples like they do but in our own way, the cool
-glowing orange." Two readings: (a) industry-specific example prompts on the public
-pages, styled with the orange glow treatment used on the credits pill, or (b)
-something about voice mode per industry. Ask before building.
+> **RESOLVED 2026-07-27.** The "glowing orange industry examples" request meant the
+> landing-page section modelled on North's — built and shipped the same day.
 
 ---
 
-## 4. Product — user-requested and competitively relevant
+## 5. Product — user-requested and competitively relevant
 
 **Step-by-step conversation guidance.** Ben's own Team Leads asked for it — *"guide
 the conversation one step at a time instead of providing everything at once."*
@@ -122,7 +148,8 @@ competitive gap, which puts it above anything speculative. Note the Conversation
 Builder already has a "Guided" view; this may be extending that rather than
 building new.
 
-**Team Pulse, with expiry.** Ben liked North's. It's cheap here —
+**Team Pulse, with expiry.** Premium candidate, but after the first Premium
+release — it needs a Terms and Privacy update. Ben liked North's. It's cheap here —
 `employeeMemory.js` already stores employee names keyed per user, so a pulse read
 ships as a new session type with **zero migrations**. But it reverses a deliberate
 design choice; the comment on line 14 of that file reads *"not a permanent growing
@@ -140,7 +167,7 @@ employer-bought B2B motion — it's the first question a buyer's legal team asks
 
 ---
 
-## 5. Dated — 15 November 2026, beta closes
+## 6. Dated — 15 November 2026, beta closes
 
 - Flip `METERING_ENFORCE=true` in Netlify env. Recording has run since 27 July; two
   months of real per-user cost data should replace the estimates in `credits.js`
@@ -153,7 +180,7 @@ employer-bought B2B motion — it's the first question a buyer's legal team asks
 
 ---
 
-## 6. Deferred, deliberately
+## 7. Deferred, deliberately
 
 **Voice.** Two of four competitors have it, so it moved from differentiator to
 table stakes — but it's gated behind billing for cost reasons (realtime voice

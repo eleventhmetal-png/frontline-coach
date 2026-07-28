@@ -11,6 +11,9 @@ import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } fro
 import { supabase } from "./lib/supabaseClient";
 import { getPointsUsedToday, planFromSession } from "./lib/usage";
 import {
+  getOpenFollowUps, getOpenFollowUpCount, markFollowUpDone, ageLabel, isStale,
+} from "./lib/followups";
+import {
   remainingPoints, pillValue, describeRemaining, secondsUntilReset, REFERENCE_COSTS,
 } from "./lib/credits";
 // ---------- Claude API helpers ----------
@@ -1945,6 +1948,7 @@ function Roleplay({ session } = {}) {
 // =====================================================
 function MoreView({ go, session, signOut }) {
   const tools = [
+    { id: "followups", label: "Follow-through", desc: "What you said you'd check", icon: Check },
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
     { id: "diagnose", label: "Skill vs. Will Diagnostic", desc: "Find the real root cause", icon: Target },
@@ -2015,6 +2019,131 @@ function MoreView({ go, session, signOut }) {
     </div>
   );
 }
+// =====================================================
+// FOLLOW-THROUGH — what you said you'd check
+// =====================================================
+// Every one-shot tool ends by telling the manager to check something on a date.
+// Until now those were written to the database and never read back. This is the
+// list, quoted verbatim from what each plan actually said — no AI call, no
+// synthesized narrative.
+//
+// TIER NOTE: ungated during beta on purpose. Ben's July 25 decision was that beta
+// testers get the FULL product so they feel what they'd lose, and the metering
+// follows the same record-now-enforce-in-November pattern. This is specced as a
+// Premium feature at launch (docs/spec-premium-tier.md) — gate it when Premium
+// opens, not before.
+function FollowUps({ session, go }) {
+  const [items, setItems] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const uid = session?.user?.id;
+
+  useEffect(() => {
+    let alive = true;
+    if (uid) getOpenFollowUps(uid).then((r) => { if (alive) setItems(r); });
+    return () => { alive = false; };
+  }, [uid]);
+
+  async function complete(id) {
+    setBusy(id);
+    const ok = await markFollowUpDone(uid, id);
+    // Only drop it from the list once the write succeeded — an optimistic removal
+    // that silently failed would look like the app forgot the commitment, which is
+    // the exact thing this feature exists to prevent.
+    if (ok) setItems((cur) => (cur || []).filter((x) => x.id !== id));
+    setBusy(null);
+  }
+
+  if (items == null) {
+    return (
+      <div>
+        <ToolHeader title="Follow-through" sub="What you said you'd check." />
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-neutral-600" size={22} /></div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div>
+        <ToolHeader title="Follow-through" sub="What you said you'd check." />
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-center">
+          <Check size={26} className="mx-auto mb-3" style={{ color: ACCENT }} />
+          <div className="font-semibold text-neutral-100 mb-1">Nothing outstanding</div>
+          <p className="text-[13px] text-neutral-500 leading-snug">
+            Every plan you've run has been followed up or ticked off. When a tool tells you to
+            check something, it lands here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const stale = items.filter((i) => isStale(i.createdAt)).length;
+
+  return (
+    <div>
+      <ToolHeader title="Follow-through" sub="What you said you'd check." />
+      {stale > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>
+            {stale} of these {stale === 1 ? "is" : "are"} more than two weeks old. A commitment
+            you never checked teaches the same lesson as one you never made.
+          </span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {items.map((it) => {
+          const old = isStale(it.createdAt);
+          return (
+            <div
+              key={it.id}
+              className="rounded-xl border bg-neutral-900 p-4"
+              style={{ borderColor: old ? "rgba(180,84,84,0.45)" : "#262626" }}
+            >
+              <div className="flex items-center gap-2 mb-2 text-[11px]">
+                {it.name && (
+                  <span className="font-bold uppercase tracking-[0.12em]" style={{ color: ACCENT }}>
+                    {it.name}
+                  </span>
+                )}
+                <span className="text-neutral-600">{it.toolLabel}</span>
+                <span className="text-neutral-700">·</span>
+                <span className={old ? "text-amber-500" : "text-neutral-600"}>{ageLabel(it.createdAt)}</span>
+              </div>
+
+              <p className="text-[15px] text-neutral-100 leading-relaxed">{it.text}</p>
+
+              {it.about && (
+                <p className="text-[12px] text-neutral-500 leading-snug mt-2 line-clamp-2">
+                  From: {it.about}
+                </p>
+              )}
+
+              <button
+                onClick={() => complete(it.id)}
+                disabled={busy === it.id}
+                className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-neutral-400 hover:text-neutral-100 disabled:opacity-40"
+              >
+                {busy === it.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                Done
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={() => go("coach")}
+        className="w-full mt-5 text-sm font-semibold text-neutral-300 border border-neutral-700 rounded-lg py-2.5 hover:bg-neutral-900"
+      >
+        Something new came up
+      </button>
+    </div>
+  );
+}
+
 // =====================================================
 // CREDITS PILL — free-tier AI usage meter
 // =====================================================
@@ -2249,6 +2378,7 @@ function HomeView({ go, session } = {}) {
   const [lastTool, setLastTool] = useState(null);
   const [followUp, setFollowUp] = useState(null);
   const [briefOpen, setBriefOpen] = useState(false);
+  const [openCount, setOpenCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
     if (session?.user?.id) {
@@ -2257,6 +2387,9 @@ function HomeView({ go, session } = {}) {
       });
       getLastFollowUp(session.user.id).then((f) => {
         if (!cancelled) setFollowUp(f);
+      });
+      getOpenFollowUpCount(session.user.id).then((n) => {
+        if (!cancelled) setOpenCount(n);
       });
     }
     return () => { cancelled = true; };
@@ -2300,6 +2433,26 @@ function HomeView({ go, session } = {}) {
           {briefOpen ? focusText : truncateToSentence(focusText)}
         </p>
       </button>
+      {/* Only shown when there's something outstanding. A permanent "0 follow-ups"
+          row is noise; an entry that appears because you owe somebody a check-in is
+          the accountability layer doing its job. */}
+      {openCount > 0 && (
+        <button
+          onClick={() => go("followups")}
+          className="w-full flex items-center gap-3 rounded-xl border p-4 mb-4 text-left transition-colors"
+          style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.06)" }}
+        >
+          <Check size={20} style={{ color: ACCENT }} />
+          <div className="flex-1">
+            <div className="font-semibold text-neutral-100">
+              {openCount} thing{openCount === 1 ? "" : "s"} you said you'd check
+            </div>
+            <div className="text-xs text-neutral-500">Follow-through is the whole job.</div>
+          </div>
+          <ArrowRight size={18} className="text-neutral-600" />
+        </button>
+      )}
+
       <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3.5">
         <div className="flex items-center gap-2 mb-2">
           <Briefcase size={15} style={{ color: ACCENT }} />
@@ -2456,12 +2609,13 @@ export default function FrontlineCoach({ session, signOut } = {}) {
           {tab === "diagnose" && <SkillWill session={session} />}
           {tab === "document" && <DocAssistant session={session} />}
           {tab === "convo" && <ConvoBuilder session={session} />}
+          {tab === "followups" && <FollowUps session={session} go={go} />}
           {tab === "more" && <MoreView go={go} session={session} signOut={signOut} />}
           </ErrorBoundary>
         </main>
         <nav className="grid grid-cols-5 border-t border-neutral-800 shrink-0 bg-neutral-950">
           {NAV.map((n) => {
-            const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo"].includes(tab));
+            const active = tab === n.id || (n.id === "more" && ["diagnose", "document", "convo", "followups"].includes(tab));
             return (
               <button key={n.id} onClick={() => go(n.id)} className="flex flex-col items-center gap-1 py-2.5">
                 <n.icon size={20} style={{ color: active ? ACCENT : "#6b6b6b" }} />

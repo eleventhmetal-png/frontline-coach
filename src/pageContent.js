@@ -16,7 +16,7 @@
 //   { p:    "Paragraph text." }
 //   { em:   "Paragraph with the whole thing emphasised." }
 //   { belief: { lead: "The principle.", rest: "The explanation." } }
-//   { sig:  "— Ben Ryan" }
+//   { sig:  "— B.W. Ryan" }
 
 export const SITE = "https://frontline-coach.com";
 export const ORG_ID = "https://otsowntheshift.com/#org";
@@ -29,7 +29,7 @@ export const PAGES = [
     slug: "operator",
     navLabel: "Why I built Frontline Coach",
     related: ["new-manager-coach", "difficult-employee-conversations", "pricing"],
-    title: "Why I Built Frontline Coach — Ben Ryan, Own The Shift",
+    title: "Why I Built Frontline Coach — B.W. Ryan, Own The Shift",
     // Keep descriptions between 120 and 158 characters. Bing's SEO checker
     // errors outside that range and Google truncates the overflow.
     description:
@@ -50,7 +50,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         description:
@@ -202,7 +202,7 @@ export const PAGES = [
       {
         p: "I built it because the version of me eighteen years ago needed it, and nothing like it existed.",
       },
-      { sig: "— Ben Ryan" },
+      { sig: "— B.W. Ryan" },
     ],
   },
 
@@ -232,7 +232,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
@@ -441,7 +441,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
@@ -666,7 +666,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
@@ -861,7 +861,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
@@ -1037,7 +1037,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
@@ -1359,7 +1359,7 @@ export const PAGES = [
       {
         "@type": "Person",
         "@id": PERSON_ID,
-        name: "Ben Ryan",
+        name: "B.W. Ryan",
         jobTitle: "Founder",
         url: `${SITE}/operator`,
         worksFor: { "@id": ORG_ID },
