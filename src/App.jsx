@@ -169,14 +169,31 @@ function toolJson(text) {
 }
 // tolerant extractor for streaming — returns only the fields that have fully arrived
 function extractPartialJson(text) {
-  const clean = (text || "").replace(/```json/gi, "").replace(/```/g, "");
+  let clean = (text || "").replace(/```json/gi, "").replace(/```/g, "");
   const obj = {};
   const unesc = (s) => s.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\\/g, "\\");
+
+  // Arrays of objects are cut out before anything else. This scanner is flat — it
+  // has no notion of nesting — so left in place, the keys INSIDE those objects
+  // ("block", "mins", "ask") get hoisted to the top level as if they were real
+  // fields. Nothing renders them today, but the first time a nested key shares a
+  // name with a top-level one it silently overwrites the real value, and the bug
+  // would look like the model misbehaving rather than the parser.
+  const objArrays = /"\w+"\s*:\s*\[[^\]]*\{[^\]]*\](\s*,)?/g;   // complete
+  const openObjArray = /"\w+"\s*:\s*\[\s*\{[\s\S]*$/;            // still streaming
+  clean = clean.replace(objArrays, "").replace(openObjArray, "");
+
   const strRe = /"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
   let m;
   while ((m = strRe.exec(clean))) obj[m[1]] = unesc(m[2]);
   const arrRe = /"(\w+)"\s*:\s*\[([^\]]*)\]/g;
   while ((m = arrRe.exec(clean))) {
+    // Arrays of OBJECTS (1:1 Prep's agenda / expectToHear) are skipped, not
+    // flattened. Scraping every quoted string out of `[{"block":"Check in",...}]`
+    // would hand the UI a list of keys and values jumbled together — visible
+    // garbage mid-stream. They render from the real JSON.parse at the end; until
+    // then the section holds its skeleton, which is the honest state anyway.
+    if (m[2].includes("{")) continue;
     const items = [];
     const itemRe = /"((?:[^"\\]|\\.)*)"/g;
     let im;
@@ -598,6 +615,48 @@ function Section({ label, children, accent }) {
       <div className="text-[15px] leading-relaxed text-neutral-100">
         {children}
       </div>
+    </div>
+  );
+}
+
+// 1:1 agenda blocks. The minutes are the point — a manager who can see that their
+// own agenda eats 18 of 25 minutes will cut something before they walk in, which is
+// the whole reason to write times down rather than a bare topic list.
+function AgendaList({ items }) {
+  return (
+    <div className="space-y-3">
+      {(items || []).map((a, i) => (
+        <div key={i} className="border-l-2 pl-3" style={{ borderColor: "rgba(232,146,60,0.35)" }}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-semibold text-neutral-100 text-[14px]">{a.block}</span>
+            {a.mins && (
+              <span className="text-[11px] text-neutral-500 shrink-0">{String(a.mins).replace(/\s*min.*$/i, "")} min</span>
+            )}
+          </div>
+          {a.why && <div className="text-[13px] text-neutral-400 mt-0.5">{a.why}</div>}
+          {a.ask && <div className="text-[14px] text-neutral-200 mt-1 italic">"{a.ask}"</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// What they'll raise, paired with the answer to have ready. Rendered as two rows
+// rather than a paragraph because the manager is scanning for their own line —
+// having the response sitting directly under the question is the whole value.
+function ExpectList({ items }) {
+  return (
+    <div className="space-y-3">
+      {(items || []).map((e, i) => (
+        <div key={i}>
+          <div className="text-[14px] text-neutral-300">
+            <span className="text-neutral-500">They say:</span> "{e.they}"
+          </div>
+          <div className="text-[14px] text-neutral-100 mt-1">
+            <span className="text-neutral-500">You:</span> {e.you}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1601,29 +1660,40 @@ ${history ? `\nPRIOR CONVERSATIONS WITH THIS EMPLOYEE (most recent first). This 
 Handle it like a first meeting, not a thin version of a normal prep:
 - Set "sinceLastTime" to "" (empty string). Do NOT write "no history available" — the manager knows, and a card that opens by announcing what it doesn't know reads as useless.
 - "whereTheyStand" is a read of what the manager described, stated as their account rather than as fact. Hedge honestly: "going off what you've said" beats a confident verdict on somebody you've never seen.
-- Weight "coverThese" toward finding things out. The most valuable first one-on-one is one where the manager talks less than half the time.
+- Weight the agenda toward finding things out. The most valuable first one-on-one is one where the manager talks less than half the time.
 - "landOn" should set up the NEXT conversation — a specific thing to revisit — because that's what turns this into a record worth keeping.\n`}
 ${openItems ? `\nCOMMITMENTS FROM LAST TIME THAT ARE STILL OPEN:\n${openItems}\n` : ""}
-A manager has a one-on-one with this person shortly and wants to walk in prepared. Give them a prep card they can read in ninety seconds standing in a break room.
+A manager has a scheduled one-on-one with this person and wants to walk in prepared.
+
+THIS IS NOT A SINGLE-ISSUE CONVERSATION PLAN. A one-on-one is a recurring, twenty-to-thirty minute, two-way conversation about a whole person — how they're doing, how the work is going, where they're headed, and whatever THEY want to raise. Do not collapse it into one topic and three questions about that topic. If the manager's note mentions one thing, that thing is the centrepiece, not the entirety: a real one-on-one still checks how they're doing generally and still leaves room for their agenda.
+
 Hard rules for this output:
 - LEAD WITH THE UNFINISHED BUSINESS. If there's an open commitment from last time, that comes first and the manager checks whether it held before anything else. A follow-up that never gets followed up teaches the employee the standard is optional.
-- "coverThese" is 2-3 items, ordered by what matters most, not by what's easiest. Three is the maximum a person holds in their head walking into a room. If there are more, pick the three and drop the rest.
-- Do NOT make the whole conversation about the problem. If this person has been corrected twice already, the third talk needs something else in it or you're just grinding them down. Look for what they've actually done well and put it in.
+- GIVE THE MANAGER SOMETHING TO SAY, not just things to ask. A card made entirely of questions turns a one-on-one into an interview. For every significant question, the manager needs a position ready for the answer.
+- ANTICIPATE THEIR SIDE. They will raise something — a request, a complaint, a question about their future, a problem with someone else. Name the two most likely, and give the manager an honest answer for each. "I don't know yet, here's when I will" is a legitimate answer; a vague deflection is not.
+- BE SPECIFIC IN THE RECOGNITION. "You've been doing great" is worth nothing. Name the actual thing, from the record or the manager's note. If you don't have a specific, tell the manager to find one before the meeting rather than inventing one.
+- Do NOT make the whole conversation about the problem. If this person has been corrected twice already, the third talk needs something else in it or you're just grinding them down.
 - "openWith" is the spoken first sentence, in their voice. Not a description of how to open.
 - "whereTheyStand" is an honest read of the pattern, including when the pattern is that the manager keeps having the same conversation without changing anything.
 - "dont" names the single trap specific to THIS person and THIS history, not general advice.
-- Never invent a date, a quote, or a prior conversation that isn't in the record above.
-LENGTH IS A HARD REQUIREMENT, not a style note. This card is read standing in a break room with two minutes to spare. A prep card that takes longer to read than the one-on-one takes to run has failed. Obey the per-field caps below exactly — going over is a worse answer, not a more thorough one.
+- Never invent a date, a quote, or a prior conversation that isn't in the record above. If the manager should know something you don't have, say so in "findOutFirst".
+Write the way a good operator briefs someone in a corridor: concrete and compressed. No paragraph runs past three sentences, and no field is padded to look thorough. But do NOT strip it to one-liners either — this is a scheduled twenty-to-thirty minute conversation and the manager needs enough to run it without improvising.
 Return ONLY valid JSON, no markdown. Schema:
 {
- "sinceLastTime": "MAX 2 sentences. What was agreed last time and what to verify.",
- "whereTheyStand": "MAX 3 sentences. Honest read of the pattern across what you can see.",
- "coverThese": ["2-3 items. Each one line, 15 words or fewer, most important first."],
- "openWith": "ONE sentence, the exact words, spoken.",
- "watchFor": "ONE sentence. What to read in them during this conversation.",
- "landOn": "ONE sentence. The specific commitment to get before you finish.",
- "dont": "ONE sentence. The single trap specific to this person."
-}`;
+ "readOnThem": "One line. The honest headline on this person right now.",
+ "sinceLastTime": "What was agreed last time and what to verify. 2 sentences.",
+ "whereTheyStand": "Honest read of the pattern across what you can see. Up to 3 sentences.",
+ "nameThis": "The specific thing they've done well that the manager should say out loud, with the detail that makes it land. If there isn't one in the record, say what the manager should go find out before the meeting.",
+ "agenda": [{"block": "short label", "mins": "5", "why": "one line on what this block is for", "ask": "the actual question to ask, worded"}],
+ "openWith": "The exact opening words, spoken.",
+ "expectToHear": [{"they": "what they're likely to raise, in their words", "you": "the honest answer to have ready"}],
+ "watchFor": "What to read in them during this conversation. 1-2 sentences.",
+ "landOn": "The specific commitment to get before you finish, and who owes what by when.",
+ "dont": "The single trap specific to this person.",
+ "findOutFirst": "Anything the manager should check or know before walking in. Empty string if nothing.",
+ "afterwards": "What to log or do within 48 hours so this conversation counts."
+}
+"agenda" is 3-4 blocks that add up to roughly 20-25 minutes, ordered so unfinished business comes first and their agenda gets real time, not the last two minutes. "expectToHear" is exactly 2 items.`;
 
 function OneOnOnePrep({ session, go }) {
   const { industry } = useIndustry();
@@ -1681,11 +1751,9 @@ function OneOnOnePrep({ session, go }) {
       const r = await callClaudeStream(
         prepSystem(industry, generation, historyBlock, openBlock),
         user,
-        // 1600 was ~2.5x what the capped schema actually emits. The ceiling
-        // doesn't slow generation, but the metering reserve is 35% of it, so an
-        // inflated number over-charges the user up front until reconcile trues
-        // it back. 700 is comfortably above a full-length card.
-        { onPartial: setResult, max_tokens: 700 }
+        // The richer schema (agenda blocks + expectToHear pairs) genuinely needs the
+        // room. Reserve is 35% of this, trued up against real usage after the call.
+        { onPartial: setResult, max_tokens: 1500 }
       );
       setResult(r);
       setSessionId(await logSession({
@@ -1699,20 +1767,35 @@ function OneOnOnePrep({ session, go }) {
     }
   }
 
-  const copyAll = () => result ? [
-    `1:1 PREP — ${name.trim()}`,
-    `SINCE LAST TIME\n${result.sinceLastTime}`,
-    `WHERE THEY STAND\n${result.whereTheyStand}`,
-    `COVER THESE\n- ${(result.coverThese || []).join("\n- ")}`,
-    `OPEN WITH\n${result.openWith}`,
-    `WATCH FOR\n${result.watchFor}`,
-    `LAND ON\n${result.landOn}`,
-    `DON'T\n${result.dont}`,
-  ].join("\n\n") : "";
+  const copyAll = () => {
+    if (!result) return "";
+    const s = [`1:1 PREP — ${name.trim()}`];
+    const add = (label, val) => { if (val) s.push(`${label}\n${val}`); };
+    add("READ ON THEM", result.readOnThem);
+    add("SINCE LAST TIME", result.sinceLastTime);
+    add("WHERE THEY STAND", result.whereTheyStand);
+    add("NAME THIS", result.nameThis);
+    if (result.agenda?.length) {
+      s.push("AGENDA\n" + result.agenda
+        .map((a) => `- ${a.block}${a.mins ? ` (${a.mins} min)` : ""}\n  ${a.why || ""}\n  Ask: ${a.ask || ""}`)
+        .join("\n"));
+    }
+    add("OPEN WITH", result.openWith);
+    if (result.expectToHear?.length) {
+      s.push("EXPECT TO HEAR\n" + result.expectToHear
+        .map((e) => `- They: ${e.they}\n  You: ${e.you}`).join("\n"));
+    }
+    add("WATCH FOR", result.watchFor);
+    add("LAND ON", result.landOn);
+    add("DON'T", result.dont);
+    add("FIND OUT FIRST", result.findOutFirst);
+    add("AFTERWARDS", result.afterwards);
+    return s.join("\n\n");
+  };
 
   return (
     <div>
-      <ToolHeader title="1:1 Prep" sub="Ninety seconds before you walk in." />
+      <ToolHeader title="1:1 Prep" sub="Walk in knowing what this conversation is for." />
 
       <input
         value={name}
@@ -1802,27 +1885,40 @@ function OneOnOnePrep({ session, go }) {
           <div className="flex justify-end mb-1">{result && !loading && <CopyBtn getText={copyAll} />}</div>
           {/* sinceLastTime is skipped entirely on a first prep — no skeleton for
               it, or every first-timer waits on a row that never fills. */}
+          {result?.readOnThem
+            ? <Section label="Read on them" accent>{result.readOnThem}</Section>
+            : loading && <SectionSkeleton label="Read on them" lines={1} />}
           {result?.sinceLastTime
             ? <Section label="Since last time" accent>{result.sinceLastTime}</Section>
             : loading && !firstTime && <SectionSkeleton label="Since last time" lines={2} />}
           {result?.whereTheyStand
             ? <Section label="Where they stand">{result.whereTheyStand}</Section>
             : loading && <SectionSkeleton label="Where they stand" lines={2} />}
-          {result?.coverThese?.length > 0
-            ? <Section label="Cover these" accent><BulletList items={result.coverThese} /></Section>
-            : loading && <SectionSkeleton label="Cover these" lines={3} />}
+          {result?.nameThis
+            ? <Section label="Name this out loud" accent>{result.nameThis}</Section>
+            : loading && <SectionSkeleton label="Name this out loud" lines={2} />}
+          {result?.agenda?.length > 0
+            ? <Section label="Agenda"><AgendaList items={result.agenda} /></Section>
+            : loading && <SectionSkeleton label="Agenda" lines={4} />}
           {result?.openWith
             ? <Section label="Open with" accent><Quote>{result.openWith}</Quote></Section>
             : loading && <SectionSkeleton label="Open with" lines={2} />}
+          {result?.expectToHear?.length > 0
+            ? <Section label="Expect to hear"><ExpectList items={result.expectToHear} /></Section>
+            : loading && <SectionSkeleton label="Expect to hear" lines={3} />}
           {result?.watchFor
             ? <Section label="Watch for">{result.watchFor}</Section>
             : loading && <SectionSkeleton label="Watch for" lines={1} />}
           {result?.landOn
-            ? <Section label="Land on">{result.landOn}</Section>
-            : loading && <SectionSkeleton label="Land on" lines={1} />}
+            ? <Section label="Land on" accent>{result.landOn}</Section>
+            : loading && <SectionSkeleton label="Land on" lines={2} />}
           {result?.dont
             ? <Section label="Don't">{result.dont}</Section>
             : loading && <SectionSkeleton label="Don't" lines={1} />}
+          {result?.findOutFirst && <Section label="Find out first">{result.findOutFirst}</Section>}
+          {result?.afterwards
+            ? <Section label="Afterwards">{result.afterwards}</Section>
+            : loading && <SectionSkeleton label="Afterwards" lines={1} />}
           {!loading && result && <FeedbackRow tool="1:1 Prep" inputSummary={name} userId={uid} sessionId={sessionId} />}
         </ResultCard>
       )}
@@ -2252,7 +2348,7 @@ export const PREMIUM_AFTER_BETA = new Set(["prep", "followups"]);
 
 function MoreView({ go, session, signOut }) {
   const tools = [
-    { id: "prep", label: "1:1 Prep", desc: "Ninety seconds before you walk in", icon: Clock },
+    { id: "prep", label: "1:1 Prep", desc: "Build the agenda before you walk in", icon: Clock },
     { id: "followups", label: "Follow-through", desc: "What you said you'd check", icon: Check },
     { id: "document", label: "Documentation Assistant", desc: "Rough notes to a factual record", icon: FileText },
     { id: "convo", label: "Conversation Builder", desc: "Plan a real conversation start to finish", icon: ClipboardList },
