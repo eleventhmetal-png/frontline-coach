@@ -280,7 +280,14 @@ function isFatal(e) {
 // Non-streaming is used only as a last resort, and only for outputs small
 // enough to buffer inside the timeout.
 const STREAM_ATTEMPTS = 3;
-const BUFFERABLE_MAX_TOKENS = 1200;
+// 400, not 1200. What kills the buffered path is an IDLE timeout — no bytes
+// flowing until the generation finishes — which is why streaming survives a
+// 2500-token Coach plan that buffering 504s on. At ~40-70 tok/s, 1200 tokens is
+// ~20-30s of silence: the "fallback" would usually just add half a minute of
+// dead spinner before failing anyway. 400 confines it to what genuinely fits —
+// roleplay turns, which cap at 350 — so Pushback (900) now fails fast and
+// honestly on the stream retries instead of pretending it has one more option.
+const BUFFERABLE_MAX_TOKENS = 400;
 async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
   let lastErr = null;
   for (let attempt = 0; attempt < STREAM_ATTEMPTS; attempt++) {
