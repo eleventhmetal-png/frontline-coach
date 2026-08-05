@@ -259,23 +259,56 @@ async function callClaude(system, user, opts = {}) {
   if (!parsed) throw new Error("bad JSON");
   return scrubVoice(parsed);
 }
-// single-shot JSON, streaming with progressive partials. Falls back to non-stream on any hiccup.
+// A retry can't fix an expired session, an ended trial, or an exhausted daily
+// credit balance — it just doubles the wait before the paywall appears.
+function isFatal(e) {
+  return !!e && (e.status === 401 || e.status === 402 || e.status === 429);
+}
+// single-shot JSON, streaming, with a retry ladder.
+//
+// This used to fall back to the NON-STREAMING path on any failure, which was
+// backwards: buffering the whole generation is exactly what trips the gateway
+// idle-timeout, so the fallback was least likely to work on the long outputs
+// that triggered it (Coach at 2500 tokens is 35-60s of wall clock against a 10s
+// sync limit). It also repeated the identical request, so a deterministic
+// failure — truncation at the token ceiling — was guaranteed to fail twice and
+// bill twice.
+//
+// Now: retry the STREAM with backoff. The proxy already retries a transient
+// upstream 5xx once or twice, so anything that reaches here has survived that;
+// a second stream attempt covers a mid-stream drop or a one-off bad parse.
+// Non-streaming is used only as a last resort, and only for outputs small
+// enough to buffer inside the timeout.
+const STREAM_ATTEMPTS = 3;
+const BUFFERABLE_MAX_TOKENS = 1200;
 async function callClaudeStream(system, user, { onPartial, ...opts } = {}) {
-  try {
-    const full = await streamClaude(
-      [{ role: "user", content: `MANAGER INPUT:\n${user}` }],
-      { system, ...opts, onText: onPartial ? (t) => onPartial(scrubVoice(extractPartialJson(t))) : undefined }
-    );
-    const parsed = toolJson(full);
-    if (parsed) return scrubVoice(parsed);
-    throw new Error("bad JSON");
-  } catch (e) {
-    // Don't fire a second doomed request for auth, rate-limit, or an expired
-    // trial — a retry can't succeed and it just doubles the wait before the
-    // paywall appears.
-    if (e && (e.status === 401 || e.status === 402 || e.status === 429)) throw e;
-    return await callClaude(system, user, opts);
+  let lastErr = null;
+  for (let attempt = 0; attempt < STREAM_ATTEMPTS; attempt++) {
+    try {
+      const full = await streamClaude(
+        [{ role: "user", content: `MANAGER INPUT:\n${user}` }],
+        { system, ...opts, onText: onPartial ? (t) => onPartial(scrubVoice(extractPartialJson(t))) : undefined }
+      );
+      const parsed = toolJson(full);
+      if (parsed) return scrubVoice(parsed);
+      lastErr = new Error("bad JSON");
+    } catch (e) {
+      if (isFatal(e)) throw e;
+      lastErr = e;
+    }
+    if (attempt < STREAM_ATTEMPTS - 1) {
+      // Clear any half-streamed partial before the next attempt so the user
+      // doesn't watch a plan assemble, reset, and assemble again.
+      if (onPartial) onPartial(null);
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
   }
+  const budget = opts.max_tokens || 1000;
+  if (budget <= BUFFERABLE_MAX_TOKENS) {
+    try { return await callClaude(system, user, opts); }
+    catch (e) { if (isFatal(e)) throw e; }
+  }
+  throw lastErr || new Error("bad JSON");
 }
 // multi-turn chat, returns plain text reply
 async function callChat(system, history, opts = {}) {
@@ -283,12 +316,23 @@ async function callChat(system, history, opts = {}) {
   return (await rawClaude(msgs, opts)).trim();
 }
 // streaming multi-turn chat — onText(fullSoFar). Falls back to non-stream.
+// Roleplay turns are capped at 350 tokens, so the buffered fallback is safe here
+// (it can't outrun the gateway timeout the way a 2500-token plan can) — but it
+// must not fire for a dead session, an ended trial, or an exhausted balance.
 async function streamChat(system, history, onText, opts = {}) {
   const msgs = [{ role: "user", content: system }, { role: "assistant", content: "Understood. I'm in character." }, ...history];
   try {
-    return await streamClaude(msgs, { ...opts, onText });
+    const txt = await streamClaude(msgs, { ...opts, onText });
+    // An empty reply means the stream opened and then died — Anthropic's own
+    // `event: error` frames and mid-stream aborts produce a clean 200 with no
+    // text deltas. Treated as a failure so the fallback runs, instead of handing
+    // the caller "" and leaving an invisible empty bubble in the transcript.
+    if (txt && txt.trim()) return txt;
+    throw new Error("empty stream");
   } catch (e) {
+    if (isFatal(e)) throw e;
     const txt = (await rawClaude(msgs, opts)).trim();
+    if (!txt) throw new Error("empty reply");
     onText && onText(txt);
     return txt;
   }
@@ -1069,6 +1113,13 @@ function AICoach({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "coach", input, output: r, model: MODEL_SMART }));
     } catch (e) {
+      // Clear the partial. `onPartial: setResult` streams fields in as they
+      // arrive, and on failure the old code set the error but LEFT the partial on
+      // screen — once loading flipped false the skeletons vanished and the Copy
+      // button appeared, so a half-written plan read as a finished one. On 1:1
+      // Prep the agenda and expectToHear blocks are structurally absent from a
+      // partial, so it looked like a complete prep that simply had no agenda.
+      setResult(null);
       setError(errMessage(e, "Couldn't generate a plan. Add a bit more detail and try again."));
     } finally {
       setLoading(false);
@@ -1123,7 +1174,9 @@ function AICoach({ session } = {}) {
                 { label: "What to say", text: result.whatToSay },
               ],
             })} />
-            <CopyBtn getText={copyAll} />
+            {/* disabled while streaming: copyAll interpolates bare fields, so a
+                tap mid-stream pasted "WHAT YOU OWN\nundefined" into a real message. */}
+            <CopyBtn getText={copyAll} disabled={loading} />
           </div>
           {result.whatMayBeHappening && <Section label="What may be happening">{result.whatMayBeHappening}</Section>}
           {result.whatYouOwn && <Section label="What you own" accent>{result.whatYouOwn}</Section>}
@@ -1230,6 +1283,7 @@ function PushbackCoach({ session } = {}) {
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context, generation }, output: r, model: MODEL_FAST }));
     } catch (e) {
+      setResult(null);
       setError(errMessage(e, "Couldn't generate a response. Try again."));
     } finally {
       setLoading(false);
@@ -1282,7 +1336,7 @@ function PushbackCoach({ session } = {}) {
               headline: result.immediateResponse,
               sections: [{ label: "Hold the line", text: result.boundaryStatement }],
             })} />
-            <CopyBtn getText={copyAll} />
+            <CopyBtn getText={copyAll} disabled={loading} />
           </div>
           {result.immediateResponse && <Section label="Say this now" accent><Quote>{result.immediateResponse}</Quote></Section>}
           {result.howToSayIt && <Section label="How to say it" accent>{result.howToSayIt}</Section>}
@@ -1331,7 +1385,13 @@ function DocAssistant({ session } = {}) {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null); setConfirmed(false);
     try {
-      const r = await callClaudeStream(docSystem(industry), input, {});
+      // Nine fields, eight of which restate the manager's notes, and
+      // `cleanedNote` — "a single tight paragraph combining the above" — is LAST.
+      // On the old 1000-token default, a long dump of a real incident truncated
+      // mid-paragraph, the closing brace never arrived, and the tool was simply
+      // broken for exactly the notes worth documenting. Retrying by hand could
+      // never fix it.
+      const r = await callClaudeStream(docSystem(industry), input, { max_tokens: 2000 });
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "document", input, output: r, model: MODEL_SMART }));
     } catch (e) {
@@ -1465,19 +1525,23 @@ function ConvoBuilder({ session } = {}) {
   async function run() {
     if (!situation.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full"); setStep(0);
-    // Pull the freshest recall right before generating, so it's authoritative.
-    let memoryBlock = "";
-    if (usePrior && name.trim()) {
-      const hist = await getEmployeeHistory(uid, name);
-      memoryBlock = summarizeEmployeeHistory(hist);
-    }
-    const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
+    // Inside the try. These awaits sat BETWEEN setLoading(true) and the try, so
+    // anything they threw skipped the finally and left the button spinning
+    // forever with no error and no way out but a page reload.
     try {
+      // Pull the freshest recall right before generating, so it's authoritative.
+      let memoryBlock = "";
+      if (usePrior && name.trim()) {
+        const hist = await getEmployeeHistory(uid, name);
+        memoryBlock = summarizeEmployeeHistory(hist);
+      }
+      const user = `TYPE: ${type}\nEMPLOYEE: ${name || "the employee"}\nSITUATION: ${situation}\nDESIRED OUTCOME: ${outcome || "clear agreement and follow-up"}`;
       const r = await callClaudeStream(convoSystem(industry, generation, memoryBlock), user, { onPartial: setResult, max_tokens: 1800 });
       setResult(r);
       setSessionId(await logSession({ userId: uid, tool: "convo", input: { type, name, situation, outcome, generation }, output: r, model: MODEL_SMART }));
       getCoachedEmployees(uid).then(setEmployees); // this employee may be new to the list
     } catch (e) {
+      setResult(null);
       setError(errMessage(e, "Couldn't build the plan. Add detail and try again."));
     } finally {
       setLoading(false);
@@ -1576,7 +1640,7 @@ function ConvoBuilder({ session } = {}) {
                 </button>
               ))}
             </div>
-            <CopyBtn getText={view === "full" ? copyAll : copyQuick} />
+            <CopyBtn getText={view === "full" ? copyAll : copyQuick} disabled={loading} />
           </div>
           {view === "guided" && guidedSteps.length > 0 && (() => {
             const idx = Math.min(step, guidedSteps.length - 1);
@@ -1761,20 +1825,27 @@ function OneOnOnePrep({ session, go }) {
 
   async function tick(id) {
     setTicking(id);
-    if (await markFollowUpDone(uid, id)) setOpen((c) => c.filter((x) => x.id !== id));
-    setTicking(null);
+    // try/finally: a rejected write left the checkmark as a permanent disabled
+    // spinner, and the item could never be ticked off without a reload.
+    try {
+      if (await markFollowUpDone(uid, id)) setOpen((c) => c.filter((x) => x.id !== id));
+    } finally {
+      setTicking(null);
+    }
   }
 
   async function run() {
     if (!name.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null);
-    const hist = ignoreHistory ? [] : await getEmployeeHistory(uid, name, 6);
-    const historyBlock = summarizeEmployeeHistory(hist);
-    const openBlock = ignoreHistory
-      ? ""
-      : open.map((o) => `- ${o.text} (from ${ageLabel(o.createdAt)})`).join("\n");
-    const user = `EMPLOYEE: ${name.trim()}\nANYTHING NEW SINCE LAST TIME: ${note.trim() || "nothing the manager flagged"}`;
+    // Inside the try — see the same fix in the Conversation Builder. An
+    // exception here used to strand the spinner permanently.
     try {
+      const hist = ignoreHistory ? [] : await getEmployeeHistory(uid, name, 6);
+      const historyBlock = summarizeEmployeeHistory(hist);
+      const openBlock = ignoreHistory
+        ? ""
+        : open.map((o) => `- ${o.text} (from ${ageLabel(o.createdAt)})`).join("\n");
+      const user = `EMPLOYEE: ${name.trim()}\nANYTHING NEW SINCE LAST TIME: ${note.trim() || "nothing the manager flagged"}`;
       const r = await callClaudeStream(
         prepSystem(industry, generation, historyBlock, openBlock),
         user,
@@ -1788,6 +1859,7 @@ function OneOnOnePrep({ session, go }) {
         input: { name: name.trim(), note, generation }, output: r, model: MODEL_SMART,
       }));
     } catch (e) {
+      setResult(null);
       setError(errMessage(e, "Couldn't build the prep. Try again."));
     } finally {
       setLoading(false);
@@ -2017,7 +2089,11 @@ function SkillWill({ session } = {}) {
     setLoading(true); setError(""); setResult(null); setSessionId(null);
     const summary = DIAG_QUESTIONS.map((d) => `${d.q} ${answers[d.key]}`).join("\n");
     try {
-      const r = await callClaudeStream(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`, {});
+      // Explicit budget. This ran on the 1000-token default while asking for
+      // eight fields including a 2-3 sentence "why" and a list of coaching
+      // questions — comfortably over on a verbose run, and `followUpInterval` is
+      // last, so truncation kills the closing brace and the whole parse fails.
+      const r = await callClaudeStream(diagSystem(industry), `${summary}\nNotes: ${notes || "none"}`, { max_tokens: 1400 });
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "skill_will", input: { answers, notes }, output: r, model: MODEL_SMART }));
     } catch (e) {
@@ -2180,22 +2256,39 @@ function Roleplay({ session } = {}) {
         (t) => { setHistory([{ role: "assistant", content: t }]); scrollDown(); },
         { model: MODEL_FAST, max_tokens: 350, temperature: 1 });
     } catch (e) {
+      // Back to the setup screen rather than into a chat whose first message is
+      // an empty assistant turn. That placeholder rendered as nothing, so the
+      // manager saw a blank scene — and because the API rejects a message with
+      // empty content, every reply they then typed failed with a DIFFERENT
+      // error. The roleplay was unrecoverable without hitting New.
+      setHistory([]); setStarted(false);
       setError(errMessage(e, "Couldn't start the roleplay. Try again."));
     } finally {
       setLoading(false);
     }
   }
   async function send() {
-    if (!draft.trim()) return;
-    const next = [...history, { role: "user", content: draft.trim() }];
+    // Guarded on `loading` because the textarea's Enter handler calls send()
+    // directly and bypassed the send button's disabled state. Two concurrent
+    // streams each wrote setHistory from their own captured array, so whichever
+    // finished last silently overwrote the other turn.
+    if (loading || !draft.trim()) return;
+    const sent = draft.trim();
+    const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
-    setDraft(""); setLoading(true); scrollDown();
+    setDraft(""); setLoading(true); setError(""); scrollDown();
     const sys = rpSystem(lockedScenario.current, difficulty, lockedIndustry.current, lockedGeneration.current);
     try {
       await streamChat(sys, next,
         (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
     } catch (e) {
+      // Roll the empty assistant placeholder back out of the transcript and give
+      // the manager their line back. Left in place it poisoned every subsequent
+      // turn: the next send shipped a message with empty content, which the API
+      // rejects, so "Try sending again" could never work.
+      setHistory(history);
+      setDraft(sent);
       setError(errMessage(e, "No reply came back. Try sending again."));
     } finally {
       setLoading(false);
@@ -2206,18 +2299,13 @@ function Roleplay({ session } = {}) {
     const transcript = history.map((m) => `${m.role === "user" ? "MANAGER" : "EMPLOYEE"}: ${m.content}`).join("\n");
     const user = `Scenario: ${lockedScenario.current}\n\n${transcript}`;
     try {
-      // Score via the streaming path (keep-alive avoids the buffered-response
-      // gateway timeout) and auto-retry a few times, so a transient hiccup or a
-      // one-off bad-JSON parse doesn't force the manager to hit the button again.
-      let r = null, lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          r = await callClaudeStream(rpScoreSystem(lockedIndustry.current), user, { max_tokens: 1200 });
-          if (r) break;
-        } catch (e) { lastErr = e; }
-        if (attempt < 2) await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
-      }
-      if (!r) throw lastErr || new Error("no score");
+      // The retry ladder now lives inside callClaudeStream, so every tool gets it
+      // instead of just this one. The local loop that used to be here also
+      // retried 401/402/429 — errors a retry can't fix — firing up to six
+      // requests for an out-of-credits manager and delaying the paywall that
+      // was the whole point of the 402.
+      const r = await callClaudeStream(rpScoreSystem(lockedIndustry.current), user, { max_tokens: 1200 });
+      if (!r) throw new Error("no score");
       setScore(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript }, output: r, model: MODEL_SMART }));
       scrollDown();
@@ -2228,7 +2316,10 @@ function Roleplay({ session } = {}) {
     }
   }
   function reset() {
-    setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null);
+    // setLoading(false) included: hitting New mid-stream left loading stuck true,
+    // so the manager landed back on the setup screen with a spinning, disabled
+    // Start button until the abandoned stream finished on its own.
+    setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
   }
   if (!started) {
     return (

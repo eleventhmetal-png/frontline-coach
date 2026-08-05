@@ -95,9 +95,21 @@ export function summarizeEmployeeHistory(sessions) {
       // read on its own terms rather than through one generic mapping.
       const isPrep = s.tool === "prep";
       const type = isPrep ? "1:1" : inp.type || "conversation";
-      const situation = (isPrep ? inp.note : inp.situation || "").trim();
-      const agreed = (isPrep ? out.landOn : out.agreement || out.agreedAction || "").trim();
-      const followUp = (isPrep ? out.afterwards : out.followUpPlan || "").trim();
+      // `text()` instead of a bare .trim(). The old form was
+      // `(isPrep ? inp.note : inp.situation || "").trim()`, and `?:` binds looser
+      // than `||` — so the `|| ""` fallback only ever protected the NON-prep
+      // branch. A prep row missing `input.note`, `output.landOn` or
+      // `output.afterwards` (exactly what a truncated prep writes) threw
+      // "Cannot read properties of undefined (reading 'trim')". Nothing in the
+      // call chain catches it, so the 1:1 Prep button spun forever — its
+      // finally/setLoading(false) never ran — and it failed the same way every
+      // time for that employee. Only reachable since 'prep' joined NAMED_TOOLS
+      // on 28 July. Also coerces non-strings: a stored object would otherwise
+      // reach the prompt as "[object Object]".
+      const text = (v) => (typeof v === "string" ? v : "").trim();
+      const situation = text(isPrep ? inp.note : inp.situation);
+      const agreed = text(isPrep ? out.landOn : out.agreement || out.agreedAction);
+      const followUp = text(isPrep ? out.afterwards : out.followUpPlan);
       // Most of these fields already end in a period, so appending one produced
       // "Friday.." throughout the history block. Cosmetic in isolation, but this
       // string is prompt input — sloppy punctuation is what the model imitates.
@@ -108,7 +120,7 @@ export function summarizeEmployeeHistory(sessions) {
       if (followUp) line += isPrep ? ` Next step: ${end(followUp)}` : ` Follow-up plan was: ${end(followUp)}`;
       // The read carries forward — it's the one field that lets a later prep say
       // "you've thought this about them twice now."
-      if (isPrep && out.readOnThem) line += ` Your read then: ${out.readOnThem}`;
+      if (isPrep && text(out.readOnThem)) line += ` Your read then: ${text(out.readOnThem)}`;
       return line;
     })
     .join("\n");

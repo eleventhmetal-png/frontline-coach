@@ -112,13 +112,21 @@ export async function getUsageSummary(userId, days = 30) {
       .select("tool, created_at")
       .eq("user_id", userId)
       .gte("created_at", since)
+      // Ordered. Without it PostgREST returned an ARBITRARY 500-row subset, so
+      // `firstAt` was the minimum of a random slice — the card said "since 12
+      // July" when the real answer was 28 June — and `total` silently capped at
+      // 500 with no indication it had been truncated.
+      .order("created_at", { ascending: true })
       .limit(500);
     if (error || !data) return null;
 
     const counts = { plans: 0, roleplays: 0, records: 0, quick: 0 };
     for (const row of data) {
-      const b = BUCKET[row.tool];
-      if (b) counts[b] += 1;
+      // hasOwn, not a bare lookup. `BUCKET["constructor"]` resolved up the
+      // prototype chain to a truthy function, which then wrote a junk key with a
+      // NaN value into `counts` — no throw, just a corrupted breakdown.
+      if (!Object.prototype.hasOwnProperty.call(BUCKET, row.tool)) continue;
+      counts[BUCKET[row.tool]] += 1;
     }
     const total = data.length;
     // First session in the window, so the card can say "since 28 June" rather

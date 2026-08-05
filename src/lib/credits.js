@@ -69,6 +69,10 @@ export function estimateInputTokens({ system, messages }) {
 }
 
 export function pointsForUsd(usd) {
+  // Number.isFinite guard: Math.max(1, Math.ceil(NaN)) is NaN, not 1, and
+  // JSON.stringify turns NaN into null — so a NaN cost reached consume_credits as
+  // a null argument and shipped `X-Credits-Cost: NaN` to the browser.
+  if (!Number.isFinite(usd)) return 1;
   return Math.max(1, Math.ceil(usd / USD_PER_POINT));
 }
 
