@@ -22,16 +22,28 @@ const KEY = "fc_whatsnew_seen";
 
 // Bump this to announce the next release. The value is what gets written to
 // localStorage, so changing it is what makes a new card appear for everyone.
-export const CURRENT = "leading-up-2026-08";
+//
+// CURRENTLY DISABLED (empty string). The card shipped ahead of the feature it
+// announces on 11 Aug 2026 — its CTA would have dropped people onto a Practice
+// screen with no boss toggle. An empty CURRENT finds no entry in RELEASES, so
+// shouldShow() returns false and nothing renders.
+//
+// TO TURN IT ON when the leading-up feature actually lands: set this to
+// "leading-up-live" and move RELEASE_DATE to that deploy date. The key is
+// deliberately NOT the original "leading-up-2026-08" — anyone who saw the card
+// during the window it was live has that older value sitting in localStorage,
+// and reusing it would hide the real announcement from exactly the people who
+// already got the broken one.
+export const CURRENT = "";
 
 // Accounts created ON OR AFTER this date never see the card. Someone who signed
 // up yesterday doesn't need "what's new" — the whole app is new to them, and an
 // announcement about a feature they never lived without reads as noise.
-// SET THIS TO THE ACTUAL DEPLOY DATE. If the deploy slips, move it.
+// SET THIS TO THE ACTUAL DEPLOY DATE OF THE FEATURE, not of this file.
 const RELEASE_DATE = "2026-08-11";
 
 export const RELEASES = {
-  "leading-up-2026-08": {
+  "leading-up-live": {
     title: "Now it points up, too",
     lede: "Every tool in here was built for the conversations you have with your team. You can run the ones that go the other way now.",
     bullets: [
