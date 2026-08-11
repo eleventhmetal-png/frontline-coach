@@ -14,6 +14,7 @@ import {
   getOpenFollowUps, getOpenFollowUpCount, getOpenFollowUpsFor, markFollowUpDone,
   ageLabel, isStale,
 } from "./lib/followups";
+import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
 
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
@@ -2239,6 +2240,12 @@ function Roleplay({ session } = {}) {
   const lockedScenario = useRef(RP_SCENARIOS[0]); // exact text sent to the model
   const lockedTitle = useRef(RP_SCENARIOS[0]);    // what the active view shows
   const lockedGeneration = useRef("");            // employee's generation, locked at start
+  // Difficulty was the one setup value NOT locked — both rpSystem() calls read
+  // live `difficulty` state, so sliding it from Easy to Hard mid-roleplay
+  // rewrote the system prompt under an in-flight conversation. The employee's
+  // character changed between turns and the header lied about what you'd been
+  // practicing against. Locked at start like everything else.
+  const lockedDifficulty = useRef("Realistic");
   function scrollDown() {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
@@ -2253,7 +2260,8 @@ function Roleplay({ session } = {}) {
     lockedScenario.current = chosen || scenario;
     lockedTitle.current = chosen ? "Your scenario" : scenario;
     lockedGeneration.current = generation;
-    const sys = rpSystem(lockedScenario.current, difficulty, lockedIndustry.current, lockedGeneration.current);
+    lockedDifficulty.current = difficulty;
+    const sys = rpSystem(lockedScenario.current, lockedDifficulty.current, lockedIndustry.current, lockedGeneration.current);
     setLoading(true); setError(""); setScore(null);
     setHistory([{ role: "assistant", content: "" }]);
     setStarted(true);
@@ -2284,7 +2292,7 @@ function Roleplay({ session } = {}) {
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
     setDraft(""); setLoading(true); setError(""); scrollDown();
-    const sys = rpSystem(lockedScenario.current, difficulty, lockedIndustry.current, lockedGeneration.current);
+    const sys = rpSystem(lockedScenario.current, lockedDifficulty.current, lockedIndustry.current, lockedGeneration.current);
     try {
       await streamChat(sys, next,
         (t) => { setHistory([...next, { role: "assistant", content: t }]); scrollDown(); },
@@ -2400,7 +2408,7 @@ function Roleplay({ session } = {}) {
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="font-bold text-neutral-100">{lockedTitle.current}</div>
-          <div className="text-xs text-neutral-500">{difficulty} · employee is AI</div>
+          <div className="text-xs text-neutral-500">{lockedDifficulty.current} · employee is AI</div>
         </div>
         <button onClick={reset} className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100">
           <RotateCcw size={14} /> New
@@ -3083,6 +3091,74 @@ function truncateToSentence(text, maxLen = 130) {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen).trim() + "…";
 }
+// =====================================================
+// WHAT'S NEW — one-time release card on Home
+// =====================================================
+// Deliberately NOT a modal. A manager opens this app because something is
+// happening on the floor right now; blocking that with an announcement is the
+// wrong trade even for a feature worth announcing. A card that converts —
+// straight into the thing it's describing — beats a dialog that interrupts.
+// State lives in the component so dismissing it removes it immediately without
+// a Home re-fetch. See src/lib/whatsNew.js for the versioning.
+function WhatsNew({ go, session }) {
+  const [show, setShow] = useState(() => shouldShowWhatsNew(session));
+  const rel = currentRelease();
+  if (!show || !rel) return null;
+  function close() {
+    markWhatsNewSeen();
+    setShow(false);
+  }
+  return (
+    <div className="mb-5 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex items-start gap-2 mb-2">
+        <Sparkles size={16} style={{ color: ACCENT }} className="mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="text-[9px] font-bold uppercase tracking-[0.14em] rounded-full px-2 py-0.5"
+              style={{ color: ACCENT, border: `1px solid ${ACCENT}66` }}
+            >
+              New
+            </span>
+            <span className="font-bold text-neutral-100">{rel.title}</span>
+          </div>
+        </div>
+        <button
+          onClick={close}
+          aria-label="Dismiss"
+          className="text-neutral-600 hover:text-neutral-300 shrink-0 -mt-0.5"
+        >
+          <X size={16} />
+        </button>
+      </div>
+      <p className="text-[13.5px] text-neutral-400 leading-relaxed">{rel.lede}</p>
+      <ul className="mt-2.5 space-y-1.5">
+        {rel.bullets.map((b) => (
+          <li key={b} className="flex gap-2 text-[13px] text-neutral-300 leading-snug">
+            <span style={{ color: ACCENT }} className="shrink-0">·</span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+      {rel.footer && <p className="text-[12px] text-neutral-500 mt-2.5">{rel.footer}</p>}
+      <div className="flex items-center gap-2 mt-3.5">
+        <button
+          onClick={() => { close(); go(rel.ctaView); }}
+          className="rounded-lg px-4 py-2 text-[13px] font-bold text-neutral-950"
+          style={{ backgroundColor: ACCENT }}
+        >
+          {rel.ctaLabel}
+        </button>
+        <button
+          onClick={close}
+          className="rounded-lg px-3 py-2 text-[13px] font-semibold text-neutral-500 hover:text-neutral-300"
+        >
+          Later
+        </button>
+      </div>
+    </div>
+  );
+}
 function HomeView({ go, session } = {}) {
   const [lastTool, setLastTool] = useState(null);
   const [followUp, setFollowUp] = useState(null);
@@ -3130,6 +3206,7 @@ function HomeView({ go, session } = {}) {
         </div>
         <div className="text-xl font-bold text-neutral-50 mt-1">{today}</div>
       </div>
+      <WhatsNew go={go} session={session} />
       <button
         onClick={() => setBriefOpen((v) => !v)}
         className="w-full text-left mb-5 pb-4 border-b border-neutral-800"
