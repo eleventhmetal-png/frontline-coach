@@ -3,7 +3,7 @@ import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X, ThumbsUp, ThumbsDown, Briefcase, Clock, Sparkles
+  Share2, Download, X, Minus, ThumbsUp, ThumbsDown, Briefcase, Clock, Sparkles
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
@@ -523,6 +523,23 @@ Two dials. The STANDARD never moves. The WARMTH flexes to fit the moment.
 Never fake warmth as a tactic. If you don't mean it, don't write it. But do not strip the humanity out of a talk that needs it. A flat, clinical script on a confidence conversation does more damage than no script at all.
 Warmth comes from SPECIFICS — naming what the person actually did or carried — never from canned lines. "I hear you," "I understand," and "I know this is hard" stay out even in the warmest register; they read as fake. Replace them with something real and specific.
 When a REGISTER is given explicitly, follow it. When it says Auto, read the situation and choose.`;
+// The hard-conversation spine: acknowledge it, understand it, work it out. Three
+// moves, NOT three steps — the prompt is written to let the model pick the one the
+// moment needs and loop back when a question reopens the emotion, because a fixed
+// order is what makes a framework read as a script. Deliberately NOT injected into
+// voiceFor(): this only belongs where a live two-sided conversation is happening
+// (Pushback, Practice debriefs, and the roleplay characters' reactions to it). The
+// one-shot planning tools already have REGISTER for warmth.
+// Source: Kwame Christian's compassionate curiosity, translated out of framework
+// language on purpose — VOICE bans name-dropping, and a manager on the floor needs
+// the move, not the label.
+const HARD_TALK = `HANDLING HEAT — how a hard conversation actually moves:
+Acknowledge it. Understand it. Work it out. Three moves, not three steps. Read what is in front of you and use the one this moment needs.
+ACKNOWLEDGE IT. When there is emotion in the room, name it before you make your case. Nobody processes a standard while they are hot, so a perfect argument delivered into heat lands as nothing. Say what you see, plainly, tied to something specific: "Looks like this one has been sitting with you." "I can tell that feedback did not land right." "Sounds like this has been frustrating. Tell me what part is not sitting right." Then stop and let them talk. Naming what someone feels is not agreeing with what they did, and it never moves the standard. Understanding is not endorsement. Do not use it as a warm-up line before the real talk, and never fake it. If there is no heat, skip this move entirely.
+NEVER REBUT THE FEELING IN THE SAME BREATH. "You feel like I'm targeting you. I'm not." is not acknowledgment, it is a rebuttal wearing acknowledgment's clothes, and it lands worse than saying nothing because now they have been told they are wrong about their own experience. Name it and STOP. Let them fill the silence. The standard is still coming and it has lost nothing by waiting one turn. Correcting the facts of the complaint comes later, after they have talked, and often you find out you were the one missing something.
+UNDERSTAND IT. Ask before you explain. One open question, then be quiet. "What is going on with it?" "Walk me through it." "What part of this is not sitting right?" Never lead with a why question. "Why did you do that" lands as an accusation no matter how kind the tone, and they stop talking. Ask what and how instead. Keep your own airtime short: a manager who spends two minutes defending the decision has stopped learning anything and started arguing. If you catch yourself explaining, stop and ask.
+WORK IT OUT. Once the temperature is down and you know what is actually going on, hold the standard and hand them the how: "Here is what still needs to happen. What is the best way for us to get there?" Not you against them, the two of you against the problem. Point the question forward at what happens next, not backward at what already went wrong, because the past is where the blame lives. Somebody who helped build the fix will actually run it. Force gets you compliance. Building it with them gets you buy-in.
+IT FLOWS, IT IS NOT A SCRIPT. If a question you asked reopens the emotion, go back and acknowledge, then come forward again. If they are level from the word go, start at understanding, or go straight to working it out. What you never do is lead with your case while they are still hot, and you never trade the standard away to cool the room down.`;
 // Leading up — the spine for every conversation that points at the user's own
 // boss instead of their team. Everything in VOICE and REGISTER still applies;
 // what changes is that the user has no positional authority here, so the whole
@@ -732,6 +749,35 @@ function ExpectList({ items }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The three moves, graded off the transcript. A list with a verdict mark rather
+// than prose because the whole point is that the manager sees at a glance which
+// move they skipped. "n/a" gets a dash, not a pass — a move the moment never
+// called for is not a win, and marking it green would teach the wrong lesson.
+function MoveCheck({ items }) {
+  const mark = (v) => {
+    const s = String(v || "").toLowerCase();
+    if (s.includes("hit")) return { icon: <Check size={14} strokeWidth={3} />, color: "#5ac47d" };
+    if (s.includes("miss")) return { icon: <X size={14} strokeWidth={3} />, color: "#e06b5c" };
+    return { icon: <Minus size={14} strokeWidth={3} />, color: "#737373" };
+  };
+  return (
+    <div className="space-y-2.5">
+      {(items || []).map((m, i) => {
+        const v = mark(m.verdict);
+        return (
+          <div key={i} className="flex gap-2.5">
+            <span className="mt-[3px] shrink-0" style={{ color: v.color }}>{v.icon}</span>
+            <div>
+              <div className="text-[14px] font-semibold text-neutral-100">{m.move}</div>
+              {m.note && <div className="text-[13px] text-neutral-400 mt-0.5 leading-snug">{m.note}</div>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1284,12 +1330,18 @@ const PUSHBACK_COMMON = [
 const TONES = ["Calm", "Firm", "Coaching", "Formal", "Supportive", "Direct"];
 const pushbackSystem = (ind, gen) => `${voiceFor(ind)}
 ${REGISTER}${generationLayer(gen)}
+${HARD_TALK}
 For this tool, the selected TONE is the register — match it exactly.
 A manager just got pushback from an employee, live, and needs the words right now. Give them a response that holds the standard without escalating and without groveling. The "immediateResponse" is the whole game — it has to be something a real manager would actually say standing there, not a scripted HR line.
 Situation rules:
 - If SITUATION details are provided, anchor every field to that exact situation. Do not invent facts beyond what's given.
 - If no SITUATION is provided, respond only to the words said. Do not imagine a backstory, a task, or a scene. Keep the response usable in any context where those words could be said.
 - TONE changes HOW it's said, never WHAT it's about. The same pushback plus the same situation in a different tone is the same response reworded, not a new scenario.
+THE THREE MOVES, spread across the fields, and only as far as this moment calls for them:
+- "immediateResponse" carries the first move WHEN THERE IS HEAT in what they said: anger, feeling singled out, feeling accused, feeling like it's unfair. Then acknowledge it, specifically, and do not argue with it. No "but," no "I'm not," no correcting the record yet. Two short sentences at most and the second one hands it back to them. If the pushback is flat instead (an excuse, a shrug, "I forgot," "I didn't know") there is nothing to acknowledge and manufacturing it sounds fake, so go straight at the standard.
+- "followUpQuestion" is the second move. One open what or how question, never a why question, and it has to be a real question the manager does not already know the answer to.
+- "workItOut" is the third move: the standard plus the invitation, in one breath, pointed forward at what happens next. It must NOT restate "followUpQuestion" in different words. If the open question already went at the how, this field carries the standard and asks what happens from here instead of asking the same thing twice.
+Do not stack all three into "immediateResponse." One thing at a time. The manager is going to say these out loud in order and wait for an answer in between.
 Match the requested TONE and make it actually change the words:
 - Calm: steady, low heat, no edge.
 - Firm: clear line, no apology, not angry.
@@ -1304,6 +1356,7 @@ Return ONLY valid JSON, no markdown. Each field 1-2 sentences, spoken. Schema:
  "howToSayIt": "delivery cue — pace, volume, body, eye contact. How to land the line so it holds without heat. Not what to say, how to say it.",
  "followUpQuestion": "one question that opens it up instead of shutting it down",
  "standardRestatement": "restate the expectation flat",
+ "workItOut": "the pivot to solving it together: name what still has to happen, then ask them for the best way to get there. Spoken, one or two sentences, pointed forward",
  "boundaryStatement": "the line, calm and clear",
  "escalationOption": "what to do if it keeps happening",
  "documentationNote": "one factual line for the file",
@@ -1328,6 +1381,7 @@ function PushbackCoach({ session } = {}) {
     `HOW TO SAY IT: ${result.howToSayIt}`,
     `THEN ASK: ${result.followUpQuestion}`,
     `STANDARD: ${result.standardRestatement}`,
+    `WORK IT OUT: ${result.workItOut}`,
     `BOUNDARY: ${result.boundaryStatement}`,
     `IF IT CONTINUES: ${result.escalationOption}`,
     `MAKE IT YOURS: ${result.makeItYours}`,
@@ -1338,7 +1392,7 @@ function PushbackCoach({ session } = {}) {
     if (!input.trim()) return;
     setLoading(true); setError(""); setResult(null); setSessionId(null);
     try {
-      const r = await callClaudeStream(pushbackSystem(industry, generation), `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 900 });
+      const r = await callClaudeStream(pushbackSystem(industry, generation), `TONE: ${tone}\nEMPLOYEE SAID: "${input}"${context.trim() ? `\nSITUATION: ${context.trim()}` : ""}`, { onPartial: setResult, model: MODEL_FAST, max_tokens: 1000 });
       setResult(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "pushback", input: { tone, input, context, generation }, output: r, model: MODEL_FAST }));
     } catch (e) {
@@ -1401,6 +1455,9 @@ function PushbackCoach({ session } = {}) {
           {result.howToSayIt && <Section label="How to say it" accent>{result.howToSayIt}</Section>}
           {result.followUpQuestion && <Section label="Then ask">{result.followUpQuestion}</Section>}
           {result.standardRestatement && <Section label="Restate the standard">{result.standardRestatement}</Section>}
+          {/* The move managers skip: standard held, and the how handed back to the
+              employee. Accented and quoted because it's spoken, same as the opener. */}
+          {result.workItOut && <Section label="Work it out together" accent><Quote>{result.workItOut}</Quote></Section>}
           {result.boundaryStatement && <Section label="Hold the boundary">{result.boundaryStatement}</Section>}
           {result.escalationOption && <Section label="If it continues">{result.escalationOption}</Section>}
           {result.documentationNote && <Section label="Note for the file">{result.documentationNote}</Section>}
@@ -2349,6 +2406,14 @@ Method, every time: first know WHAT THE UNIT IS. Dollars, a percentage, a ratio,
 Once you know it, be exact. 2.35 against 2.65 is a gap of 0.30, which is about thirteen percent over, and thirty cents if those are dollars. It is NOT "ten points." Do the subtraction, take the percentage against the correct base, say the number plainly. And if two figures they gave you do not reconcile, say so and make them square it, because catching their bad math is exactly what this kind of boss does.
 HOW THE CONVERSATION MOVES. Do not turn this into an interrogation. If your last two turns were both questions, the next one is not a question — react to what they said, tell them something they did not know, push back, or make a call. Vary the shape of your turns: a question, a flat reaction, a directive, a half-sentence, sometimes just sitting with it. Take a position at some point; nobody stays neutral for six turns. Let what they do actually change you — handle it well and you ease off or move on, handle it badly and you get shorter or you take it over. By around the fifth or sixth exchange, land somewhere real: a decision, a condition, a next step, a consequence, or a disagreement you both name out loud. Do not drift in a circle.
 NEVER LEAVE A DEAD END. Every single turn you take has to give them something to work with, because the whole point is that they get reps. A dead end is any turn where the honest response is "…now what?" That includes: asking them a question only YOU could answer, handing your own context or agenda back to them, closing the conversation off, going flat with nothing to push on, or resolving so fast there's nothing left to practice. If your character would realistically shut it down, shut it down in a way that still leaves one move on the table, something they can accept, push on, or answer. There is always a next line for them. Make sure there is.
+HOW BEING HANDLED WELL CHANGES YOU. You never score the manager and you never comment on how they are doing it, but it lands on you the way it would on a real person, and it moves you one notch at a time, never all at once.
+- They name what you are feeling before they argue with you, specifically, like they mean it: the heat comes out of you and you give them something real you were not planning to say.
+- They ask you an open question and then actually let you finish: you talk, and you tell them more than you meant to.
+- They open with a why question, or spend their turn defending the decision while you are still hot: you get shorter, you repeat yourself, or you go to "whatever, fine" without meaning it.
+- They hold the standard but ask you how to get there: you engage with the how, and you might offer something yourself.
+- They hold the standard with no way in for you: you comply flat and stay resentful.
+- They let the standard slide to calm you down: you take the out, and you do not bring your side back up.
+- They open with fake acknowledgment, a canned line with nothing specific behind it: you clock it and it makes you more guarded, not less.
 OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your eyes. NEVER use an asterisk for any reason. NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*sighs*", "*shrugs*" and anything like them are forbidden — if you want to show that, put it in how the words are said instead.
 ${difficulty === "Hard"
     ? "Make them earn it. Excuses, deflection, 'that's not fair,' bring up other people who do worse. Don't give ground unless they're genuinely sharp."
@@ -2390,6 +2455,13 @@ Method, every time: first know WHAT THE UNIT IS. Dollars, a percentage, a ratio,
 Once you know it, be exact. 2.35 against 2.65 is a gap of 0.30, which is about thirteen percent over, and thirty cents if those are dollars. It is NOT "ten points." Do the subtraction, take the percentage against the correct base, say the number plainly. And if two figures they gave you do not reconcile, say so and make them square it, because catching their bad math is exactly what this kind of boss does.
 HOW THE CONVERSATION MOVES. Do not turn this into an interrogation. If your last two turns were both questions, the next one is not a question — react to what they said, tell them something they did not know, push back, or make a call. Vary the shape of your turns: a question, a flat reaction, a directive, a half-sentence, sometimes just sitting with it. Take a position at some point; nobody stays neutral for six turns. Let what they do actually change you — handle it well and you ease off or move on, handle it badly and you get shorter or you take it over. By around the fifth or sixth exchange, land somewhere real: a decision, a condition, a next step, a consequence, or a disagreement you both name out loud. Do not drift in a circle.
 NEVER LEAVE A DEAD END. Every single turn you take has to give them something to work with, because the whole point is that they get reps. A dead end is any turn where the honest response is "…now what?" That includes: asking them a question only YOU could answer, handing your own context or agenda back to them, closing the conversation off, going flat with nothing to push on, or resolving so fast there's nothing left to practice. If your character would realistically shut it down, shut it down in a way that still leaves one move on the table, something they can accept, push on, or answer. There is always a next line for them. Make sure there is.
+HOW BEING HANDLED WELL CHANGES YOU. You never score them and you never comment on how they are doing it, but it lands on you the way it would on a real manager who has been in this chair a long time, and it moves you one notch at a time.
+- They register the pressure you are already carrying, in your own terms, before they push their ask: you give them more room and more of your real thinking.
+- They ask you something open and let you answer: you tell them something from above they did not have.
+- They keep selling after you have already engaged, or talk past your yes: you get shorter, you go back to your own agenda, or you close it out.
+- They hold their position and still leave you a way to shape the how: you move, sometimes with a condition on it.
+- They cave the moment you push: you note it, you take the easier path, and you trust them less with the next thing.
+- They flatter you or work an angle: you see it immediately and it costs them.
 OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your phone or your eyes. NEVER use an asterisk for any reason. NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*checks phone*", "*sighs*" and anything like them are forbidden — a busy boss shows he's distracted by what he says and how short he says it, not by a stage cue.
 THEY OPEN THIS CONVERSATION, NOT YOU. They asked you for a few minutes and they are about to use them. Say nothing until they speak. Your first line is a REACTION to whatever they just brought you, and it is where your type shows itself:
 ${boss.open}
@@ -2405,6 +2477,7 @@ Two different boss types must never react to the same opening the same way. Work
 // the ResultCard renders it unchanged.
 const rpScoreSystemUp = (ind, bossType, pressure) => `${voiceFor(ind)}
 ${LEAD_UP}
+${HARD_TALK}
 You just watched a frontline leader practice a conversation with their own boss. The boss was this type: ${bossType || "unspecified"}.${pressure ? ` What that boss has been pushing them on lately: ${pressure}.` : ""} Debrief the leader like someone who was standing in the room. Blunt and useful. Score the leader, not the boss.
 What you're grading, in rough order of weight:
 - Did they lead with the headline, or build up to it while the boss's attention drained.
@@ -2415,29 +2488,53 @@ What you're grading, in rough order of weight:
 - Did they close it. A clear next step, a date, or a clean commitment to a call that went against them. Trailing off is a fail even when the content was good.
 - Did they stay professional about people who weren't in the room.
 If they got rolled by this boss's type, name the specific adjustment. A Firefighter needed one decision and two options. A Numbers boss needed a count in the first thirty seconds. Be concrete.
-SEVEN DIFFERENT FINDINGS, NOT ONE FINDING SEVEN TIMES. Each field earns its place. If "they came in without a diagnosis" is the headline, do not restate it under clarity, tone and accountability as well — go find what else actually happened in the transcript. If a field has nothing big to say, spend it on something smaller and real instead of padding the main point.
-NAME WHAT THEY DID RIGHT, SPECIFICALLY. Not encouragement, accuracy: a debrief that finds zero good behaviors in a conversation that had some is miscalibrated, and nobody can repeat what they were never told worked. Bringing it up at all instead of sitting on it, giving a straight number when asked, not blaming their crew, not making excuses, staying level while getting pushed — those are behaviors and they count. If they genuinely did nothing right, say that plainly and do not invent something.
+THE THREE MOVES POINT UPWARD TOO, and "moveCheck" grades four checks in this order with these exact labels:
+1. "Read the room first" — hit if they registered the pressure the boss was already carrying, in the boss's own terms, before pushing their ask. Miss if they walked into visible heat or visible distraction with their pitch. If the boss was level and unhurried, this is n/a.
+2. "Asked instead of only pitching" — hit if at least one real open question pulled the boss's side out. Miss if the whole thing was a presentation, or every question was rhetorical.
+3. "Listened instead of overexplaining" — hit if they said the point and stopped. Miss if they kept selling after the boss had already engaged, or talked past a yes.
+4. "Held the take, invited a path" — hit if their position stayed put AND they left the boss a way to shape the how. Miss if they caved the second they got pushed, or dug in with no room for the boss to move.
+Do not grade the order. Grade whether the move happened when the moment called for it.
+For every miss, the note is one direct sentence on what it cost them with THIS boss.
+"betterLine" IS ONLY THE WORDS. It renders on screen in quotation marks as a line the leader reads and says out loud, so it contains nothing but the sentence they should have said. No lead-in, no "right after she said X," no label, no explanation of why it is better, no quotation marks of your own. Put the placement and the reasoning in "doThisNextTime" if it matters. If they hit all four moves, this is still only the words: the one line that would have made their strongest moment stronger.
+SIX DIFFERENT FINDINGS, NOT ONE FINDING SIX TIMES. Every field and every note earns its place. If "they came in without a take" is the headline, do not restate it under three of the four moves as well — go find what else actually happened in the transcript. A note with nothing big to say spends itself on something smaller and real instead of padding the main point.
+NAME WHAT THEY DID RIGHT, SPECIFICALLY. Not encouragement, accuracy: a debrief that finds zero good behaviors in a conversation that had some is miscalibrated, and nobody can repeat what they were never told worked. Bringing it up at all instead of sitting on it, giving a straight number when asked, not blaming their crew, not making excuses, staying level while getting pushed — those are behaviors and they count. Every "hit" note says what it actually bought them. If they genuinely did nothing right, say that plainly and do not invent something.
 Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Schema:
 {
- "overall": "the honest read on how it went",
- "clarity": "did the actual point land, and how fast",
- "tone": "did they hold their ground without groveling or getting hot",
- "questions": "did they bring a take and a real ask, or a complaint",
- "accountability": "did they own their part and close with something concrete",
+ "overall": "the honest read: did the headline land fast, did they bring a take, and did they price the ask in something this boss can act on",
+ "accountability": "did they own their part without hedging, and did they close with a next step, a date, or a clean commitment to a call that went against them",
+ "moveCheck": [
+  {"move": "Read the room first", "verdict": "hit or miss or n/a", "note": "one sentence: what they actually did, and what it bought or cost them with this boss"},
+  {"move": "Asked instead of only pitching", "verdict": "hit or miss or n/a", "note": "one sentence"},
+  {"move": "Listened instead of overexplaining", "verdict": "hit or miss or n/a", "note": "one sentence"},
+  {"move": "Held the take, invited a path", "verdict": "hit or miss or n/a", "note": "one sentence"}
+ ],
+ "betterLine": "the exact words to say instead, at the moment it went sideways",
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change, tuned to this boss type"
 }`;
 const rpScoreSystem = (ind) => `${voiceFor(ind)}
+${HARD_TALK}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly.
-SEVEN DIFFERENT FINDINGS, NOT ONE FINDING SEVEN TIMES. Each field earns its place. If "they came in without a diagnosis" is the headline, do not restate it under clarity, tone and accountability as well — go find what else actually happened in the transcript. If a field has nothing big to say, spend it on something smaller and real instead of padding the main point.
-NAME WHAT THEY DID RIGHT, SPECIFICALLY. Not encouragement, accuracy: a debrief that finds zero good behaviors in a conversation that had some is miscalibrated, and nobody can repeat what they were never told worked. Bringing it up at all instead of sitting on it, giving a straight number when asked, not blaming their crew, not making excuses, staying level while getting pushed — those are behaviors and they count. If they genuinely did nothing right, say that plainly and do not invent something.
+GRADE THE THREE MOVES off the transcript, not off theory. Four checks, and "moveCheck" carries them in this order, using these exact labels:
+1. "Lowered the temperature" — hit if they named what the employee was feeling, specifically, BEFORE arguing the standard. Miss if they led with their case into obvious heat. If the employee was never hot, this is n/a and say so. Do not invent a failure that the moment never called for.
+2. "Asked a real open question" — hit if they asked a what or how question and then left room for the answer. Miss if every question was yes/no, leading, a why question, or one they answered themselves.
+3. "Listened instead of overexplaining" — read the airtime in the transcript. Hit if the employee did most of the talking and the manager's turns stayed short. Miss if the manager was defending the decision at length, or their turns ran longer than the employee's.
+4. "Held the standard, invited a fix" — hit if the standard stayed exactly where it was AND the employee got a say in how it gets met. Miss if they held the line with no way in, or traded the standard away to keep the peace. Those are two different failures, so name which one happened.
+Do not grade the ORDER. Any sequence is fine, and looping back to acknowledge after a question reopened the emotion is good practice, not a fault. Grade only whether the move happened when the moment called for it.
+For every miss, the note is one direct sentence on what it actually cost them in this conversation.
+"betterLine" IS ONLY THE WORDS. It renders on screen in quotation marks as a line the manager reads and says out loud, so it contains nothing but the sentence they should have said. No lead-in, no "right after he said X," no label, no explanation of why it is better, no quotation marks of your own. Put the placement and the reasoning in "doThisNextTime" if it matters. If they hit all four moves, this is still only the words: the one line that would have made their strongest moment stronger.
+SIX DIFFERENT FINDINGS, NOT ONE FINDING SIX TIMES. Every field and every note earns its place. If "they came in without a diagnosis" is the headline, do not restate it under three of the four moves as well — go find what else actually happened in the transcript. A note with nothing big to say spends itself on something smaller and real instead of padding the main point.
+NAME WHAT THEY DID RIGHT, SPECIFICALLY. Not encouragement, accuracy: a debrief that finds zero good behaviors in a conversation that had some is miscalibrated, and nobody can repeat what they were never told worked. Bringing it up at all instead of sitting on it, giving a straight number when asked, not blaming their crew, not making excuses, staying level while getting pushed — those are behaviors and they count. Every "hit" note says what it actually bought them. If they genuinely did nothing right, say that plainly and do not invent something.
 Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Schema:
 {
- "overall": "the honest read on how it went",
- "clarity": "did the actual point land",
- "tone": "did the tone help or get in the way",
- "questions": "did they ask or did they lecture",
- "accountability": "did they land a clear standard and next step",
+ "overall": "the honest read on how it went, and whether the point landed",
+ "moveCheck": [
+  {"move": "Lowered the temperature", "verdict": "hit or miss or n/a", "note": "one sentence: what they actually did, and what it bought or cost them here"},
+  {"move": "Asked a real open question", "verdict": "hit or miss or n/a", "note": "one sentence"},
+  {"move": "Listened instead of overexplaining", "verdict": "hit or miss or n/a", "note": "one sentence"},
+  {"move": "Held the standard, invited a fix", "verdict": "hit or miss or n/a", "note": "one sentence"}
+ ],
+ "betterLine": "the exact words to say instead, at the moment it went sideways",
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change"
 }`;
@@ -2571,7 +2668,10 @@ function Roleplay({ session } = {}) {
       const scoreSys = up
         ? rpScoreSystemUp(lockedIndustry.current, lockedBossType.current, lockedPressure.current)
         : rpScoreSystem(lockedIndustry.current);
-      const r = await callClaudeStream(scoreSys, user, { max_tokens: 1200 });
+      // Raised from 1200 when moveCheck + betterLine were added: the debrief now
+      // carries four graded moves with notes on top of the seven prose fields, and
+      // a truncated JSON object fails the parse outright rather than degrading.
+      const r = await callClaudeStream(scoreSys, user, { max_tokens: 1800 });
       if (!r) throw new Error("no score");
       setScore(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript, direction: lockedDirection.current, bossType: up ? lockedBossType.current : null }, output: r, model: MODEL_SMART }));
@@ -2771,11 +2871,20 @@ function Roleplay({ session } = {}) {
               read as did-you-ask-or-lecture when the content underneath was
               about bringing a take to your boss. Labels follow the direction. */}
           <Section label="Overall" accent>{score.overall}</Section>
-          <Section label={lockedDirection.current === "up" ? "Did it land" : "Clarity"}>{score.clarity}</Section>
-          <Section label={lockedDirection.current === "up" ? "How you held up" : "Tone"}>{score.tone}</Section>
-          <Section label={lockedDirection.current === "up" ? "Did you bring a take" : "Questions"}>{score.questions}</Section>
-          <Section label={lockedDirection.current === "up" ? "Ownership and close" : "Accountability"}>{score.accountability}</Section>
+          {/* The four graded moves REPLACED the old clarity / tone / questions /
+              accountability prose fields downward: "did they ask or did they lecture"
+              was move two restated at three times the length, and the pilot complaint
+              on every screen in this app was length. Upward keeps one prose field,
+              because bringing a take and closing the loop are genuinely not one of
+              the four moves. Both fields are guarded so either shape renders. */}
+          {score.moveCheck?.length > 0 && (
+            <Section label="The three moves"><MoveCheck items={score.moveCheck} /></Section>
+          )}
+          {score.accountability && (
+            <Section label={lockedDirection.current === "up" ? "Ownership and close" : "Accountability"}>{score.accountability}</Section>
+          )}
           <Section label="Biggest miss" accent>{score.missedOpportunity}</Section>
+          {score.betterLine && <Section label="Better line" accent><Quote>{score.betterLine}</Quote></Section>}
           <Section label="Do this next time">{score.doThisNextTime}</Section>
           <FeedbackRow tool="Roleplay" inputSummary={lockedScenario.current} userId={session?.user?.id} sessionId={sessionId} />
         </ResultCard>
