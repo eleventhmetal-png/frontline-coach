@@ -1123,6 +1123,11 @@ function AICoach({ session } = {}) {
   const [share, setShare] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [memory, setMemory] = useState(null);
+  // Default to the condensed card. The GM pilot's near-unanimous complaint was
+  // that the full plan is too long to read live without losing eye contact.
+  // The card names the full plan in its own helper line, so depth stays
+  // discoverable from here; a wall of text never advertises a card.
+  const [view, setView] = useState("quick");
   useEffect(() => {
     let alive = true;
     getLatestMemory(session?.user?.id).then((m) => { if (alive) setMemory(m); });
@@ -1130,7 +1135,7 @@ function AICoach({ session } = {}) {
   }, [session?.user?.id]);
   async function run() {
     if (!input.trim()) return;
-    setLoading(true); setError(""); setResult(null); setSessionId(null);
+    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("quick");
     try {
       const r = await callClaudeStream(coachSystem(industry, generation, memory), `REGISTER: Auto\n\nSITUATION:\n${input}`, { onPartial: setResult, max_tokens: 2500 });
       setResult(r);
@@ -1148,6 +1153,14 @@ function AICoach({ session } = {}) {
       setLoading(false);
     }
   }
+  const copyQuick = () => result ? [
+    `WHAT YOU OWN\n${result.whatYouOwn}`,
+    `THE STANDARD\n${result.theStandard}`,
+    `WHAT TO SAY\n${result.whatToSay}`,
+    `ASK\n- ${(result.questionsToAsk||[]).slice(0,2).join("\n- ")}`,
+    `FOLLOW-UP\n${result.followUp}`,
+    `PRINCIPLE: ${result.leadershipPrinciple}`,
+  ].join("\n\n") : "";
   const copyAll = () => result ? [
     `WHAT MAY BE HAPPENING\n${result.whatMayBeHappening}`,
     `WHAT YOU OWN\n${result.whatYouOwn}`,
@@ -1199,21 +1212,44 @@ function AICoach({ session } = {}) {
             })} />
             {/* disabled while streaming: copyAll interpolates bare fields, so a
                 tap mid-stream pasted "WHAT YOU OWN\nundefined" into a real message. */}
-            <CopyBtn getText={copyAll} disabled={loading} />
+            <CopyBtn getText={view === "full" ? copyAll : copyQuick} disabled={loading} />
           </div>
-          {result.whatMayBeHappening && <Section label="What may be happening">{result.whatMayBeHappening}</Section>}
-          {result.whatYouOwn && <Section label="What you own" accent>{result.whatYouOwn}</Section>}
-          {result.theStandard && <Section label="The standard">{result.theStandard}</Section>}
-          {result.beforeYouTalk && <Section label="Before you talk">{result.beforeYouTalk}</Section>}
-          {result.questionsToAsk?.length > 0 && <Section label="Questions to ask"><BulletList items={result.questionsToAsk} /></Section>}
-          {result.whatToSay && <Section label="What to say" accent><Quote>{result.whatToSay}</Quote></Section>}
-          {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
-          {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
-          <DoDontCard dos={result.dos} donts={result.donts} />
-          {result.watchFor?.length > 0 && <Section label="Watch for"><BulletList items={result.watchFor} /></Section>}
-          {result.nextSteps?.length > 0 && <Section label="Agree on next steps"><BulletList items={result.nextSteps} /></Section>}
-          {result.documentThis && <Section label="Document this">{result.documentThis}</Section>}
-          {result.followUp && <Section label="Follow-up">{result.followUp}</Section>}
+          <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900 mb-3">
+            {[["quick", "Quick card"], ["full", "Full plan"]].map(([v, lbl]) => (
+              <button key={v} onClick={() => setView(v)} disabled={loading}
+                className="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
+                style={view === v ? { backgroundColor: ACCENT, color: "#0a0a0a" } : {}}>
+                <span className={view === v ? "" : "text-neutral-400"}>{lbl}</span>
+              </button>
+            ))}
+          </div>
+          {view === "quick" && (
+            <>
+              <div className="mb-3 text-[11px] text-neutral-500">The lines to hold during the talk. Say them your way. Tap Full plan for the read, the delivery notes and the do's and don'ts.</div>
+              {result.whatYouOwn && <Section label="You own" accent>{result.whatYouOwn}</Section>}
+              {result.theStandard && <Section label="The standard">{result.theStandard}</Section>}
+              {result.whatToSay && <Section label="Say" accent><Quote>{result.whatToSay}</Quote></Section>}
+              {result.questionsToAsk?.length > 0 && <Section label="Ask"><BulletList items={result.questionsToAsk.slice(0, 2)} /></Section>}
+              {result.followUp && <Section label="Then">{result.followUp}</Section>}
+            </>
+          )}
+          {view === "full" && (
+            <>
+              {result.whatMayBeHappening && <Section label="What may be happening">{result.whatMayBeHappening}</Section>}
+              {result.whatYouOwn && <Section label="What you own" accent>{result.whatYouOwn}</Section>}
+              {result.theStandard && <Section label="The standard">{result.theStandard}</Section>}
+              {result.beforeYouTalk && <Section label="Before you talk">{result.beforeYouTalk}</Section>}
+              {result.questionsToAsk?.length > 0 && <Section label="Questions to ask"><BulletList items={result.questionsToAsk} /></Section>}
+              {result.whatToSay && <Section label="What to say" accent><Quote>{result.whatToSay}</Quote></Section>}
+              {result.howToDeliver && <Section label="How to deliver it" accent>{result.howToDeliver}</Section>}
+              {result.makeItYours && <Section label="Make it yours">{result.makeItYours}</Section>}
+              <DoDontCard dos={result.dos} donts={result.donts} />
+              {result.watchFor?.length > 0 && <Section label="Watch for"><BulletList items={result.watchFor} /></Section>}
+              {result.nextSteps?.length > 0 && <Section label="Agree on next steps"><BulletList items={result.nextSteps} /></Section>}
+              {result.documentThis && <Section label="Document this">{result.documentThis}</Section>}
+              {result.followUp && <Section label="Follow-up">{result.followUp}</Section>}
+            </>
+          )}
           {result.leadershipPrinciple && (
             <div className="pt-4">
               <div className="rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-950" style={{ backgroundColor: ACCENT }}>
@@ -1520,7 +1556,7 @@ function ConvoBuilder({ session } = {}) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState(null);
-  const [view, setView] = useState("full");
+  const [view, setView] = useState("quick");
   const [step, setStep] = useState(0);
   const [employees, setEmployees] = useState([]);      // recent employees for quick-pick
   const [prior, setPrior] = useState(null);            // { count, lastDate, block } for current name
@@ -1547,7 +1583,7 @@ function ConvoBuilder({ session } = {}) {
   function pickEmployee(e) { setName(e); refreshPrior(e); }
   async function run() {
     if (!situation.trim()) return;
-    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("full"); setStep(0);
+    setLoading(true); setError(""); setResult(null); setSessionId(null); setView("quick"); setStep(0);
     // Inside the try. These awaits sat BETWEEN setLoading(true) and the try, so
     // anything they threw skipped the finally and left the button spinning
     // forever with no error and no way out but a page reload.
