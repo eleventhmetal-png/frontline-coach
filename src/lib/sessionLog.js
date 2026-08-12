@@ -83,18 +83,41 @@ const FOLLOWUP_FIELD_BY_TOOL = {
   pushback: "followUpQuestion",
 };
 
+// Skips anything already ticked off in the Follow-through tracker.
+//
+// BUG THIS FIXES (reported 12 Aug 2026): Home and the tracker are two separate
+// readers of the same commitments, and only the tracker knew about the Done
+// button. Tick a follow-up off, come back to Home, and the brief was still
+// telling you to do the thing you just finished. Worse than cosmetic — the whole
+// pitch of Home is that it is the accountability layer, and an accountability
+// layer that doesn't notice you did the work teaches people to ignore it.
+//
+// `id` is now selected because it wasn't before, which is the whole reason the
+// anti-join was impossible here. The limit went 5 -> 25 so that ticking off a
+// few in a row doesn't blank the brief while older open commitments still exist.
+//
+// NOTE: pushback appears in FOLLOWUP_FIELD_BY_TOOL but NOT in the tracker's
+// COMMITMENT_FIELD — its followUpQuestion is a question to ask mid-conversation,
+// not a dated task. So a pushback nudge on Home has no Done button anywhere and
+// will persist until a newer session outranks it. That's intended, not a leak of
+// this bug.
 export async function getLastFollowUp(userId) {
   if (!supabaseReady || !userId) return null;
   try {
-    const { data, error } = await supabase
-      .from("sessions")
-      .select("tool, output")
-      .eq("user_id", userId)
-      .neq("tool", "practice")
-      .order("created_at", { ascending: false })
-      .limit(5);
+    const [{ data, error }, { data: doneRows }] = await Promise.all([
+      supabase
+        .from("sessions")
+        .select("id, tool, output")
+        .eq("user_id", userId)
+        .neq("tool", "practice")
+        .order("created_at", { ascending: false })
+        .limit(25),
+      supabase.from("followups_done").select("session_id").eq("user_id", userId),
+    ]);
     if (error || !data) return null;
+    const done = new Set((doneRows || []).map((r) => r.session_id));
     for (const row of data) {
+      if (done.has(row.id)) continue;
       const field = FOLLOWUP_FIELD_BY_TOOL[row.tool];
       if (!field) continue;
       const out = row.output;
