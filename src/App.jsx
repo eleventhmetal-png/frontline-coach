@@ -2397,12 +2397,32 @@ function pickStance(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
 // ---------- the counterpart's VOICE ----------
-// Drawn once per session, like the stance, so the person you're talking to
-// sounds like the same person for the whole conversation — and like somebody
-// else the second time you run the same scenario. Mixed on purpose: a frontline
-// team is not all one voice, and neither is a room full of bosses.
-const RP_VOICES_DOWN = ["ash", "coral", "verse", "sage", "nova", "echo"];
-const RP_VOICES_UP = ["onyx", "ballad", "sage", "alloy", "verse"];
+// TWO voices, not a pool. OpenAI's own docs say "for best quality, we recommend
+// using marin or cedar," and the gap is audible — mixing in the older eleven
+// would drag the average down for the sake of variety nobody asked for.
+// Variety comes from the delivery direction instead, which changes the character
+// far more than timbre does.
+const VOICE_WOMAN = "marin";
+const VOICE_MAN = "cedar";
+// WHY THIS IS A CHOICE AND NOT A RANDOM DRAW: the person you're about to
+// practice against is usually a specific person on your team. Rehearsing a
+// conversation you're dreading against a voice that reads nothing like them is
+// a worse rep. This is scenario information, not a preference setting — same
+// category as difficulty or the employee's generation, both of which are already
+// pickers. "Either" stays the default so nobody has to decide to get started.
+const RP_VOICE_CHOICES = [
+  { key: "either", label: "Either" },
+  { key: "woman", label: "Woman" },
+  { key: "man", label: "Man" },
+];
+// Named ttsVoiceFor, not voiceFor — voiceFor() is already taken by the VOICE
+// spine's register lookup and a duplicate top-level declaration is a hard parse
+// error in an ES module.
+function ttsVoiceFor(choice) {
+  if (choice === "woman") return VOICE_WOMAN;
+  if (choice === "man") return VOICE_MAN;
+  return Math.random() < 0.5 ? VOICE_WOMAN : VOICE_MAN;
+}
 // gpt-4o-mini-tts takes free-text delivery direction, which is the whole reason
 // this is worth paying for: the same words can be read guarded, embarrassed, or
 // checked-out, and WHICH of those the manager hears is the rep. Keep these
@@ -2583,6 +2603,12 @@ function Roleplay({ session } = {}) {
   const [scenario, setScenario] = useState(RP_SCENARIOS[0]);
   const [customScenario, setCustomScenario] = useState("");
   const [difficulty, setDifficulty] = useState("Realistic");
+  // Remembered across sessions: a manager whose crew is mostly men will pick the
+  // same thing every time, and making them re-pick every rep is friction for no
+  // reason.
+  const [voiceChoice, setVoiceChoice] = useState(() => {
+    try { return localStorage.getItem("fc_voice_choice") || "either"; } catch (e) { return "either"; }
+  });
   const [generation, setGeneration] = useState("");
   const [started, setStarted] = useState(false);
   const [history, setHistory] = useState([]);
@@ -2713,7 +2739,7 @@ function Roleplay({ session } = {}) {
     // Same draw-once logic as the stance: one voice and one delivery direction
     // for the whole session, re-picked on New.
     setSpeechCharacter({
-      voice: pickStance(direction === "up" ? RP_VOICES_UP : RP_VOICES_DOWN),
+      voice: ttsVoiceFor(voiceChoice),
       instructions: voiceDirection(direction, difficulty),
     });
     // THE USER OPENS. The AI used to speak first, which handed away the single
@@ -2925,6 +2951,24 @@ function Roleplay({ session } = {}) {
             <GenerationPicker value={generation} onChange={setGeneration} label="Employee's generation (optional)" />
           </>
         )}
+        <div className="mb-5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">
+            {direction === "up" ? "Your boss's voice" : "Their voice"}
+          </div>
+          <div className="flex gap-2">
+            {RP_VOICE_CHOICES.map((v) => (
+              <button key={v.key}
+                onClick={() => {
+                  setVoiceChoice(v.key);
+                  try { localStorage.setItem("fc_voice_choice", v.key); } catch (e) {}
+                }}
+                className="flex-1 text-sm rounded-lg px-3 py-2 font-medium border border-neutral-800 transition-colors"
+                style={voiceChoice === v.key ? { backgroundColor: ACCENT, color: "#0a0a0a", borderColor: ACCENT } : {}}>
+                <span className={voiceChoice === v.key ? "" : "text-neutral-400"}>{v.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <SmartGenerateButton onClick={start} loading={loading} label={direction === "up" ? "Start the conversation" : "Start the roleplay"} />
         <ErrorNote msg={error} />
       </div>

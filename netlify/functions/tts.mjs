@@ -22,10 +22,15 @@ const TTS_MODEL = "gpt-4o-mini-tts";
 
 // Only the voices Practice actually assigns. Blocks a caller from probing the
 // API surface through our key.
+// marin and cedar are the two OpenAI's own docs single out: "for best quality,
+// we recommend using marin or cedar." They are the only two Practice actually
+// assigns — the older eleven are kept allowed so a saved/queued call with an old
+// voice name still plays instead of erroring, but nothing picks them.
 const ALLOWED_VOICES = new Set([
+  "marin", "cedar",
   "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
 ]);
-const DEFAULT_VOICE = "ash";
+const DEFAULT_VOICE = "cedar";
 
 // A roleplay turn is capped at 350 output tokens upstream, which lands around
 // 250 characters. 800 is generous headroom and still bounds what a single call
