@@ -33,6 +33,17 @@ function getSR() {
 const MAX_RESTARTS = 30;
 const MAX_LISTEN_MS = 3 * 60 * 1000;
 
+// PUNCTUATION FROM PAUSES. The Web Speech API returns no punctuation at all, so a
+// dictated turn arrives as one unbroken wall of words — ugly on screen and flat
+// when read back. But we DO have real acoustic information for free: the
+// recognizer ends a segment when you stop talking, so the gap between one segment
+// ending and speech resuming in the next IS a pause. A long gap is a sentence
+// boundary. Short gaps are the recognizer timing out mid-thought, which is not.
+//
+// Threshold has to clear our own 250ms restart delay plus recognition latency, so
+// 900ms — a real between-sentence beat, not a breath.
+const SENTENCE_PAUSE_MS = 900;
+
 const webSpeechDictation = {
   id: "web-speech",
   available() {
@@ -57,19 +68,36 @@ const webSpeechDictation = {
     let restarts = 0;
     let finalText = "";
     let rec = null;
+    let segmentEndedAt = 0;   // when the previous segment stopped hearing speech
+    let pendingBreak = false; // the gap before this segment was long enough to punctuate
     const startedAt = Date.now();
 
     function finish() {
       if (done) return;
       done = true;
-      if (!suppressed) onFinal && onFinal(finalText.trim());
+      if (!suppressed) {
+        // Close the last sentence. A dictated turn that ends bare reads as cut off.
+        let out = finalText.trim();
+        if (out && !/[.!?]$/.test(out)) out += ".";
+        onFinal && onFinal(out);
+      }
       onEnd && onEnd();
     }
 
+    function cap(s) {
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    }
     function join(a, b) {
-      if (!a) return b;
+      if (!a) return cap(b);
       if (!b) return a;
       return /\s$/.test(a) ? a + b : a + " " + b;
+    }
+    // Same as join, but the gap was long enough to be a full stop.
+    function joinSentence(a, b) {
+      if (!a) return cap(b);
+      if (!b) return a;
+      const left = /[.!?,;:]$/.test(a) ? a : a + ".";
+      return left + " " + cap(b);
     }
 
     function boot() {
@@ -87,15 +115,26 @@ const webSpeechDictation = {
 
       rec.onresult = (e) => {
         if (suppressed) return;
+        // First words of a new segment: decide now whether the gap we just sat
+        // through was a sentence break, and spend that decision once.
+        if (segmentEndedAt) {
+          pendingBreak = Date.now() - segmentEndedAt > SENTENCE_PAUSE_MS;
+          segmentEndedAt = 0;
+        }
         let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const r = e.results[i];
           const t = (r[0] && r[0].transcript ? r[0].transcript : "").trim();
           if (!t) continue;
-          if (r.isFinal) finalText = join(finalText, t);
-          else interim = join(interim, t);
+          if (r.isFinal) {
+            finalText = pendingBreak ? joinSentence(finalText, t) : join(finalText, t);
+            pendingBreak = false;
+          } else {
+            interim = join(interim, t);
+          }
         }
-        onPartial && onPartial(join(finalText, interim));
+        const shown = pendingBreak ? joinSentence(finalText, interim) : join(finalText, interim);
+        onPartial && onPartial(shown);
       };
 
       rec.onerror = (e) => {
@@ -118,6 +157,7 @@ const webSpeechDictation = {
       };
 
       rec.onend = () => {
+        segmentEndedAt = Date.now();   // start timing the gap
         if (stopped || restarts >= MAX_RESTARTS || Date.now() - startedAt > MAX_LISTEN_MS) {
           finish();
           return;

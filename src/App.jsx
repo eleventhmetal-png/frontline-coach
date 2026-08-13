@@ -2468,7 +2468,8 @@ WHERE YOUR HEAD IS RIGHT NOW: ${stance || "It is an ordinary day."} Let it colou
 You are an hourly frontline employee in the setting described above. Your shift, your complaints, your excuses, and anything you mention about work happen in that setting. Use that world's language for the work — if you reference being busy, it's the work of that setting, not some other industry's.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
 - Short. Real speech. Half-sentences, "I mean," "look," "whatever," trailing off. 1-3 sentences max per turn.
-- These words get SPOKEN OUT LOUD, not read on a page, so write them the way a mouth makes them: contractions always, a false start you correct, a word repeated, a sentence you abandon and restart. Clean well-formed prose is the tell. "I don't know what you want me to say here" beats "I am uncertain what you are asking of me" every time. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "I mean," "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence.
+- These words get SPOKEN OUT LOUD, not read on a page, so write them the way a mouth makes them: contractions always, a false start you correct, a word repeated, a sentence you abandon and restart. Clean well-formed prose is the tell. "I don't know what you want me to say here" beats "I am uncertain what you are asking of me" every time.
+- RATION THE FILLERS. At most ONE per turn, and never open two turns in a row the same way. "I mean" at the front of every single answer is its own tell — worse than no filler at all, because a real person's hesitations land in different places every time. Most turns should carry none: the texture comes from short sentences, a thought you drop halfway, and answering the part you want to answer. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "I mean," "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence.
 - You're a person with a side to the story, not a problem to be solved.
 - React to what the manager ACTUALLY says. If they're vague, you don't know what they want and you say so. If they come in hot or accusatory, you get defensive or shut down. If they're clear, fair, and specific, you give a little ground over a few turns, but slowly. Don't fold on turn one.
 - Don't be articulate about your own feelings. People aren't.
@@ -2592,7 +2593,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 // airtime is real signal and move 3 depends on it, so length still counts.
 const SPOKEN_TRANSCRIPT = `
 THIS TRANSCRIPT WAS SPOKEN, NOT TYPED. The manager's turns came through speech-to-text, so they arrive with no punctuation, no capitalization, sentences running together, and occasionally a word the recognizer simply got wrong. NONE of that is how they actually spoke, and you cannot see where they paused.
-So: never grade punctuation, capitalization, grammar or run-on structure, and never cite them as evidence of rambling, poor clarity or missing structure. Where a word is obviously a mis-transcription, read the intent and move on. If a passage is genuinely unreadable, say you could not make it out rather than scoring it as unclear delivery.
+So: never grade punctuation, capitalization, grammar or run-on structure, and never cite them as evidence of rambling, poor clarity or missing structure. Where a word is obviously a mis-transcription, read the intent and move on. If a passage is genuinely unreadable, say so inside the relevant JSON field rather than scoring it as unclear delivery. Never write anything outside the JSON object.
 What DOES still count exactly as it always did: how much they said versus how much the other person said, what order they said it in, and whether they ever landed the point. A turn that goes on for two hundred words was long whether they typed it or said it, so airtime stays fair game.`;
 const rpScoreSystem = (ind, spoken) => `${voiceFor(ind)}${spoken ? SPOKEN_TRANSCRIPT : ""}
 ${HARD_TALK}
@@ -2914,12 +2915,24 @@ function Roleplay({ session } = {}) {
       // Raised from 1200 when moveCheck + betterLine were added: the debrief now
       // carries four graded moves with notes on top of the seven prose fields, and
       // a truncated JSON object fails the parse outright rather than degrading.
-      const r = await callClaudeStream(scoreSys, user, { max_tokens: 1800 });
-      if (!r) throw new Error("no score");
+      // 1800 was not enough once turns got DICTATED. Spoken turns run two to three
+      // times longer than typed ones, the transcript grows with them, and the
+      // debrief grows to match — four graded moves plus five prose fields. Past the
+      // ceiling the JSON is cut mid-object, toolJson's lastIndexOf("}") lands on a
+      // brace inside moveCheck, the parse fails, and all three attempts fail the
+      // same way. The user just sees "Couldn't score it."
+      // 2800 keeps headroom under the free plan's 3000 cap in the proxy.
+      const r = await callClaudeStream(scoreSys, user, { max_tokens: 2800 });
+      if (!r) throw new Error("debrief JSON did not parse (likely truncated)");
       setScore(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript, direction: lockedDirection.current, bossType: up ? lockedBossType.current : null }, output: r, model: MODEL_SMART }));
       scrollDown();
     } catch (e) {
+      // Log the real reason. Without this a truncated debrief and a dead network
+      // look identical from the outside, which is exactly the guessing this cost
+      // an hour of.
+      console.warn("score failed:", e && e.message, "| transcript chars:", transcript.length, "| spoken:", spoken);
+      if (window.__reportError) window.__reportError(e);
       setError(errMessage(e, "Couldn't score it. Try again."));
     } finally {
       setLoading(false);
