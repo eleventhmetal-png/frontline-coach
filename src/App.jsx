@@ -2311,6 +2311,22 @@ function cleanTurn(t) {
     // reads right ("I don't") where a comma leaves a dangling ", "
     .replace(/\s*(—|--)\s*$/gm, "")
     .replace(/\s*(—|--)\s*/g, ", ")
+    // FILLER "like" backstop. Same belt-and-braces logic as the em dash: the
+    // prompt bans it, this catches the leak. Every pattern here requires a COMMA
+    // immediately after "like", which is the filler signature — a real
+    // comparison ("runs like a machine") never has one, so legitimate uses are
+    // untouched. Ben flagged this on the first real voice test: read aloud, the
+    // tic is far more obvious than it is on screen.
+    // "it's like," is a whole discourse marker, not a stray word: strip only the
+    // "like," and you strand the "It's" ("It's I don't even know anymore").
+    .replace(/\b(?:it'?s)\s+like,\s*/gi, "")
+    .replace(/,\s*like,\s*/gi, ", ")
+    .replace(/\b(but|and|so|then)\s+like,\s*/gi, "$1 ")
+    .replace(/(^|[.!?"]\s+)[Ll]ike,\s*/g, "$1")
+    // Re-capitalize: dropping a leading filler leaves the turn starting on a
+    // lowercase word, which looks broken on screen and makes the synthesizer
+    // run the first word flat into the second.
+    .replace(/^(\s*)([a-z])/, (m, sp, ch) => sp + ch.toUpperCase())
     .replace(/,\s*,/g, ",")
     .replace(/,\s*([.!?])/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
@@ -2418,6 +2434,11 @@ const RP_VOICE_CHOICES = [
 // Named ttsVoiceFor, not voiceFor — voiceFor() is already taken by the VOICE
 // spine's register lookup and a duplicate top-level declaration is a hard parse
 // error in an ES module.
+// Spoken answers run far longer than typed ones — people say in twenty seconds
+// what they would never thumb-type. The old 120px cap was about four lines, so a
+// dictated turn ran off the bottom of a box that also had overflow hidden: the
+// text was invisible AND unreachable. Taller, and scrollable past the cap.
+const DRAFT_MAX_PX = 220;
 function ttsVoiceFor(choice) {
   if (choice === "woman") return VOICE_WOMAN;
   if (choice === "man") return VOICE_MAN;
@@ -2447,6 +2468,7 @@ WHERE YOUR HEAD IS RIGHT NOW: ${stance || "It is an ordinary day."} Let it colou
 You are an hourly frontline employee in the setting described above. Your shift, your complaints, your excuses, and anything you mention about work happen in that setting. Use that world's language for the work — if you reference being busy, it's the work of that setting, not some other industry's.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
 - Short. Real speech. Half-sentences, "I mean," "look," "whatever," trailing off. 1-3 sentences max per turn.
+- These words get SPOKEN OUT LOUD, not read on a page, so write them the way a mouth makes them: contractions always, a false start you correct, a word repeated, a sentence you abandon and restart. Clean well-formed prose is the tell. "I don't know what you want me to say here" beats "I am uncertain what you are asking of me" every time. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "I mean," "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence.
 - You're a person with a side to the story, not a problem to be solved.
 - React to what the manager ACTUALLY says. If they're vague, you don't know what they want and you say so. If they come in hot or accusatory, you get defensive or shut down. If they're clear, fair, and specific, you give a little ground over a few turns, but slowly. Don't fold on turn one.
 - Don't be articulate about your own feelings. People aren't.
@@ -2464,7 +2486,7 @@ HOW BEING HANDLED WELL CHANGES YOU. You never score the manager and you never co
 - They hold the standard with no way in for you: you comply flat and stay resentful.
 - They let the standard slide to calm you down: you take the out, and you do not bring your side back up.
 - They open with fake acknowledgment, a canned line with nothing specific behind it: you clock it and it makes you more guarded, not less.
-OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your eyes. NEVER use an asterisk for any reason. NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*sighs*", "*shrugs*" and anything like them are forbidden — if you want to show that, put it in how the words are said instead.
+OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your eyes. NEVER use an asterisk for any reason. NEVER use filler "like." NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*sighs*", "*shrugs*" and anything like them are forbidden — if you want to show that, put it in how the words are said instead.
 ${difficulty === "Hard"
     ? "Make them earn it. Excuses, deflection, 'that's not fair,' bring up other people who do worse. Don't give ground unless they're genuinely sharp."
     : difficulty === "Easy"
@@ -2512,7 +2534,7 @@ HOW BEING HANDLED WELL CHANGES YOU. You never score them and you never comment o
 - They hold their position and still leave you a way to shape the how: you move, sometimes with a condition on it.
 - They cave the moment you push: you note it, you take the easier path, and you trust them less with the next thing.
 - They flatter you or work an angle: you see it immediately and it costs them.
-OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your phone or your eyes. NEVER use an asterisk for any reason. NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*checks phone*", "*sighs*" and anything like them are forbidden — a busy boss shows he's distracted by what he says and how short he says it, not by a stage cue.
+OUTPUT IS SPOKEN WORDS ONLY. No stage directions, no narration, no describing what you do with your hands or your phone or your eyes. NEVER use an asterisk for any reason. NEVER use "like" as a filler or a quotative ("but like," "it's like," "I was like") — it is a machine tic and it is even more wrong in the mouth of a senior manager than an hourly employee. "Like" only as a real comparison or a real verb. NEVER use an em dash (— or --); use a comma or a period, the way the sentence actually sounds out loud. "*looks up*", "*checks phone*", "*sighs*" and anything like them are forbidden — a busy boss shows he's distracted by what he says and how short he says it, not by a stage cue.
 THEY OPEN THIS CONVERSATION, NOT YOU. They asked you for a few minutes and they are about to use them. Say nothing until they speak. Your first line is a REACTION to whatever they just brought you, and it is where your type shows itself:
 ${boss.open}
 Apply that to your reaction, not to a greeting.
@@ -2651,8 +2673,12 @@ function Roleplay({ session } = {}) {
     const el = taRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
-  }, [draft]);
+    el.style.height = Math.min(el.scrollHeight, DRAFT_MAX_PX) + "px";
+    // Dictation appends at the END, so once the box hits its cap the newest
+    // words are the ones out of view — exactly the words you need to see to know
+    // the mic is still hearing you. Keep it pinned to the bottom while speaking.
+    if (listening) el.scrollTop = el.scrollHeight;
+  }, [draft, listening]);
   function toggleMic() {
     if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} return; }
     if (!canDictate) { setVoiceErr(dictationErrorText("unsupported")); return; }
@@ -3076,8 +3102,8 @@ function Roleplay({ session } = {}) {
                 ? "Listening… say it the way you'd say it"
                 : (history.length === 0 ? "The first real thing you'd say…" : "Your response…")}
               rows={1}
-              className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-hidden"
-              style={{ minHeight: "48px", maxHeight: "120px", borderColor: listening ? ACCENT : "#262626" }}
+              className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-y-auto"
+              style={{ minHeight: "48px", maxHeight: DRAFT_MAX_PX + "px", borderColor: listening ? ACCENT : "#262626" }}
             />
             {canDictate && (
               <button onClick={toggleMic} disabled={loading}
