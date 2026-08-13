@@ -2547,7 +2547,7 @@ Two different boss types must never react to the same opening the same way. Work
 }
 // Upward debrief. Different dimensions from the downward one — same field names so
 // the ResultCard renders it unchanged.
-const rpScoreSystemUp = (ind, bossType, pressure) => `${voiceFor(ind)}
+const rpScoreSystemUp = (ind, bossType, pressure, spoken) => `${voiceFor(ind)}${spoken ? SPOKEN_TRANSCRIPT : ""}
 ${LEAD_UP}
 ${HARD_TALK}
 You just watched a frontline leader practice a conversation with their own boss. The boss was this type: ${bossType || "unspecified"}.${pressure ? ` What that boss has been pushing them on lately: ${pressure}.` : ""} Debrief the leader like someone who was standing in the room. Blunt and useful. Score the leader, not the boss.
@@ -2585,7 +2585,16 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change, tuned to this boss type"
 }`;
-const rpScoreSystem = (ind) => `${voiceFor(ind)}
+// SPOKEN_TRANSCRIPT is appended when any turn came through the mic. Without it the
+// debrief reads a speech-to-text artifact as a delivery failure: recognizers
+// return no punctuation, no capitalization and the odd misheard word, so a
+// perfectly clear manager looks like they rambled. Note what it does NOT excuse —
+// airtime is real signal and move 3 depends on it, so length still counts.
+const SPOKEN_TRANSCRIPT = `
+THIS TRANSCRIPT WAS SPOKEN, NOT TYPED. The manager's turns came through speech-to-text, so they arrive with no punctuation, no capitalization, sentences running together, and occasionally a word the recognizer simply got wrong. NONE of that is how they actually spoke, and you cannot see where they paused.
+So: never grade punctuation, capitalization, grammar or run-on structure, and never cite them as evidence of rambling, poor clarity or missing structure. Where a word is obviously a mis-transcription, read the intent and move on. If a passage is genuinely unreadable, say you could not make it out rather than scoring it as unclear delivery.
+What DOES still count exactly as it always did: how much they said versus how much the other person said, what order they said it in, and whether they ever landed the point. A turn that goes on for two hundred words was long whether they typed it or said it, so airtime stays fair game.`;
+const rpScoreSystem = (ind, spoken) => `${voiceFor(ind)}${spoken ? SPOKEN_TRANSCRIPT : ""}
 ${HARD_TALK}
 You just watched a manager practice a hard conversation against a roleplay employee. Debrief them like a DM who was standing in the room. Blunt and useful. Score the manager, not the employee. If they buried the point, talked too much, asked questions then answered them, never set a clear standard, or got pulled into arguing, say it plainly.
 GRADE THE THREE MOVES off the transcript, not off theory. Four checks, and "moveCheck" carries them in this order, using these exact labels:
@@ -2616,6 +2625,78 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
  "missedOpportunity": "the single biggest thing they missed",
  "doThisNextTime": "one specific change"
 }`;
+// =====================================================
+// DICTATION HOOK + MIC BUTTON
+// =====================================================
+// Extracted the moment a SECOND text box needed a mic. Duplicating this wiring
+// is how the cancel-vs-stop bug would get fixed in one box and not the other:
+// stop() hands the transcript back through onFinal asynchronously, so any caller
+// that clears its field must cancel() instead, and that rule has to live in one
+// place. Read-aloud deliberately stays in Roleplay — only the counterpart speaks,
+// and only there.
+//
+// onFirstUse fires once per hook instance, the first time speech actually turns
+// into text. Roleplay uses it to switch the reply voice on.
+function useDictation({ value, setValue, onFirstUse }) {
+  const [listening, setListening] = useState(false);
+  const [err, setErr] = useState("");
+  const handleRef = useRef(null);
+  const baseRef = useRef("");     // whatever was already in the field before the mic opened
+  const valueRef = useRef(value); // so toggle() reads the live value without re-binding
+  const usedRef = useRef(false);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  // Practice stays mounted behind a display:none wrapper, so leaving the tab does
+  // NOT unmount it and would otherwise leave the mic hot.
+  useEffect(() => () => { try { handleRef.current && handleRef.current.cancel(); } catch (e) {} }, []);
+  const available = dictationAvailable();
+  function markUsed() {
+    if (usedRef.current) return;
+    usedRef.current = true;
+    if (onFirstUse) onFirstUse();
+  }
+  function toggle() {
+    if (listening) { try { handleRef.current && handleRef.current.stop(); } catch (e) {} return; }
+    if (!available) { setErr(dictationErrorText("unsupported")); return; }
+    stopSpeaking();   // never dictate over our own voice — the mic hears it
+    primeSpeech();    // must happen inside the tap or iOS stays mute later
+    setErr("");
+    const cur = valueRef.current || "";
+    baseRef.current = cur ? cur.replace(/\s+$/, "") + " " : "";
+    setListening(true);
+    handleRef.current = startDictation({
+      onPartial: (t) => { if (t) markUsed(); setValue(baseRef.current + t); },
+      onFinal: (t) => { if (t) { markUsed(); setValue(baseRef.current + t); } },
+      onError: (code) => setErr(dictationErrorText(code)),
+      onEnd: () => { setListening(false); handleRef.current = null; },
+    });
+  }
+  // cancel() throws the in-flight transcript away. Use it any time the field is
+  // about to be cleared or abandoned; stop() would put the words straight back.
+  function cancel() {
+    if (!listening) return;
+    try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
+  }
+  return {
+    available, listening, err, toggle, cancel,
+    used: () => usedRef.current,
+    reset: () => { usedRef.current = false; setErr(""); },
+  };
+}
+
+function MicButton({ dict, disabled, size = 48 }) {
+  if (!dict.available) return null;   // no broken button on a platform that can't
+  const live = dict.listening;
+  return (
+    <button onClick={dict.toggle} disabled={disabled}
+      aria-label={live ? "Stop dictating" : "Say it out loud"}
+      className="rounded-lg flex items-center justify-center shrink-0 border disabled:opacity-40"
+      style={live
+        ? { backgroundColor: ACCENT, borderColor: ACCENT, color: "#0a0a0a", height: size, width: size }
+        : { backgroundColor: "#171717", borderColor: "#262626", color: "#a3a3a3", height: size, width: size }}>
+      <Mic size={18} className={live ? "animate-pulse" : ""} />
+    </button>
+  );
+}
 function Roleplay({ session } = {}) {
   const { industry } = useIndustry();
   // "down" = the existing employee roleplay. "up" = the user's own boss.
@@ -2649,23 +2730,33 @@ function Roleplay({ session } = {}) {
   // was the one thing the GM pilot said the app was weak on. Dictation lets the
   // manager say their line out loud; read-aloud makes the counterpart answer out
   // loud. Both degrade to the keyboard if the platform can't do it.
-  const [listening, setListening] = useState(false);
-  const [voiceErr, setVoiceErr] = useState("");
   const [readAloud, setReadAloud] = useState(() => readAloudPref() === true);
-  const dictRef = useRef(null);
-  const dictBase = useRef("");   // whatever was already typed before the mic opened
   // Mirrored into a ref because the streaming callback closes over whatever
   // `readAloud` was when send() fired. Without this, muting mid-reply cancelled
   // the current utterance and then the next streaming tick queued another one.
   const readAloudRef = useRef(false);
-  const canDictate = dictationAvailable();
   const canSpeak = readAloudAvailable();
+  // First time somebody actually speaks into this thing, turn the counterpart's
+  // voice on. Standing somewhere you can talk out loud is the only honest signal
+  // that a voice coming out of the phone is welcome. Explicitly switching it off
+  // is remembered and never overridden.
+  function enableReplyVoiceOnce() {
+    if (canSpeak && readAloudPref() === null) { setReadAloud(true); setReadAloudPref(true); }
+  }
+  // TWO mics. `dict` is the manager's turn in the live conversation. `setupDict`
+  // is the "or write your own" box on the setup screen — describing the situation
+  // you are walking into is easier said than typed, and the setup screen is also
+  // where Ben went looking for the mic first, which means users will too.
+  const dict = useDictation({ value: draft, setValue: setDraft, onFirstUse: enableReplyVoiceOnce });
+  const setupDict = useDictation({ value: customScenario, setValue: setCustomScenario, onFirstUse: enableReplyVoiceOnce });
+  const listening = dict.listening;
+  const voiceErr = dict.err || setupDict.err;
   // Practice is stays-mounted (see the display:none wrapper in the shell), so
-  // leaving the tab does NOT unmount this component and would otherwise leave the
-  // mic hot and a voice talking to an empty screen.
+  // leaving the tab does NOT unmount this component and would otherwise leave a
+  // voice talking to an empty screen. The mics clean themselves up in the hook.
   useEffect(() => {
     warmVoices();   // getVoices() is empty on first call; choose before the first reply
-    return () => { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} stopSpeaking(); };
+    return () => { stopSpeaking(); };
   }, []);
   // Dictated text bypasses the textarea's onChange, so the imperative auto-grow
   // never ran and long spoken answers were trapped in a one-line box.
@@ -2679,26 +2770,6 @@ function Roleplay({ session } = {}) {
     // the mic is still hearing you. Keep it pinned to the bottom while speaking.
     if (listening) el.scrollTop = el.scrollHeight;
   }, [draft, listening]);
-  function toggleMic() {
-    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} return; }
-    if (!canDictate) { setVoiceErr(dictationErrorText("unsupported")); return; }
-    stopSpeaking();   // never dictate over our own voice — the mic hears it
-    primeSpeech();    // must happen inside the tap or iOS stays mute later
-    // First time somebody actually speaks into this thing, turn the counterpart's
-    // voice on. Standing in a place you can talk out loud is the only honest
-    // signal we get that a voice coming out of the phone is welcome. Explicitly
-    // switching it off is remembered and never overridden.
-    if (canSpeak && readAloudPref() === null) { setReadAloud(true); setReadAloudPref(true); }
-    setVoiceErr("");
-    dictBase.current = draft ? draft.replace(/\s+$/, "") + " " : "";
-    setListening(true);
-    dictRef.current = startDictation({
-      onPartial: (t) => setDraft(dictBase.current + t),
-      onFinal: (t) => { if (t) setDraft(dictBase.current + t); },
-      onError: (code) => setVoiceErr(dictationErrorText(code)),
-      onEnd: () => { setListening(false); dictRef.current = null; },
-    });
-  }
   useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
   function toggleReadAloud() {
     const next = !readAloud;
@@ -2789,9 +2860,8 @@ function Roleplay({ session } = {}) {
     if (loading || !draft.trim()) return;
     // CANCEL, not stop. stop() keeps the transcript and hands it back through
     // onFinal — which lands after setDraft("") below and puts the sent line
-    // straight back in the box, so the next dictation appends to it. cancel()
-    // throws the in-flight dictation away.
-    if (listening) { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} }
+    // straight back in the box, so the next dictation appends to it.
+    dict.cancel();
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
@@ -2835,9 +2905,12 @@ function Roleplay({ session } = {}) {
       // retried 401/402/429 — errors a retry can't fix — firing up to six
       // requests for an out-of-credits manager and delaying the paywall that
       // was the whole point of the 402.
+      // Was any of this dictated? If so the debrief gets told, so it stops reading
+      // the recognizer's missing punctuation as the manager rambling.
+      const spoken = dict.used();
       const scoreSys = up
-        ? rpScoreSystemUp(lockedIndustry.current, lockedBossType.current, lockedPressure.current)
-        : rpScoreSystem(lockedIndustry.current);
+        ? rpScoreSystemUp(lockedIndustry.current, lockedBossType.current, lockedPressure.current, spoken)
+        : rpScoreSystem(lockedIndustry.current, spoken);
       // Raised from 1200 when moveCheck + betterLine were added: the debrief now
       // carries four graded moves with notes on top of the seven prose fields, and
       // a truncated JSON object fails the parse outright rather than degrading.
@@ -2856,8 +2929,8 @@ function Roleplay({ session } = {}) {
     // setLoading(false) included: hitting New mid-stream left loading stuck true,
     // so the manager landed back on the setup screen with a spinning, disabled
     // Start button until the abandoned stream finished on its own.
-    if (listening) { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} }
-    stopSpeaking(); resetReadAloud(); setVoiceErr("");
+    dict.cancel(); setupDict.cancel();
+    stopSpeaking(); resetReadAloud(); dict.reset(); setupDict.reset();
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
   }
   if (!started) {
@@ -2913,15 +2986,25 @@ function Roleplay({ session } = {}) {
         </div>
         <div className="mb-5">
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Or write your own</div>
+          <div className="flex gap-2 items-start">
           <textarea
             value={customScenario}
             onChange={(e) => setCustomScenario(e.target.value)}
             maxLength={300}
             rows={2}
             placeholder={direction === "up" ? "Optional — describe the real situation. e.g. I have to tell my boss we are going to miss the number this month and it is partly on me." : "Optional — describe the real situation. e.g. Server keeps disappearing on smoke breaks during the dinner rush and the section falls behind."}
-            className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+            className="flex-1 rounded-lg bg-neutral-900 border p-3.5 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+            style={{ borderColor: setupDict.listening ? ACCENT : "#262626" }}
           />
-          <p className="text-[11px] text-neutral-500 mt-2">If you fill this in, it's used instead of the picks above.</p>
+          <MicButton dict={setupDict} size={56} />
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-2">
+            {setupDict.listening
+              ? "Listening. Say what's actually going on."
+              : setupDict.available
+              ? "Tap the mic and say it out loud, it's faster than typing it. If you fill this in, it's used instead of the picks above."
+              : "If you fill this in, it's used instead of the picks above."}
+          </p>
         </div>
         {/* Difficulty means almost nothing upward. WHAT KIND of boss means
             everything, so the same slot carries the archetype instead. */}
@@ -3105,16 +3188,7 @@ function Roleplay({ session } = {}) {
               className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-y-auto"
               style={{ minHeight: "48px", maxHeight: DRAFT_MAX_PX + "px", borderColor: listening ? ACCENT : "#262626" }}
             />
-            {canDictate && (
-              <button onClick={toggleMic} disabled={loading}
-                aria-label={listening ? "Stop dictating" : "Say it out loud"}
-                className="rounded-lg flex items-center justify-center shrink-0 border disabled:opacity-40"
-                style={listening
-                  ? { backgroundColor: ACCENT, borderColor: ACCENT, color: "#0a0a0a", height: "48px", width: "48px" }
-                  : { backgroundColor: "#171717", borderColor: "#262626", color: "#a3a3a3", height: "48px", width: "48px" }}>
-                <Mic size={18} className={listening ? "animate-pulse" : ""} />
-              </button>
-            )}
+            <MicButton dict={dict} disabled={loading} />
             <button onClick={send} disabled={loading || !draft.trim()}
               className="rounded-lg flex items-center justify-center text-neutral-950 disabled:opacity-40 shrink-0"
               style={{ backgroundColor: ACCENT, height: "48px", width: "48px" }}>
