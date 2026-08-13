@@ -12,6 +12,25 @@
 [functions]
   node_bundler = "esbuild"
 
+# LOCAL DEV — pinned on purpose, and it needs to stay pinned.
+#
+# `npm run dev` is vite ALONE. Vite reads neither the [[redirects]] below nor
+# netlify/functions, so /api/claude 404s and every AI call in the app dies with
+# its generic catch message ("No reply came back. Try sending again." in
+# Practice). Anything that touches the model has to run under `netlify dev`.
+#
+# Without this block Netlify has to guess how to serve the app, and framework
+# detection can fall back to serving the STALE `dist` publish directory
+# statically — which is what produced a bare 404 at the root. Naming the command
+# and the ports removes the guess.
+#
+#   npx netlify dev   ->   http://localhost:8888   (not 5173)
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  autoLaunch = false
+
 # Route the app's /api/claude call to the function.
 [[redirects]]
   from = "/api/claude"

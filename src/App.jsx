@@ -3,7 +3,8 @@ import {
   Home, MessageSquare, Shield, FileText, ClipboardList,
   Zap, Copy, Check, Loader2, AlertTriangle, ArrowRight,
   ChevronLeft, ChevronDown, Send, Target, Play, Award, RotateCcw, MoreHorizontal,
-  Share2, Download, X, Minus, ThumbsUp, ThumbsDown, Briefcase, Clock, Sparkles
+  Share2, Download, X, Minus, ThumbsUp, ThumbsDown, Briefcase, Clock, Sparkles,
+  Mic, Volume2, VolumeX
 } from "lucide-react";
 import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "./lib/sessionLog";
 import { getLatestMemory } from "./lib/memory";
@@ -15,6 +16,11 @@ import {
   ageLabel, isStale,
 } from "./lib/followups";
 import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
+import {
+  dictationAvailable, startDictation, dictationErrorText,
+  readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud,
+  readAloudPref, setReadAloudPref,
+} from "./lib/voice";
 
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
@@ -2565,6 +2571,63 @@ function Roleplay({ session } = {}) {
   const [memoryOpen, setMemoryOpen] = useState(false); // collapsed by default so it never blocks the tool
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const taRef = useRef(null);
+  // VOICE. Practice is the only tool where speaking is the actual skill being
+  // trained — you can write a good line and still deliver it badly, and delivery
+  // was the one thing the GM pilot said the app was weak on. Dictation lets the
+  // manager say their line out loud; read-aloud makes the counterpart answer out
+  // loud. Both degrade to the keyboard if the platform can't do it.
+  const [listening, setListening] = useState(false);
+  const [voiceErr, setVoiceErr] = useState("");
+  const [readAloud, setReadAloud] = useState(() => readAloudPref() === true);
+  const dictRef = useRef(null);
+  const dictBase = useRef("");   // whatever was already typed before the mic opened
+  // Mirrored into a ref because the streaming callback closes over whatever
+  // `readAloud` was when send() fired. Without this, muting mid-reply cancelled
+  // the current utterance and then the next streaming tick queued another one.
+  const readAloudRef = useRef(false);
+  const canDictate = dictationAvailable();
+  const canSpeak = readAloudAvailable();
+  // Practice is stays-mounted (see the display:none wrapper in the shell), so
+  // leaving the tab does NOT unmount this component and would otherwise leave the
+  // mic hot and a voice talking to an empty screen.
+  useEffect(() => () => { try { dictRef.current && dictRef.current.stop(); } catch (e) {} stopSpeaking(); }, []);
+  // Dictated text bypasses the textarea's onChange, so the imperative auto-grow
+  // never ran and long spoken answers were trapped in a one-line box.
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }, [draft]);
+  function toggleMic() {
+    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} return; }
+    if (!canDictate) { setVoiceErr(dictationErrorText("unsupported")); return; }
+    stopSpeaking();   // never dictate over our own voice — the mic hears it
+    primeSpeech();    // must happen inside the tap or iOS stays mute later
+    // First time somebody actually speaks into this thing, turn the counterpart's
+    // voice on. Standing in a place you can talk out loud is the only honest
+    // signal we get that a voice coming out of the phone is welcome. Explicitly
+    // switching it off is remembered and never overridden.
+    if (canSpeak && readAloudPref() === null) { setReadAloud(true); setReadAloudPref(true); }
+    setVoiceErr("");
+    dictBase.current = draft ? draft.replace(/\s+$/, "") + " " : "";
+    setListening(true);
+    dictRef.current = startDictation({
+      onPartial: (t) => setDraft(dictBase.current + t),
+      onFinal: (t) => { if (t) setDraft(dictBase.current + t); },
+      onError: (code) => setVoiceErr(dictationErrorText(code)),
+      onEnd: () => { setListening(false); dictRef.current = null; },
+    });
+  }
+  useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
+  function toggleReadAloud() {
+    const next = !readAloud;
+    setReadAloud(next);
+    setReadAloudPref(next);
+    if (!next) stopSpeaking();
+    else primeSpeech();
+  }
   // Practice is the one tool with a real multi-turn transcript, so it's the
   // one place a synthesized pattern is earned. Show what the nightly job pulled
   // from the last few reps right before the next one — this is where it's
@@ -2639,15 +2702,29 @@ function Roleplay({ session } = {}) {
     // streams each wrote setHistory from their own captured array, so whichever
     // finished last silently overwrote the other turn.
     if (loading || !draft.trim()) return;
+    // Close the mic before the turn goes out, or the recognizer keeps appending
+    // into a draft the manager already sent.
+    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} }
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
     setDraft(""); setLoading(true); setError(""); scrollDown();
     const sys = buildRpSystem();
     try {
+      let spoken = "";
+      resetReadAloud();
       await streamChat(sys, next,
-        (t) => { setHistory([...next, { role: "assistant", content: cleanTurn(t) }]); scrollDown(); },
+        (t) => {
+          const clean = cleanTurn(t);
+          spoken = clean;
+          setHistory([...next, { role: "assistant", content: clean }]);
+          // Speak only completed sentences as they land. Feeding half-clauses to
+          // the synthesizer makes it stutter and swallow words.
+          if (readAloudRef.current) speakStream(clean);
+          scrollDown();
+        },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
+      if (readAloudRef.current) speakRest(spoken);
     } catch (e) {
       // Roll the empty assistant placeholder back out of the transcript and give
       // the manager their line back. Left in place it poisoned every subsequent
@@ -2692,6 +2769,8 @@ function Roleplay({ session } = {}) {
     // setLoading(false) included: hitting New mid-stream left loading stuck true,
     // so the manager landed back on the setup screen with a spinning, disabled
     // Start button until the abandoned stream finished on its own.
+    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} }
+    stopSpeaking(); resetReadAloud(); setVoiceErr("");
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
   }
   if (!started) {
@@ -2829,9 +2908,19 @@ function Roleplay({ session } = {}) {
               : `${lockedDifficulty.current} · employee is AI`}
           </div>
         </div>
-        <button onClick={reset} className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100">
-          <RotateCcw size={14} /> New
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          {canSpeak && (
+            <button onClick={toggleReadAloud}
+              aria-label={readAloud ? "Turn off the reply voice" : "Hear the reply out loud"}
+              className="flex items-center gap-1 text-xs"
+              style={{ color: readAloud ? ACCENT : "#737373" }}>
+              {readAloud ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            </button>
+          )}
+          <button onClick={reset} className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100">
+            <RotateCcw size={14} /> New
+          </button>
+        </div>
       </div>
       <div className="space-y-3 mb-3">
         {history.map((m, i) => {
@@ -2899,25 +2988,37 @@ function Roleplay({ session } = {}) {
         <div className="sticky bottom-0 bg-neutral-950 pt-2 pb-1">
           <div className="flex gap-2 mb-2 items-end" ref={inputRef}>
             <textarea
+              ref={taRef}
               value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-              }}
+              onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onFocus={handleFocus}
-              placeholder={history.length === 0 ? "The first real thing you'd say…" : "Your response…"}
+              placeholder={listening
+                ? "Listening… say it the way you'd say it"
+                : (history.length === 0 ? "The first real thing you'd say…" : "Your response…")}
               rows={1}
-              className="flex-1 rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-hidden"
-              style={{ minHeight: "48px", maxHeight: "120px" }}
+              className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-hidden"
+              style={{ minHeight: "48px", maxHeight: "120px", borderColor: listening ? ACCENT : "#262626" }}
             />
+            {canDictate && (
+              <button onClick={toggleMic} disabled={loading}
+                aria-label={listening ? "Stop dictating" : "Say it out loud"}
+                className="rounded-lg flex items-center justify-center shrink-0 border disabled:opacity-40"
+                style={listening
+                  ? { backgroundColor: ACCENT, borderColor: ACCENT, color: "#0a0a0a", height: "48px", width: "48px" }
+                  : { backgroundColor: "#171717", borderColor: "#262626", color: "#a3a3a3", height: "48px", width: "48px" }}>
+                <Mic size={18} className={listening ? "animate-pulse" : ""} />
+              </button>
+            )}
             <button onClick={send} disabled={loading || !draft.trim()}
-              className="rounded-lg px-4 flex items-center justify-center text-neutral-950 disabled:opacity-40 shrink-0"
-              style={{ backgroundColor: ACCENT, height: "48px" }}>
+              className="rounded-lg flex items-center justify-center text-neutral-950 disabled:opacity-40 shrink-0"
+              style={{ backgroundColor: ACCENT, height: "48px", width: "48px" }}>
               <Send size={18} />
             </button>
           </div>
+          {voiceErr && (
+            <div className="text-[11.5px] text-neutral-500 mb-2 leading-snug">{voiceErr}</div>
+          )}
           {history.length >= 3 && (
             <button onClick={endAndScore} disabled={loading}
               className="w-full text-sm font-semibold text-neutral-300 border border-neutral-700 rounded-lg py-2.5 hover:bg-neutral-900 disabled:opacity-40">
