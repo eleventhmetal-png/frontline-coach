@@ -7,7 +7,7 @@
     "dev": "vite",
     "gen:pages": "node scripts/gen-pages.mjs",
     "gen:legal": "node scripts/gen-legal-html.mjs",
-    "build": "node scripts/gen-pages.mjs && vite build",
+    "build": "node scripts/gen-pages.mjs && node scripts/gen-legal-html.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

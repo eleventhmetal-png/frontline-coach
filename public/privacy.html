@@ -19,7 +19,7 @@
 <div class="wrap">
   <div class="nav"><a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/">Home</a></div>
   <h1>Privacy Policy</h1>
-  <div class="updated">Last updated July 20, 2026</div>
+  <div class="updated">Last updated August 13, 2026</div>
 
   <h2>1. Who We Are</h2>
   <p>This Privacy Policy explains how OTS Media LLC ("we") handles information in Own The Shift — Frontline Coach. Questions: hello@otsowntheshift.com.</p>
@@ -29,20 +29,24 @@
   <p>Profile information: optional details such as your name, role, and organization name.</p>
   <p>Session content: the inputs you enter into each tool and the outputs generated — including practice roleplay transcripts — timestamped and linked to your account. This may include information you enter about other people.</p>
   <p>Derived content: synthesized summaries of your practice patterns used to tailor coaching. Abuse/quality reports you submit. Basic technical and log data needed to run and secure the Service.</p>
+  <p>Voice: if you use the microphone to dictate instead of typing, your speech is converted to text by your own browser or device. We do not record, receive, or store audio — we receive only the resulting text, which is then handled exactly like text you typed.</p>
 
   <h2>3. How We Use Information</h2>
   <p>To operate the Service: generate coaching responses, keep your session history so context carries across visits, produce your practice-pattern feedback, and provide support.</p>
   <p>To protect the Service: review flagged content and investigate abuse, security, or misuse. We do not use your content to train AI models, and we do not sell your information.</p>
 
-  <h2>4. AI Processing</h2>
+  <h2>4. AI Processing and Voice Features</h2>
   <p>Your inputs are sent to Anthropic's Claude API to generate responses. Anthropic processes this data under its commercial/API terms and does not use API inputs or outputs to train its models. We send only what's needed to produce your result.</p>
+  <p>Read-aloud (optional): when this is on, the practice counterpart's generated reply is sent as text to OpenAI's API to be turned into speech. The audio is played to you and is not stored by us. OpenAI processes it under its API terms, and we have not enabled OpenAI's optional data-sharing program, so this content is not used to train OpenAI's models. Your own words are not sent to OpenAI — only the reply you are about to hear.</p>
+  <p>Dictation (optional): speech-to-text is performed by the speech service built into your browser or operating system, not by us. Depending on your device that vendor may be Apple (Safari and iOS) or Google (Chrome), and the audio is handled under their terms. Your device will ask for microphone permission; you can decline or revoke it at any time and keep typing instead.</p>
+  <p>Both voice features are off when you first use the app. Read-aloud switches on the first time you use dictation, and either can be turned off at any time from the practice screen.</p>
 
   <h2>5. Where Your Data Is Stored</h2>
   <p>Account and session data is stored in Supabase (hosted PostgreSQL) on infrastructure located in Canada. If you use the Service from another country, your information will be transferred to and processed in Canada and the United States, which may have different data-protection laws than where you live.</p>
 
   <h2>6. Who Can See Your Content</h2>
   <p>Access is restricted by database policy so that you can only read your own session history — other users cannot, and managers do not automatically get access to content created by other people. Broader access is limited to what's needed for abuse review, support, and running the Service.</p>
-  <p>We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.</p>
+  <p>We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), OpenAI (speech synthesis, only when read-aloud is on), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.</p>
 
   <h2>7. Information About Other People</h2>
   <p>Because coaching often involves employees or coworkers, you may enter information about people who are not users of the Service. You are responsible for having the right to enter that information. We ask you to minimize it and avoid sensitive details. If someone believes their information was entered improperly, they can contact us at hello@otsowntheshift.com.</p>

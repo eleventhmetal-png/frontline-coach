@@ -1,8 +1,10 @@
 // Terms of Service + Privacy Policy shown in-app (AuthGate legal modal).
 //
-// DRAFT — tailored to the actual product (Anthropic AI processing, Supabase/
-// Canada storage, private per-user session data, no public user content, no
-// live paid billing yet). Written to the audit framework in the project notes.
+// DRAFT — tailored to the actual product (Anthropic AI processing, OpenAI speech
+// synthesis for the optional read-aloud voice, browser/OS speech-to-text for
+// dictation, Supabase/Canada storage, private per-user session data, no public
+// user content, no live paid billing yet). Written to the audit framework in the
+// project notes.
 //
 // BEFORE THIS BINDS REAL USERS, an attorney should review the clauses marked
 // "RED" in the accompanying handoff notes: Limitation of Liability (§15),
@@ -12,7 +14,11 @@
 // Entity: OTS Media LLC (Missouri). Contact: hello@otsowntheshift.com.
 // Business address: 11628 Old Ballas Rd, Suite 345, PMB 1228, St. Louis, MO 63141.
 
-export const LAST_UPDATED = "July 20, 2026";
+// NOTE: this string is also written to each user's app_metadata as tos_version at
+// signup (see AuthGate.jsx), so bumping it starts recording a new accepted
+// version. Adding a processor is a data-use change, which §2 of the Terms says we
+// notify users about — announce it rather than letting the date change silently.
+export const LAST_UPDATED = "August 13, 2026";
 
 export const TERMS_SECTIONS = [
   {
@@ -93,7 +99,7 @@ export const TERMS_SECTIONS = [
   {
     heading: "12. Third-Party Services",
     body: [
-      "The Service depends on third parties, including Anthropic (AI processing), Supabase (authentication and database), Netlify (hosting), and Google (optional sign-in). Their availability and their own terms are outside our control. We're not responsible for failures or changes in third-party services, though we'll make reasonable efforts to keep the Service running.",
+      "The Service depends on third parties, including Anthropic (AI processing), OpenAI (speech synthesis for the optional read-aloud voice), Supabase (authentication and database), Netlify (hosting), and Google (optional sign-in). Their availability and their own terms are outside our control. We're not responsible for failures or changes in third-party services, though we'll make reasonable efforts to keep the Service running.",
     ],
   },
   {
@@ -164,6 +170,7 @@ export const PRIVACY_SECTIONS = [
       "Profile information: optional details such as your name, role, and organization name.",
       "Session content: the inputs you enter into each tool and the outputs generated — including practice roleplay transcripts — timestamped and linked to your account. This may include information you enter about other people.",
       "Derived content: synthesized summaries of your practice patterns used to tailor coaching. Abuse/quality reports you submit. Basic technical and log data needed to run and secure the Service.",
+      "Voice: if you use the microphone to dictate instead of typing, your speech is converted to text by your own browser or device. We do not record, receive, or store audio — we receive only the resulting text, which is then handled exactly like text you typed.",
     ],
   },
   {
@@ -174,9 +181,12 @@ export const PRIVACY_SECTIONS = [
     ],
   },
   {
-    heading: "4. AI Processing",
+    heading: "4. AI Processing and Voice Features",
     body: [
       "Your inputs are sent to Anthropic's Claude API to generate responses. Anthropic processes this data under its commercial/API terms and does not use API inputs or outputs to train its models. We send only what's needed to produce your result.",
+      "Read-aloud (optional): when this is on, the practice counterpart's generated reply is sent as text to OpenAI's API to be turned into speech. The audio is played to you and is not stored by us. OpenAI processes it under its API terms, and we have not enabled OpenAI's optional data-sharing program, so this content is not used to train OpenAI's models. Your own words are not sent to OpenAI — only the reply you are about to hear.",
+      "Dictation (optional): speech-to-text is performed by the speech service built into your browser or operating system, not by us. Depending on your device that vendor may be Apple (Safari and iOS) or Google (Chrome), and the audio is handled under their terms. Your device will ask for microphone permission; you can decline or revoke it at any time and keep typing instead.",
+      "Both voice features are off when you first use the app. Read-aloud switches on the first time you use dictation, and either can be turned off at any time from the practice screen.",
     ],
   },
   {
@@ -189,7 +199,7 @@ export const PRIVACY_SECTIONS = [
     heading: "6. Who Can See Your Content",
     body: [
       "Access is restricted by database policy so that you can only read your own session history — other users cannot, and managers do not automatically get access to content created by other people. Broader access is limited to what's needed for abuse review, support, and running the Service.",
-      "We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.",
+      "We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), OpenAI (speech synthesis, only when read-aloud is on), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.",
     ],
   },
   {

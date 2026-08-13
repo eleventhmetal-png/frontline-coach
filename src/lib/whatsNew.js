@@ -23,22 +23,40 @@ const KEY = "fc_whatsnew_seen";
 // Bump this to announce the next release. The value is what gets written to
 // localStorage, so changing it is what makes a new card appear for everyone.
 //
-// LIVE as of 12 Aug 2026. The upward-conversation feature deployed 11 Aug, so
-// the CTA now lands on a Practice screen that actually has the boss toggle.
+// LIVE as of 13 Aug 2026: voice in Practice.
 //
-// The key is deliberately NOT the original "leading-up-2026-08". That value was
-// written to localStorage for everyone who saw the card during the few hours it
-// shipped ahead of its feature on 11 Aug — Ben included. Reusing it would hide
-// the real announcement from exactly the people who got the broken one.
-export const CURRENT = "leading-up-live";
+// This card is also the NOTICE required by Terms §2. Adding OpenAI as a speech
+// processor is a data-use change, and §2 says we tell users rather than let the
+// "Last updated" date move quietly. That is why the last bullet names it and the
+// footer points at the policy — do not trim those for brevity.
+//
+// History: "leading-up-live" replaced the original "leading-up-2026-08" because
+// that value had been written to localStorage for everyone who saw the card
+// during the few hours it shipped ahead of its feature on 11 Aug, Ben included.
+// Reusing a burned key hides the real announcement from exactly the people who
+// got the broken one.
+export const CURRENT = "voice-practice-live";
 
 // Accounts created ON OR AFTER this date never see the card. Someone who signed
 // up yesterday doesn't need "what's new" — the whole app is new to them, and an
 // announcement about a feature they never lived without reads as noise.
 // SET THIS TO THE ACTUAL DEPLOY DATE OF THE FEATURE, not of this file.
-const RELEASE_DATE = "2026-08-12";
+const RELEASE_DATE = "2026-08-13";
 
 export const RELEASES = {
+  "voice-practice-live": {
+    title: "Say it out loud",
+    lede: "You can write a good line and still deliver it badly. Practice takes your voice now, and answers in one.",
+    bullets: [
+      "Tap the mic and say your side the way you'd actually say it",
+      "Hear them answer back, guarded or irritated or embarrassed, depending on who you picked",
+      "Pick the voice you're up against, and whether it's a man or a woman",
+      "New: read-aloud sends the reply text to OpenAI to make the audio. Dictation is handled by your own phone or browser, and we never receive the recording.",
+    ],
+    footer: "Updated the Privacy Policy to name it. Read it before you use the voice.",
+    ctaLabel: "Try it",
+    ctaView: "practice",
+  },
   "leading-up-live": {
     title: "Now it points up, too",
     lede: "Every tool in here was built for the conversations you have with your team. You can run the ones that go the other way now.",
