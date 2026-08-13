@@ -37,6 +37,12 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+# Route read-aloud speech to the TTS function.
+[[redirects]]
+  from = "/api/tts"
+  to = "/.netlify/functions/tts"
+  status = 200
+
 # Route checkout session creation to its function.
 [[redirects]]
   from = "/api/create-checkout-session"

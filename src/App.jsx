@@ -18,7 +18,8 @@ import {
 import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
 import {
   dictationAvailable, startDictation, dictationErrorText,
-  readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud,
+  readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
+  setSpeechCharacter,
   readAloudPref, setReadAloudPref,
 } from "./lib/voice";
 
@@ -2395,6 +2396,29 @@ const RP_STANCES_DOWN = [
 function pickStance(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
+// ---------- the counterpart's VOICE ----------
+// Drawn once per session, like the stance, so the person you're talking to
+// sounds like the same person for the whole conversation — and like somebody
+// else the second time you run the same scenario. Mixed on purpose: a frontline
+// team is not all one voice, and neither is a room full of bosses.
+const RP_VOICES_DOWN = ["ash", "coral", "verse", "sage", "nova", "echo"];
+const RP_VOICES_UP = ["onyx", "ballad", "sage", "alloy", "verse"];
+// gpt-4o-mini-tts takes free-text delivery direction, which is the whole reason
+// this is worth paying for: the same words can be read guarded, embarrassed, or
+// checked-out, and WHICH of those the manager hears is the rep. Keep these
+// about DELIVERY only — the words themselves come from the roleplay prompt.
+function voiceDirection(direction, difficulty) {
+  if (direction === "up") {
+    return "A busy senior manager in a short one-on-one. Clipped, professional, faintly impatient — someone with somewhere else to be. Plain American English, normal pace. Not warm, not theatrical.";
+  }
+  if (difficulty === "Hard") {
+    return "An hourly employee pulled aside who does not want to be here. Guarded, irritated, close to dismissive. Short and flat. Not shouting and not theatrical — someone who has decided not to give you much.";
+  }
+  if (difficulty === "Easy") {
+    return "An hourly employee pulled aside who is a little embarrassed. Cooperative, slightly sheepish, quieter than usual. Plain American English, unhurried.";
+  }
+  return "An hourly employee pulled aside who is guarded. Defensive but not hostile — measured, wary, holding something back. Plain American English at a normal conversational pace. Not a narrator, not a customer service rep.";
+}
 function rpSystem(scenario, difficulty, ind, gen, stance) {
   return `${worldFor(ind)}${generationLayer(gen)}
 You are playing an EMPLOYEE in a roleplay so a frontline manager can practice a hard conversation. Scenario: "${scenario}". Difficulty: ${difficulty}.${gen && GENERATIONS[gen] ? ` Play the employee as roughly this generation: ${GENERATIONS[gen].label} — let the tendencies above shape how they react and talk, without ever naming or mentioning their generation in character.` : ""}
@@ -2591,7 +2615,10 @@ function Roleplay({ session } = {}) {
   // Practice is stays-mounted (see the display:none wrapper in the shell), so
   // leaving the tab does NOT unmount this component and would otherwise leave the
   // mic hot and a voice talking to an empty screen.
-  useEffect(() => () => { try { dictRef.current && dictRef.current.stop(); } catch (e) {} stopSpeaking(); }, []);
+  useEffect(() => {
+    warmVoices();   // getVoices() is empty on first call; choose before the first reply
+    return () => { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} stopSpeaking(); };
+  }, []);
   // Dictated text bypasses the textarea's onChange, so the imperative auto-grow
   // never ran and long spoken answers were trapped in a one-line box.
   useEffect(() => {
@@ -2683,6 +2710,12 @@ function Roleplay({ session } = {}) {
     // Drawn once per session so the character stays consistent turn to turn, and
     // redrawn on New so the same scenario plays differently the second time.
     lockedStance.current = pickStance(direction === "up" ? RP_STANCES_UP : RP_STANCES_DOWN);
+    // Same draw-once logic as the stance: one voice and one delivery direction
+    // for the whole session, re-picked on New.
+    setSpeechCharacter({
+      voice: pickStance(direction === "up" ? RP_VOICES_UP : RP_VOICES_DOWN),
+      instructions: voiceDirection(direction, difficulty),
+    });
     // THE USER OPENS. The AI used to speak first, which handed away the single
     // hardest rep in the whole exercise: starting the conversation. A manager
     // pulling somebody aside opens it. A leader who asked their boss for five
@@ -2702,9 +2735,11 @@ function Roleplay({ session } = {}) {
     // streams each wrote setHistory from their own captured array, so whichever
     // finished last silently overwrote the other turn.
     if (loading || !draft.trim()) return;
-    // Close the mic before the turn goes out, or the recognizer keeps appending
-    // into a draft the manager already sent.
-    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} }
+    // CANCEL, not stop. stop() keeps the transcript and hands it back through
+    // onFinal — which lands after setDraft("") below and puts the sent line
+    // straight back in the box, so the next dictation appends to it. cancel()
+    // throws the in-flight dictation away.
+    if (listening) { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} }
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
@@ -2769,7 +2804,7 @@ function Roleplay({ session } = {}) {
     // setLoading(false) included: hitting New mid-stream left loading stuck true,
     // so the manager landed back on the setup screen with a spinning, disabled
     // Start button until the abandoned stream finished on its own.
-    if (listening) { try { dictRef.current && dictRef.current.stop(); } catch (e) {} }
+    if (listening) { try { dictRef.current && dictRef.current.cancel(); } catch (e) {} }
     stopSpeaking(); resetReadAloud(); setVoiceErr("");
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
   }
