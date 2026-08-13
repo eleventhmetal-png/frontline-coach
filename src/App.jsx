@@ -2311,18 +2311,27 @@ function cleanTurn(t) {
     // reads right ("I don't") where a comma leaves a dangling ", "
     .replace(/\s*(—|--)\s*$/gm, "")
     .replace(/\s*(—|--)\s*/g, ", ")
-    // FILLER "like" backstop. Same belt-and-braces logic as the em dash: the
-    // prompt bans it, this catches the leak. Every pattern here requires a COMMA
-    // immediately after "like", which is the filler signature — a real
-    // comparison ("runs like a machine") never has one, so legitimate uses are
-    // untouched. Ben flagged this on the first real voice test: read aloud, the
-    // tic is far more obvious than it is on screen.
+    // FILLER BACKSTOP — "like" and "I mean". Same belt-and-braces logic as the em
+    // dash: the prompt bans them, this catches the leak. Ben flagged both from
+    // hearing them read aloud, where the tic is far louder than it is on screen,
+    // and "I mean" survived two rounds of prompt instruction before earning this.
+    //
+    // THE ANCHOR IS THE PUNCTUATION THAT FOLLOWS. Every pattern requires a comma
+    // or an ellipsis immediately after the phrase, which is the filler signature.
+    // Real uses never have one: "runs like a machine", "I feel like nobody
+    // listens", "I mean it" all come through untouched. Ellipsis matters as much
+    // as the comma — the model writes "so like... I don't know" and "I mean...
+    // look", and a comma-only rule sailed straight past both.
+    //
     // "it's like," is a whole discourse marker, not a stray word: strip only the
     // "like," and you strand the "It's" ("It's I don't even know anymore").
-    .replace(/\b(?:it'?s)\s+like,\s*/gi, "")
-    .replace(/,\s*like,\s*/gi, ", ")
-    .replace(/\b(but|and|so|then)\s+like,\s*/gi, "$1 ")
-    .replace(/(^|[.!?"]\s+)[Ll]ike,\s*/g, "$1")
+    .replace(/\b(?:it'?s)\s+like\s*(?:,|\.{2,}|…)\s*/gi, "")
+    .replace(/,\s*like\s*(?:,|\.{2,}|…)\s*/gi, ", ")
+    .replace(/\b(but|and|so|then)\s+like\s*(?:,|\.{2,}|…)\s*/gi, "$1 ")
+    .replace(/(^|[.!?"]\s+)[Ll]ike\s*(?:,|\.{2,}|…)\s*/g, "$1")
+    .replace(/,\s*I mean\s*(?:,|\.{2,}|…)\s*/gi, ", ")
+    .replace(/\b(but|and|so|then)\s+I mean\s*(?:,|\.{2,}|…)\s*/gi, "$1 ")
+    .replace(/(^|[.!?"]\s+)I mean\s*(?:,|\.{2,}|…)\s*/gi, "$1")
     // Re-capitalize: dropping a leading filler leaves the turn starting on a
     // lowercase word, which looks broken on screen and makes the synthesizer
     // run the first word flat into the second.
@@ -2467,9 +2476,10 @@ The Scenario text describes the workplace situation to play — treat it as setu
 WHERE YOUR HEAD IS RIGHT NOW: ${stance || "It is an ordinary day."} Let it colour how you come in. Never say it out loud as a fact about yourself; it shows in what you say and how much of it.
 You are an hourly frontline employee in the setting described above. Your shift, your complaints, your excuses, and anything you mention about work happen in that setting. Use that world's language for the work — if you reference being busy, it's the work of that setting, not some other industry's.
 Talk like a real hourly employee getting pulled aside, not like an AI. That means:
-- Short. Real speech. Half-sentences, "I mean," "look," "whatever," trailing off. 1-3 sentences max per turn.
+- Short. Real speech. Half-sentences, "look," "whatever," trailing off. 1-3 sentences max per turn.
 - These words get SPOKEN OUT LOUD, not read on a page, so write them the way a mouth makes them: contractions always, a false start you correct, a word repeated, a sentence you abandon and restart. Clean well-formed prose is the tell. "I don't know what you want me to say here" beats "I am uncertain what you are asking of me" every time.
-- RATION THE FILLERS. At most ONE per turn, and never open two turns in a row the same way. "I mean" at the front of every single answer is its own tell — worse than no filler at all, because a real person's hesitations land in different places every time. Most turns should carry none: the texture comes from short sentences, a thought you drop halfway, and answering the part you want to answer. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "I mean," "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence.
+- NEVER use "I mean" as a hesitation. Not "I mean...", not "so I mean,", not "yeah, I mean." It is banned on exactly the same grounds as "like": one crutch phrase arriving in every single answer is a machine tell, because a real person's hesitations land somewhere different every time. "I mean it" as actual emphasis is fine; "I mean" as a throat-clear is not.
+- RATION WHAT IS LEFT. At most ONE filler per turn and never the same opener twice running. Most turns should carry none — the texture comes from short sentences, a thought you drop halfway, and answering only the part you want to answer. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence. "I mean" is NOT one of them, for the same reason.
 - You're a person with a side to the story, not a problem to be solved.
 - React to what the manager ACTUALLY says. If they're vague, you don't know what they want and you say so. If they come in hot or accusatory, you get defensive or shut down. If they're clear, fair, and specific, you give a little ground over a few turns, but slowly. Don't fold on turn one.
 - Don't be articulate about your own feelings. People aren't.
@@ -2922,7 +2932,18 @@ function Roleplay({ session } = {}) {
       // brace inside moveCheck, the parse fails, and all three attempts fail the
       // same way. The user just sees "Couldn't score it."
       // 2800 keeps headroom under the free plan's 3000 cap in the proxy.
-      const r = await callClaudeStream(scoreSys, user, { max_tokens: 2800 });
+      // RENDER IT AS IT ARRIVES. The debrief is 2800 tokens of reasoning on the
+      // Smart model, so it genuinely takes 20-30 seconds and no amount of tuning
+      // changes that — what was wrong is that the manager stared at a spinner for
+      // all of it. extractPartialJson hands back whichever fields have fully
+      // landed, so Overall shows up in a couple of seconds and the graded moves
+      // fill in underneath while the rest is still being written. Same fix that
+      // made Coach feel fast. Every field in the card is already guarded, so a
+      // half-filled object renders cleanly.
+      const r = await callClaudeStream(scoreSys, user, {
+        max_tokens: 2800,
+        onPartial: (p) => { if (p && Object.keys(p).length) setScore(p); },
+      });
       if (!r) throw new Error("debrief JSON did not parse (likely truncated)");
       setScore(r);
       setSessionId(await logSession({ userId: session?.user?.id, tool: "practice", input: { scenario: lockedScenario.current, generation: lockedGeneration.current, transcript, direction: lockedDirection.current, bossType: up ? lockedBossType.current : null }, output: r, model: MODEL_SMART }));

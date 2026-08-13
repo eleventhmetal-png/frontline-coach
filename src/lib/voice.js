@@ -466,60 +466,170 @@ async function authHeader() {
   return h;
 }
 
+// SENTENCE PIPELINING. The first version fired ONE request after the whole reply
+// finished, which meant the manager watched the text land and then sat in silence
+// for two or three more seconds before hearing anything. Now each completed
+// sentence is sent as soon as it exists and the clips play back to back, so the
+// voice starts while the model is still writing. Billing is per character, so N
+// clips cost the same as one — the only real cost is more requests.
+//
+// Two guards keep it from getting silly: nothing is sent until there are at least
+// TTS_MIN_CHUNK characters pending (a request for "Yeah." is a waste and sounds
+// clipped), and a turn is capped at TTS_MAX_CHUNKS.
+const TTS_MIN_CHUNK = 60;
+const TTS_MAX_CHUNKS = 8;
+
+let ttsUpTo = 0;         // characters of the reply already sent for synthesis
+let ttsQueue = [];       // in-flight/ready clips, strictly in speaking order
+let ttsPumping = false;  // the player loop is running
+let ttsChunks = 0;
+let ttsAnyPlayed = false;
+let ttsFullText = "";    // kept so a fallback can read the whole line
+
+function resetTtsTurn() {
+  ttsUpTo = 0;
+  ttsQueue = [];
+  ttsChunks = 0;
+  ttsAnyPlayed = false;
+  ttsFullText = "";
+}
+
+async function fetchClip(text, mine) {
+  const res = await fetch("/api/tts", {
+    method: "POST",
+    headers: await authHeader(),
+    body: JSON.stringify({
+      text,
+      voice: character.voice,
+      instructions: character.instructions || undefined,
+    }),
+  });
+  if (mine !== turnToken) return null;
+  if (res.status === 501) {
+    // No key on the server. Stop asking for the rest of the session.
+    ttsUnavailable = true;
+    throw new Error("tts-unconfigured");
+  }
+  if (!res.ok) throw new Error("tts-" + res.status);
+  return await res.blob();
+}
+
+// Resolves when the clip has finished, however it finishes. It must NEVER reject
+// and never hang, because the whole queue is waiting behind it.
+function playBlob(el, blob) {
+  return new Promise(function (resolve) {
+    let settled = false;
+    function done() {
+      if (settled) return;
+      settled = true;
+      el.removeEventListener("ended", done);
+      el.removeEventListener("error", done);
+      resolve();
+    }
+    el.addEventListener("ended", done);
+    el.addEventListener("error", done);
+    try {
+      releaseUrl();
+      audioUrl = URL.createObjectURL(blob);
+      el.src = audioUrl;
+      const p = el.play();
+      if (p && typeof p.catch === "function") p.catch(done);
+    } catch (e) {
+      done();
+    }
+    // A stalled element must not deadlock the rest of the turn.
+    setTimeout(done, 30000);
+  });
+}
+
+async function pump(el, mine) {
+  if (ttsPumping) return;
+  ttsPumping = true;
+  try {
+    while (ttsQueue.length) {
+      if (mine !== turnToken) return;
+      let blob = null;
+      let failed = false;
+      try {
+        blob = await ttsQueue[0];
+      } catch (e) {
+        failed = true;
+      }
+      if (mine !== turnToken) return;
+      ttsQueue.shift();
+      if (failed) {
+        // Failed before a single word was heard: hand the whole line to the
+        // browser voice so the conversation still has audio. Failed midway:
+        // skip the clip. A one-sentence gap beats restarting the line.
+        if (!ttsAnyPlayed) {
+          ttsQueue = [];
+          browserSpeech.speakWhole(ttsFullText);
+          return;
+        }
+        continue;
+      }
+      if (!blob) continue;   // superseded turn
+      ttsAnyPlayed = true;
+      await playBlob(el, blob);
+    }
+  } finally {
+    ttsPumping = false;
+    // A clip may have been queued while the loop was draining. Without this
+    // re-check the queue can stall with work still in it.
+    if (ttsQueue.length && mine === turnToken) pump(el, mine);
+  }
+}
+
+function enqueueClip(el, text, mine) {
+  if (!text) return;
+  ttsChunks++;
+  ttsQueue.push(fetchClip(text, mine));
+  pump(el, mine);
+}
+
 const apiSpeech = {
   id: "openai-tts",
   begin() {
     turnToken++;
     this.stop();
     spokenUpTo = 0;
+    resetTtsTurn();
   },
-  // Deliberately does nothing per streaming tick. One request per turn keeps
-  // the cost and the request count predictable, and a single clip of the whole
-  // line sounds better than four clips stitched together.
-  onStream() {},
-  async onEnd(fullText) {
-    const text = String(fullText || "").trim();
-    if (!text) return;
-    const mine = turnToken;
+  // Send every sentence the moment it is complete. This is what removes the
+  // dead air between the text landing and the voice starting.
+  onStream(fullText) {
+    if (!fullText) return;
+    ttsFullText = fullText;
+    if (ttsUnavailable) { browserSpeech.onStream(fullText); return; }
+    const el = ensureAudio();
+    if (!el) return;
+    if (ttsChunks >= TTS_MAX_CHUNKS) return;
+    if (fullText.length < ttsUpTo) ttsUpTo = 0;   // stream restarted
+    const pending = fullText.slice(ttsUpTo);
+    if (pending.length < TTS_MIN_CHUNK) return;
+    // Greedy on purpose: take everything through the LAST sentence end in the
+    // pending text, so a fast stream batches instead of firing per clause.
+    const m = pending.match(/^[\s\S]*[.!?…]["')\]]?[\s]/);
+    if (!m) return;
+    ttsUpTo += m[0].length;
+    enqueueClip(el, m[0].trim(), turnToken);
+  },
+  // Flush the tail — the last sentence usually has no trailing whitespace, so
+  // onStream never sees it as complete. Short replies come through here whole.
+  onEnd(fullText) {
+    const text = String(fullText || "");
+    ttsFullText = text || ttsFullText;
+    if (ttsUnavailable) { browserSpeech.speakWhole(text); return; }
     const el = ensureAudio();
     if (!el) { browserSpeech.speakWhole(text); return; }
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: await authHeader(),
-        body: JSON.stringify({
-          text,
-          voice: character.voice,
-          instructions: character.instructions || undefined,
-        }),
-      });
-      if (mine !== turnToken) return;   // New / next turn happened while we waited
-      if (res.status === 501) {
-        // No key on the server. Stop asking for the rest of the session.
-        ttsUnavailable = true;
-        browserSpeech.speakWhole(text);
-        return;
-      }
-      if (!res.ok) { browserSpeech.speakWhole(text); return; }
-      const blob = await res.blob();
-      if (mine !== turnToken) return;
-      releaseUrl();
-      audioUrl = URL.createObjectURL(blob);
-      el.src = audioUrl;
-      const p = el.play();
-      if (p && typeof p.catch === "function") {
-        p.catch(function () {
-          // Autoplay refused (never primed inside a gesture). Samantha covers it.
-          browserSpeech.speakWhole(text);
-        });
-      }
-    } catch (e) {
-      if (mine !== turnToken) return;
-      browserSpeech.speakWhole(text);
-    }
+    if (text.length < ttsUpTo) ttsUpTo = 0;
+    const rest = text.slice(ttsUpTo).trim();
+    ttsUpTo = text.length;
+    if (rest && ttsChunks < TTS_MAX_CHUNKS) enqueueClip(el, rest, turnToken);
   },
   stop() {
     turnToken++;
+    ttsQueue = [];
     if (audioEl) {
       try { audioEl.pause(); } catch (e) { /* no-op */ }
       try { audioEl.currentTime = 0; } catch (e) { /* no-op */ }
