@@ -31,23 +31,8 @@ function getSR() {
 // recognizer on every end and accumulate the finals ourselves. Bounded twice —
 // by count and by wall clock — because a recognizer that ends instantly (no mic
 // permission edge cases, backgrounded tab) would otherwise spin forever.
-// 30 was far too low and it failed SILENTLY. iOS ends the recognizer at every
-// pause, so one segment is one breath — a manager working through a hard
-// conversation pauses constantly, and a two-minute spoken turn burns 30 segments
-// without trying. Past the cap the mic just stopped, no error, mid-sentence.
-// The wall clock is the real bound; this counter only exists to stop a recognizer
-// that ends instantly from spinning forever, and 120 of those burn ~8 seconds
-// before giving up.
-const MAX_RESTARTS = 120;
+const MAX_RESTARTS = 30;
 const MAX_LISTEN_MS = 3 * 60 * 1000;
-// THE DEAF WINDOW. Every restart is time the mic is not recording, and the words
-// spoken into it are gone. 250ms of deliberate delay plus iOS's own start-up
-// latency meant the first word after any pause could vanish — the "spotty"
-// dictation. Now we restart as fast as iOS will allow and treat the
-// InvalidStateError from restarting too fast as the expected case, backing off
-// only when it actually throws.
-const RESTART_GAP_MS = 60;
-const RESTART_LADDER = [80, 180, 350, 700];
 
 // PUNCTUATION FROM PAUSES. The Web Speech API returns no punctuation at all, so a
 // dictated turn arrives as one unbroken wall of words — ugly on screen and flat
@@ -56,10 +41,8 @@ const RESTART_LADDER = [80, 180, 350, 700];
 // ending and speech resuming in the next IS a pause. A long gap is a sentence
 // boundary. Short gaps are the recognizer timing out mid-thought, which is not.
 //
-// Threshold has to clear our own restart delay plus recognition latency. That
-// delay used to be 250ms and is now 60ms, so a measured gap is closer to the
-// true silence than it was and 900ms now means a genuine between-sentence beat
-// rather than a breath plus our own overhead.
+// Threshold has to clear our own 250ms restart delay plus recognition latency, so
+// 900ms — a real between-sentence beat, not a breath.
 const SENTENCE_PAUSE_MS = 900;
 
 const webSpeechDictation = {
@@ -118,8 +101,7 @@ const webSpeechDictation = {
       return left + " " + cap(b);
     }
 
-    function boot(attempt) {
-      const tries = attempt || 0;
+    function boot() {
       try {
         rec = new SR();
       } catch (e) {
@@ -182,35 +164,23 @@ const webSpeechDictation = {
           return;
         }
         restarts++;
-        // Back-to-back start() calls on iOS throw InvalidStateError, so there is
-        // still a gap — just the smallest one that usually works, with a ladder
-        // below to cover the times it doesn't.
+        // Small gap before restarting: back-to-back start() calls on iOS throw
+        // InvalidStateError and kill the whole session.
         setTimeout(() => {
           if (stopped || done) { finish(); return; }
-          boot(0);
-        }, RESTART_GAP_MS);
+          boot();
+        }, 250);
       };
 
       try {
         rec.start();
       } catch (e) {
-        // Almost always InvalidStateError: the previous recognizer has not
-        // released the mic yet. That is a "wait and try again", not a failure —
-        // treating it as fatal is what ended dictation mid-turn.
-        const wait = RESTART_LADDER[tries];
-        if (wait === undefined) {
-          onError && onError("start-failed");
-          finish();
-          return;
-        }
-        setTimeout(() => {
-          if (stopped || done) { finish(); return; }
-          boot(tries + 1);
-        }, wait);
+        onError && onError("start-failed");
+        finish();
       }
     }
 
-    boot(0);
+    boot();
 
     return {
       stop() {
@@ -265,7 +235,10 @@ export function dictationErrorText(code) {
     case "denied":
       return "Microphone access is off. Turn it on in Settings, then tap the mic again.";
     case "no-mic":
-      return "No microphone found.";
+      // audio-capture on iOS almost never means "this phone has no microphone."
+      // It means something else still had it, usually playback that has not let
+      // go yet, or a Bluetooth route pointed somewhere with no live input.
+      return "The mic wasn't free yet. Tap it again.";
     case "network":
       return "Dictation needs a connection. Type it instead.";
     case "unsupported":
@@ -516,6 +489,52 @@ let ttsPumping = false;  // the player loop is running
 let ttsChunks = 0;
 let ttsAnyPlayed = false;
 let ttsFullText = "";    // kept so a fallback can read the whole line
+// Set once speakRest() has run, so a drained queue means "the turn is over"
+// rather than "we are between sentences".
+let ttsTurnClosed = false;
+
+// HAND THE AUDIO SESSION BACK. This is the fix for the oldest bug in the voice
+// feature: tap the mic right after the counterpart finishes and iOS reports
+// audio-capture ("No microphone found"), but wait a minute and the same tap works.
+// A media element that still holds a loaded resource keeps the iOS audio session,
+// and while it does, nothing else gets the microphone. iOS eventually reclaims it
+// on its own, which is why waiting worked and why this looked intermittent.
+//
+// pause() is not enough and neither is re-pointing src at the silent clip. Only
+// removeAttribute + load() makes WebKit let go. That costs the element its
+// user-activation, so it is thrown away and `primed` is cleared: the next tap
+// (the mic, or send) builds a fresh one and primes it inside that gesture.
+function releaseAudioSession() {
+  const el = audioEl;
+  releaseUrl();
+  if (el) {
+    try { el.pause(); } catch (e) { /* no-op */ }
+    try { el.removeAttribute("src"); } catch (e) { /* no-op */ }
+    try { el.load(); } catch (e) { /* no-op */ }
+  }
+  audioEl = null;
+  primed = false;
+  // speechSynthesis holds the session too when it covered for us this turn.
+  try { if (browserSpeechAvailable()) window.speechSynthesis.cancel(); } catch (e) { /* no-op */ }
+}
+
+// Called wherever the queue might have just gone empty. Releases only when the
+// turn is CLOSED, because mid-reply the queue drains between every sentence.
+function maybeReleaseAfterTurn(mine) {
+  if (!ttsTurnClosed) return;
+  if (mine !== turnToken) return;
+  if (ttsPumping || ttsQueue.length) return;
+  // Let the final clip's tail flush before pulling the element out from under it.
+  setTimeout(function () {
+    if (mine !== turnToken || ttsPumping || ttsQueue.length) return;
+    if (browserSpeechAvailable()) {
+      try {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return;
+      } catch (e) { /* no-op */ }
+    }
+    releaseAudioSession();
+  }, 400);
+}
 
 function resetTtsTurn() {
   ttsUpTo = 0;
@@ -613,6 +632,7 @@ async function pump(el, mine) {
     // A clip may have been queued while the loop was draining. Without this
     // re-check the queue can stall with work still in it.
     if (ttsQueue.length && mine === turnToken) pump(el, mine);
+    else maybeReleaseAfterTurn(mine);
   }
 }
 
@@ -694,6 +714,7 @@ export function speechDriverId() {
 // Names kept stable so callers don't care which driver is live.
 
 export function resetReadAloud() {
+  ttsTurnClosed = false;
   activeSpeech().begin();
 }
 
@@ -703,6 +724,10 @@ export function speakStream(fullText) {
 
 export function speakRest(fullText) {
   activeSpeech().onEnd(fullText);
+  // The turn is done. From here the microphone matters more than holding on to a
+  // warm audio element, so give the session back as soon as the audio stops.
+  ttsTurnClosed = true;
+  maybeReleaseAfterTurn(turnToken);
 }
 
 export function stopSpeaking() {

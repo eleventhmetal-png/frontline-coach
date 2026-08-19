@@ -2924,6 +2924,10 @@ function Roleplay({ session } = {}) {
     // streams each wrote setHistory from their own captured array, so whichever
     // finished last silently overwrote the other turn.
     if (loading || !draft.trim()) return;
+    // Inside the tap. The audio element is released after each reply so the mic
+    // can have the session back, which means a fresh one needs priming every turn
+    // or read-aloud goes silent for anyone who types instead of dictating.
+    primeSpeech();
     // CANCEL, not stop. stop() keeps the transcript and hands it back through
     // onFinal — which lands after setDraft("") below and puts the sent line
     // straight back in the box, so the next dictation appends to it.
