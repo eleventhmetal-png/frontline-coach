@@ -2711,6 +2711,19 @@ function useDictation({ value, setValue, onFirstUse }) {
   // When the mic actually opened. A tap that lands within a moment of that is not
   // somebody changing their mind, it is the second half of a double tap.
   const openedAtRef = useRef(0);
+  // stop() is not instant: it flags the driver, calls rec.stop(), and waits up to
+  // 400ms for onend. Through that window `listening` is still true, so a tap
+  // meaning "open it again" lands in the stop branch and is swallowed.
+  const stoppingRef = useRef(false);
+  const pendingStartRef = useRef(false);
+  // SESSION TOKEN. Every startDictation call gets its own handlers, and a dying
+  // session's onEnd used to fire straight into this hook's state with no idea it
+  // was stale. Start a new mic before the old recognizer has finished winding down
+  // and the old onEnd would set listening false and null out handleRef, orphaning
+  // the mic that was actually recording: it stayed on, the button went dark, and
+  // nothing could stop it. That is why tapping while the iOS mic pill is still up
+  // did not work at all.
+  const sessionRef = useRef(0);
   const [err, setErr] = useState("");
   const handleRef = useRef(null);
   const baseRef = useRef("");     // whatever was already in the field before the mic opened
@@ -2737,34 +2750,70 @@ function useDictation({ value, setValue, onFirstUse }) {
   // that fast is not a real intention; killing the mic you just asked for is not
   // what that tap meant.
   const OPEN_GRACE_MS = 700;
-  function toggle() {
-    if (listeningRef.current) {
-      if (Date.now() - openedAtRef.current < OPEN_GRACE_MS) return;
-      try { handleRef.current && handleRef.current.stop(); } catch (e) {}
-      return;
-    }
+  function open({ resumed = false } = {}) {
+    if (listeningRef.current) return;
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
-    primeSpeech();    // must happen inside the tap or iOS stays mute later
+    if (!resumed) primeSpeech();   // must happen inside the tap or iOS stays mute later
     setErr("");
     const cur = valueRef.current || "";
     baseRef.current = cur ? cur.replace(/\s+$/, "") + " " : "";
     // Set synchronously: startDictation can call back before this render commits,
     // and a second tap can arrive before it too.
+    const mine = ++sessionRef.current;
     listeningRef.current = true;
+    stoppingRef.current = false;
+    pendingStartRef.current = false;
     openedAtRef.current = Date.now();
     setListening(true);
     handleRef.current = startDictation({
-      onPartial: (t) => { if (t) markUsed(); setValue(baseRef.current + t); },
-      onFinal: (t) => { if (t) { markUsed(); setValue(baseRef.current + t); } },
-      onError: (code) => setErr(dictationErrorText(code)),
-      onEnd: () => { listeningRef.current = false; setListening(false); handleRef.current = null; },
+      onPartial: (t) => {
+        if (mine !== sessionRef.current) return;
+        if (t) markUsed();
+        setValue(baseRef.current + t);
+      },
+      onFinal: (t) => {
+        if (mine !== sessionRef.current) return;
+        if (t) { markUsed(); setValue(baseRef.current + t); }
+      },
+      onError: (code) => { if (mine === sessionRef.current) setErr(dictationErrorText(code)); },
+      onEnd: () => {
+        // A superseded session finishing must not touch anything. It is reporting
+        // on a mic nobody is using any more.
+        if (mine !== sessionRef.current) return;
+        listeningRef.current = false;
+        stoppingRef.current = false;
+        setListening(false);
+        handleRef.current = null;
+        if (pendingStartRef.current) {
+          pendingStartRef.current = false;
+          // Safe outside a gesture: the device log showed audiostart firing on
+          // every start, whether a tap triggered it or not.
+          setTimeout(() => { if (!listeningRef.current) open({ resumed: true }); }, 120);
+        }
+      },
     });
+  }
+  function toggle() {
+    // Already closing. The only thing this tap can sensibly mean is "open it
+    // again", so honour it once the old session lands instead of starting a second
+    // recognizer alongside a dying one.
+    if (stoppingRef.current) { pendingStartRef.current = true; return; }
+    if (listeningRef.current) {
+      if (Date.now() - openedAtRef.current < OPEN_GRACE_MS) return;
+      stoppingRef.current = true;
+      try { handleRef.current && handleRef.current.stop(); } catch (e) {}
+      return;
+    }
+    open();
   }
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
   function cancel() {
+    pendingStartRef.current = false;   // a send or a reset outranks a queued tap
     if (!listeningRef.current) return;
+    stoppingRef.current = false;
+    listeningRef.current = false;
     try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
   }
   return {
