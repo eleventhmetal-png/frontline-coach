@@ -323,7 +323,15 @@ export default function AuthGate({ children }) {
           },
         });
         if (signUpError) throw signUpError;
-        setNotice("Check your email to confirm your account, then sign in.");
+        // CHECK JUNK, said explicitly and on purpose. Auth mail comes from
+        // no-reply@auth.frontline-coach.com, a young sending subdomain with
+        // almost no volume, and iCloud in particular files it as junk even with
+        // SPF, DKIM and DMARC all in place — confirmed on a real iCloud address
+        // 13 Aug 2026. Reputation builds over weeks of sending, which is not
+        // something a new product has. Until it does, the person who never
+        // thinks to look in junk is a signup we lost for no reason. Cheapest
+        // possible recovery, so do not trim this back to one clause.
+        setNotice("Check your email to confirm your account, then sign in. If it's not there in a minute, look in your junk or spam folder — it often lands there the first time.");
         setMode("signin");
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -669,7 +677,7 @@ export default function AuthGate({ children }) {
                 <Check size={14} className="mt-0.5 shrink-0" />
                 <span>
                   If an account exists for {email.trim()}, a reset link is on its way. It
-                  expires in an hour — check your spam folder if you don't see it.
+                  expires in an hour — check your junk or spam folder if you don't see it.
                 </span>
               </div>
             ) : (
