@@ -105,7 +105,7 @@ export const TERMS_SECTIONS = [
   {
     heading: "13. Suspension, Termination, and Deletion",
     body: [
-      "You can stop using the Service and request account deletion at any time by contacting hello@otsowntheshift.com (or using the in-app option where available). We may suspend or terminate accounts that violate these Terms, and may act immediately without advance notice where needed to address fraud, abuse, security, or legal risk.",
+      "You can delete your account at any time from inside the app, under Tools then Data and privacy. That removes your profile, your session history, your practice patterns and your follow-through list, permanently and with no backup to restore from; problem reports you submitted are kept with your account detached from them so we can still act on them. You can also write to hello@otsowntheshift.com. We may suspend or terminate accounts that violate these Terms, and may act immediately without advance notice where needed to address fraud, abuse, security, or legal risk.",
       "On termination, your license to use the Service ends. We'll delete or de-identify your data as described in the Privacy Policy, subject to limited operational copies and any legal retention obligation.",
     ],
   },
@@ -178,6 +178,7 @@ export const PRIVACY_SECTIONS = [
     body: [
       "To operate the Service: generate coaching responses, keep your session history so context carries across visits, produce your practice-pattern feedback, and provide support.",
       "To protect the Service: review flagged content and investigate abuse, security, or misuse. We do not use your content to train AI models, and we do not sell your information.",
+      "If you report a problem with a response, we review it within three business days and act on it — correcting the behaviour, changing the underlying instructions, or removing content. Reports about safety or someone's wellbeing are looked at the same day. You can also reach us directly at hello@otsowntheshift.com.",
     ],
   },
   {
