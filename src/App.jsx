@@ -2673,12 +2673,18 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 // into text. Roleplay uses it to switch the reply voice on.
 function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   const [listening, setListening] = useState(false);
+  // Mirrored into a ref because start() gets called from a closure captured at
+  // SEND time, and at send time `listening` was true — the manager was mid-
+  // sentence. Reading the state variable there made the hands-free reopen a
+  // no-op every time: it hit the "already listening" guard and returned.
+  const listeningRef = useRef(false);
   const [err, setErr] = useState("");
   const handleRef = useRef(null);
   const baseRef = useRef("");     // whatever was already in the field before the mic opened
   const valueRef = useRef(value); // so toggle() reads the live value without re-binding
   const usedRef = useRef(false);
   useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
   // Practice stays mounted behind a display:none wrapper, so leaving the tab does
   // NOT unmount it and would otherwise leave the mic hot.
   useEffect(() => () => { try { handleRef.current && handleRef.current.cancel(); } catch (e) {} }, []);
@@ -2692,23 +2698,26 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   // after the counterpart finished talking. It skips primeSpeech, which is only
   // legal inside a user gesture and has already run on the first tap anyway.
   function start({ resumed = false } = {}) {
-    if (listening) return;
+    if (listeningRef.current) return;
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
     if (!resumed) primeSpeech();   // must happen inside the tap or iOS stays mute later
     setErr("");
     const cur = valueRef.current || "";
     baseRef.current = cur ? cur.replace(/\s+$/, "") + " " : "";
+    // Set the ref synchronously. The effect that mirrors it does not run until
+    // after this render commits, and startDictation can call back before then.
+    listeningRef.current = true;
     setListening(true);
     handleRef.current = startDictation({
       onPartial: (t) => { if (t) markUsed(); setValue(baseRef.current + t); },
       onFinal: (t) => { if (t) { markUsed(); setValue(baseRef.current + t); } },
       onError: (code) => setErr(dictationErrorText(code)),
-      onEnd: () => { setListening(false); handleRef.current = null; },
+      onEnd: () => { listeningRef.current = false; setListening(false); handleRef.current = null; },
     });
   }
   function toggle() {
-    if (listening) {
+    if (listeningRef.current) {
       try { handleRef.current && handleRef.current.stop(); } catch (e) {}
       // A deliberate tap off is the manager saying "I'll type the rest". Hands-free
       // has to hear that, or the mic reopens on them next turn and it feels broken.
@@ -2720,11 +2729,14 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
   function cancel() {
-    if (!listening) return;
+    if (!listeningRef.current) return;
     try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
   }
   return {
     available, listening, err, toggle, start, cancel,
+    // Live read, for callers deciding something at event time rather than render
+    // time. `listening` is still the right thing to render from.
+    isListening: () => listeningRef.current,
     used: () => usedRef.current,
     reset: () => { usedRef.current = false; setErr(""); },
   };
@@ -2938,7 +2950,7 @@ function Roleplay({ session } = {}) {
     // straight back in the box, so the next dictation appends to it.
     // Read this BEFORE cancel(): whether the mic was live at send time is the
     // whole signal for hands-free. Spoken turn, keep the loop going.
-    handsFreeRef.current = dict.listening;
+    handsFreeRef.current = dict.isListening();
     dict.cancel();
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
