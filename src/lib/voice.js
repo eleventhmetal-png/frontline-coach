@@ -486,6 +486,13 @@ let ttsPumping = false;  // the player loop is running
 let ttsChunks = 0;
 let ttsAnyPlayed = false;
 let ttsFullText = "";    // kept so a fallback can read the whole line
+// HANDS-FREE SUPPORT. The mic must not reopen while the counterpart is still
+// talking, or it records our own voice. "Idle" is a stricter thing than "the
+// queue is empty": mid-stream the queue drains constantly between sentences.
+// It means the turn is CLOSED (speakRest has run) AND nothing is left to play.
+let ttsTurnClosed = false;
+let idleCbs = [];
+let idleDeadline = 0;
 
 function resetTtsTurn() {
   ttsUpTo = 0;
@@ -583,6 +590,7 @@ async function pump(el, mine) {
     // A clip may have been queued while the loop was draining. Without this
     // re-check the queue can stall with work still in it.
     if (ttsQueue.length && mine === turnToken) pump(el, mine);
+    else maybeSpeechIdle();
   }
 }
 
@@ -660,10 +668,48 @@ export function speechDriverId() {
   return activeSpeech().id;
 }
 
+function browserSpeaking() {
+  if (!browserSpeechAvailable()) return false;
+  try {
+    return !!(window.speechSynthesis.speaking || window.speechSynthesis.pending);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Fires the one-shot idle subscribers once the voice has genuinely stopped.
+// The browser synthesizer gives us no drain event we own, so that path polls.
+// The deadline exists so a wedged utterance can't leave a hands-free manager
+// staring at a dead mic forever: past it we hand control back anyway.
+function maybeSpeechIdle() {
+  if (!idleCbs.length || !ttsTurnClosed) return;
+  const late = Date.now() > idleDeadline;
+  if (!late) {
+    if (ttsPumping || ttsQueue.length) return;
+    if (browserSpeaking()) { setTimeout(maybeSpeechIdle, 250); return; }
+  }
+  const cbs = idleCbs;
+  idleCbs = [];
+  cbs.forEach(function (fn) { try { fn(); } catch (e) { /* no-op */ } });
+}
+
+// Subscribe once to "the voice has finished this turn". Calling it when the
+// voice is already done fires on the spot, which is the common case for a
+// short reply that finished speaking before the caller got here.
+export function onSpeechIdle(cb) {
+  if (typeof cb !== "function") return;
+  idleCbs.push(cb);
+  if (!idleDeadline || Date.now() > idleDeadline) idleDeadline = Date.now() + 60000;
+  maybeSpeechIdle();
+}
+
 // ---------- public read-aloud API ----------
 // Names kept stable so callers don't care which driver is live.
 
 export function resetReadAloud() {
+  ttsTurnClosed = false;
+  idleCbs = [];
+  idleDeadline = 0;
   activeSpeech().begin();
 }
 
@@ -673,12 +719,19 @@ export function speakStream(fullText) {
 
 export function speakRest(fullText) {
   activeSpeech().onEnd(fullText);
+  // The turn is closed. From here a drained queue means the voice is done, not
+  // that it is between sentences.
+  ttsTurnClosed = true;
+  maybeSpeechIdle();
 }
 
 export function stopSpeaking() {
   // Stop BOTH: the API driver may have handed this turn to the browser.
   apiSpeech.stop();
   browserSpeech.stop();
+  // Someone cut the voice off deliberately. Dropping the subscribers is the
+  // point: a manual stop must not trip an automatic mic reopen.
+  idleCbs = [];
 }
 
 // ---------- read-aloud preference ----------

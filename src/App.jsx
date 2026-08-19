@@ -23,6 +23,7 @@ import {
 import {
   dictationAvailable, startDictation, dictationErrorText,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
+  onSpeechIdle,
   setSpeechCharacter,
   readAloudPref, setReadAloudPref,
 } from "./lib/voice";
@@ -2670,7 +2671,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 //
 // onFirstUse fires once per hook instance, the first time speech actually turns
 // into text. Roleplay uses it to switch the reply voice on.
-function useDictation({ value, setValue, onFirstUse }) {
+function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   const [listening, setListening] = useState(false);
   const [err, setErr] = useState("");
   const handleRef = useRef(null);
@@ -2687,11 +2688,14 @@ function useDictation({ value, setValue, onFirstUse }) {
     usedRef.current = true;
     if (onFirstUse) onFirstUse();
   }
-  function toggle() {
-    if (listening) { try { handleRef.current && handleRef.current.stop(); } catch (e) {} return; }
+  // `resumed` marks a start that no tap triggered — hands-free reopening the mic
+  // after the counterpart finished talking. It skips primeSpeech, which is only
+  // legal inside a user gesture and has already run on the first tap anyway.
+  function start({ resumed = false } = {}) {
+    if (listening) return;
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
-    primeSpeech();    // must happen inside the tap or iOS stays mute later
+    if (!resumed) primeSpeech();   // must happen inside the tap or iOS stays mute later
     setErr("");
     const cur = valueRef.current || "";
     baseRef.current = cur ? cur.replace(/\s+$/, "") + " " : "";
@@ -2703,6 +2707,16 @@ function useDictation({ value, setValue, onFirstUse }) {
       onEnd: () => { setListening(false); handleRef.current = null; },
     });
   }
+  function toggle() {
+    if (listening) {
+      try { handleRef.current && handleRef.current.stop(); } catch (e) {}
+      // A deliberate tap off is the manager saying "I'll type the rest". Hands-free
+      // has to hear that, or the mic reopens on them next turn and it feels broken.
+      if (onManualStop) onManualStop();
+      return;
+    }
+    start();
+  }
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
   function cancel() {
@@ -2710,7 +2724,7 @@ function useDictation({ value, setValue, onFirstUse }) {
     try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
   }
   return {
-    available, listening, err, toggle, cancel,
+    available, listening, err, toggle, start, cancel,
     used: () => usedRef.current,
     reset: () => { usedRef.current = false; setErr(""); },
   };
@@ -2780,7 +2794,16 @@ function Roleplay({ session } = {}) {
   // is the "or write your own" box on the setup screen — describing the situation
   // you are walking into is easier said than typed, and the setup screen is also
   // where Ben went looking for the mic first, which means users will too.
-  const dict = useDictation({ value: draft, setValue: setDraft, onFirstUse: enableReplyVoiceOnce });
+  // HANDS-FREE. Speaking a turn, sending it, then having to reach back for the
+  // mic every single time turns a conversation into a walkie-talkie. Armed by
+  // sending a turn that was actually being dictated, disarmed the moment the
+  // manager taps the mic off or the rep ends. Never armed by a typed turn: the
+  // mic must not open on someone who chose the keyboard.
+  const handsFreeRef = useRef(false);
+  const dict = useDictation({
+    value: draft, setValue: setDraft, onFirstUse: enableReplyVoiceOnce,
+    onManualStop: () => { handsFreeRef.current = false; },
+  });
   const setupDict = useDictation({ value: customScenario, setValue: setCustomScenario, onFirstUse: enableReplyVoiceOnce });
   const listening = dict.listening;
   const voiceErr = dict.err || setupDict.err;
@@ -2885,6 +2908,25 @@ function Roleplay({ session } = {}) {
     setStarted(true);
     scrollDown();
   }
+  // Reopen the mic for the next turn, but only once the counterpart has actually
+  // stopped talking — the phone speaker feeds straight back into the phone mic,
+  // so starting a moment early records our own voice as the manager's answer.
+  // With read-aloud off there is nothing to wait for.
+  function resumeMic() {
+    if (!handsFreeRef.current) return;
+    if (!dict.available) return;
+    const go = () => {
+      // Re-checked, not assumed: seconds pass while the voice talks, and the rep
+      // can be scored or abandoned inside that window. Every one of those paths
+      // clears handsFreeRef, so this one flag is the whole guard.
+      if (!handsFreeRef.current) return;
+      dict.start({ resumed: true });
+    };
+    if (!readAloudRef.current) { setTimeout(go, 120); return; }
+    // The short tail after the last clip's `ended` event still bleeds into the
+    // mic on a speakerphone, so give it a beat.
+    onSpeechIdle(() => setTimeout(go, 350));
+  }
   async function send() {
     // Guarded on `loading` because the textarea's Enter handler calls send()
     // directly and bypassed the send button's disabled state. Two concurrent
@@ -2894,6 +2936,9 @@ function Roleplay({ session } = {}) {
     // CANCEL, not stop. stop() keeps the transcript and hands it back through
     // onFinal — which lands after setDraft("") below and puts the sent line
     // straight back in the box, so the next dictation appends to it.
+    // Read this BEFORE cancel(): whether the mic was live at send time is the
+    // whole signal for hands-free. Spoken turn, keep the loop going.
+    handsFreeRef.current = dict.listening;
     dict.cancel();
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
@@ -2915,6 +2960,7 @@ function Roleplay({ session } = {}) {
         },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
       if (readAloudRef.current) speakRest(spoken);
+      resumeMic();
     } catch (e) {
       // Roll the empty assistant placeholder back out of the transcript and give
       // the manager their line back. Left in place it poisoned every subsequent
@@ -2928,6 +2974,7 @@ function Roleplay({ session } = {}) {
     }
   }
   async function endAndScore() {
+    handsFreeRef.current = false;   // the rep is over; nothing left to answer
     setLoading(true); setError(""); setSessionId(null);
     const up = lockedDirection.current === "up";
     const transcript = history.map((m) => `${m.role === "user" ? (up ? "LEADER" : "MANAGER") : (up ? "BOSS" : "EMPLOYEE")}: ${m.content}`).join("\n");
@@ -2985,6 +3032,7 @@ function Roleplay({ session } = {}) {
     // setLoading(false) included: hitting New mid-stream left loading stuck true,
     // so the manager landed back on the setup screen with a spinning, disabled
     // Start button until the abandoned stream finished on its own.
+    handsFreeRef.current = false;
     dict.cancel(); setupDict.cancel();
     stopSpeaking(); resetReadAloud(); dict.reset(); setupDict.reset();
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
