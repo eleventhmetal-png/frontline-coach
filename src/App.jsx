@@ -23,7 +23,7 @@ import {
 import {
   dictationAvailable, startDictation, dictationErrorText,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
-  onSpeechIdle,
+  onSpeechIdle, releaseAudioForCapture,
   setSpeechCharacter,
   readAloudPref, setReadAloudPref,
 } from "./lib/voice";
@@ -2671,7 +2671,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 //
 // onFirstUse fires once per hook instance, the first time speech actually turns
 // into text. Roleplay uses it to switch the reply voice on.
-function useDictation({ value, setValue, onFirstUse, onManualStop }) {
+function useDictation({ value, setValue, onFirstUse, onManualStop, onResumeFailed }) {
   const [listening, setListening] = useState(false);
   const [muted, setMuted] = useState(false);
   // Mirrored into a ref because start() gets called from a closure captured at
@@ -2695,6 +2695,12 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   // counterpart has even replied. So it opens then, deaf on purpose, and comes
   // live when the reply has finished being spoken.
   const mutedRef = useRef(false);
+  // Every driver event, including the no-speech and aborted codes deliberately
+  // hidden from the user. A recognizer that is open and merely hearing silence
+  // fires these constantly. One that is WEDGED fires nothing at all, and that
+  // difference is the only way to tell the two apart from up here.
+  const evRef = useRef({ count: 0, lastAt: 0, trail: [] });
+  const resumedRef = useRef(false);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { listeningRef.current = listening; }, [listening]);
   // Practice stays mounted behind a display:none wrapper, so leaving the tab does
@@ -2723,6 +2729,8 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
     heardRef.current = false;
     mutedRef.current = !!muted;
     setMuted(!!muted);
+    evRef.current = { count: 0, lastAt: 0, trail: [] };
+    resumedRef.current = !!resumed;
     setListening(true);
     handleRef.current = startDictation({
       // Dropped, not buffered. While muted the recognizer is transcribing OUR
@@ -2736,7 +2744,25 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
         if (mutedRef.current) return;
         if (t) { markUsed(); heardRef.current = true; setValue(baseRef.current + t); }
       },
-      onError: (code) => setErr(dictationErrorText(code)),
+      onError: (code) => {
+        // "No microphone found" is true for a phone with no mic and false for a
+        // route that has not finished switching. Shown after an automatic reopen
+        // it reads as hardware failure and it is not — it is our timing. Fall
+        // back to asking for a tap, which is the path that works.
+        const routeIssue = code === "no-mic" || code === "start-failed" || code === "network";
+        if (resumedRef.current && routeIssue) {
+          if (onResumeFailed) onResumeFailed();
+          return;
+        }
+        setErr(dictationErrorText(code));
+      },
+      onEvent: (name) => {
+        const e = evRef.current;
+        e.count++;
+        e.lastAt = Date.now();
+        e.trail.push(name);
+        if (e.trail.length > 8) e.trail.shift();
+      },
       onEnd: () => {
         listeningRef.current = false;
         mutedRef.current = false;
@@ -2781,6 +2807,7 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
     // time. `listening` is still the right thing to render from.
     isListening: () => listeningRef.current,
     heard: () => heardRef.current,
+    events: () => evRef.current,
     used: () => usedRef.current,
     reset: () => { usedRef.current = false; setErr(""); },
   };
@@ -2863,12 +2890,17 @@ function Roleplay({ session } = {}) {
   // manager taps the mic off or the rep ends. Never armed by a typed turn: the
   // mic must not open on someone who chose the keyboard.
   const handsFreeRef = useRef(false);
+  // Set when an automatic reopen could not get the microphone. The manager is
+  // told to tap, rather than left talking at a mic that is not there.
+  const [tapToTalk, setTapToTalk] = useState(false);
   const dict = useDictation({
     value: draft, setValue: setDraft, onFirstUse: enableReplyVoiceOnce,
-    onManualStop: () => { handsFreeRef.current = false; },
+    onManualStop: () => { handsFreeRef.current = false; setTapToTalk(false); },
+    onResumeFailed: () => { if (handsFreeRef.current) setTapToTalk(true); },
   });
   const setupDict = useDictation({ value: customScenario, setValue: setCustomScenario, onFirstUse: enableReplyVoiceOnce });
   const listening = dict.listening;
+  useEffect(() => { if (dict.listening && dict.events().count > 0) setTapToTalk(false); }, [dict.listening, draft]);
   const voiceErr = dict.err || setupDict.err;
   // Practice is stays-mounted (see the display:none wrapper in the shell), so
   // leaving the tab does NOT unmount this component and would otherwise leave a
@@ -2975,20 +3007,39 @@ function Roleplay({ session } = {}) {
   // stopped talking — the phone speaker feeds straight back into the phone mic,
   // so starting a moment early records our own voice as the manager's answer.
   // With read-aloud off there is nothing to wait for.
-  // Reopening the mic AFTER the reply cannot work on iOS: a recognizer started
-  // without a live user gesture comes up silently deaf, no error thrown. So the
-  // mic opens inside the send tap, while the gesture is still valid, and simply
-  // discards everything until the counterpart has finished talking.
-  function armHandsFree() {
+  // WHY THE MIC IS CLOSED WHILE THE COUNTERPART TALKS, even though holding it open
+  // is the only way iOS reliably grants it: an open mic puts the audio session in
+  // record mode, and record mode routes playback to the earpiece instead of the
+  // speaker. Holding it open buys hands-free and costs everyone without earbuds a
+  // reply they can barely hear. On a sales floor that is the wrong trade.
+  //
+  // So we try to reopen after the voice stops, knowing iOS may refuse a mic that
+  // no gesture asked for, and we make the refusal SAFE rather than silent.
+  function resumeMic() {
     if (!handsFreeRef.current || !dict.available) return;
-    dict.start({ resumed: true, muted: true });
-  }
-  // The counterpart has stopped. Whatever the recognizer transcribed of OUR voice
-  // gets thrown away and the next words in are the manager's.
-  function goLive() {
-    if (!handsFreeRef.current) return;
-    if (!readAloudRef.current) { setTimeout(() => dict.unmute(), 150); return; }
-    onSpeechIdle(() => setTimeout(() => { if (handsFreeRef.current) dict.unmute(); }, 250));
+    const go = () => {
+      if (!handsFreeRef.current) return;
+      setTapToTalk(false);
+      // Drop the audio element entirely so the route is free to switch to input.
+      // This is why the fallback below works: it costs the element its
+      // user-activation, and the tap that rebuilds it re-primes inside a gesture.
+      releaseAudioForCapture();
+      dict.start({ resumed: true });
+      // WEDGE CHECK. A recognizer that is merely hearing silence fires no-speech
+      // and end events constantly. One iOS refused fires nothing at all. Total
+      // event silence is the signal, NOT "no words yet" — a manager thinking for
+      // three seconds before answering a hard question is not a broken mic.
+      setTimeout(() => {
+        if (!handsFreeRef.current || !dict.isListening()) return;
+        if (dict.events().count > 0) return;
+        // Dead. Close it and ask for the tap, rather than leave a lit mic eating
+        // the answer.
+        dict.cancel();
+        setTapToTalk(true);
+      }, 2500);
+    };
+    if (!readAloudRef.current) { setTimeout(go, 200); return; }
+    onSpeechIdle(() => setTimeout(go, 700));
   }
   async function send() {
     // Guarded on `loading` because the textarea's Enter handler calls send()
@@ -3003,9 +3054,6 @@ function Roleplay({ session } = {}) {
     // whole signal for hands-free. Spoken turn, keep the loop going.
     handsFreeRef.current = dict.isListening();
     dict.cancel();
-    // INSIDE THE TAP. Everything above this line is still synchronous with the
-    // user's gesture, and that is the only window iOS will give us a working mic.
-    armHandsFree();
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
@@ -3026,7 +3074,7 @@ function Roleplay({ session } = {}) {
         },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
       if (readAloudRef.current) speakRest(spoken);
-      goLive();
+      resumeMic();
     } catch (e) {
       // Roll the empty assistant placeholder back out of the transcript and give
       // the manager their line back. Left in place it poisoned every subsequent
@@ -3037,6 +3085,7 @@ function Roleplay({ session } = {}) {
       // for a reply that never came. Close it, or the manager's next attempt talks
       // into a recognizer that is throwing every word away.
       handsFreeRef.current = false;
+      setTapToTalk(false);
       dict.cancel();
       setDraft(sent);
       setError(errMessage(e, "No reply came back. Try sending again."));
@@ -3108,6 +3157,7 @@ function Roleplay({ session } = {}) {
     // so the manager landed back on the setup screen with a spinning, disabled
     // Start button until the abandoned stream finished on its own.
     handsFreeRef.current = false;
+    setTapToTalk(false);
     dict.cancel(); setupDict.cancel();
     stopSpeaking(); resetReadAloud(); dict.reset(); setupDict.reset();
     setStarted(false); setHistory([]); setScore(null); setDraft(""); setError(""); setSessionId(null); setLoading(false);
@@ -3364,7 +3414,9 @@ function Roleplay({ session } = {}) {
                 ? (dict.muted
                     ? "Let them finish, then talk…"
                     : "Listening… say it the way you'd say it")
-                : (history.length === 0 ? "The first real thing you'd say…" : "Your response…")}
+                : tapToTalk
+                  ? "Tap the mic to answer"
+                  : (history.length === 0 ? "The first real thing you'd say…" : "Your response…")}
               rows={1}
               className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-y-auto"
               style={{ minHeight: "48px", maxHeight: DRAFT_MAX_PX + "px", borderColor: listening ? ACCENT : "#262626" }}
@@ -3376,6 +3428,11 @@ function Roleplay({ session } = {}) {
               <Send size={18} />
             </button>
           </div>
+          {tapToTalk && !listening && !voiceErr && (
+            <div className="text-[12px] mb-2 leading-snug" style={{ color: ACCENT }}>
+              Tap the mic and keep going.
+            </div>
+          )}
           {voiceErr && (
             <div className="text-[11.5px] text-neutral-500 mb-2 leading-snug">{voiceErr}</div>
           )}

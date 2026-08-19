@@ -67,7 +67,11 @@ const webSpeechDictation = {
   available() {
     return !!getSR();
   },
-  start({ onPartial, onFinal, onError, onEnd } = {}) {
+  start({ onPartial, onFinal, onError, onEnd, onEvent } = {}) {
+    // no-speech and aborted are deliberately hidden from the user (see onerror),
+    // which also hid them from US while chasing a mic that looked live and heard
+    // nothing. This tap reports everything, for the debug line only.
+    const ev = (name) => { try { onEvent && onEvent(name); } catch (e) { /* no-op */ } };
     const SR = getSR();
     if (!SR) {
       onError && onError("unsupported");
@@ -133,6 +137,7 @@ const webSpeechDictation = {
       rec.maxAlternatives = 1;
 
       rec.onresult = (e) => {
+        ev("result");
         if (suppressed) return;
         // First words of a new segment: decide now whether the gap we just sat
         // through was a sentence break, and spend that decision once.
@@ -158,6 +163,7 @@ const webSpeechDictation = {
 
       rec.onerror = (e) => {
         const code = e && e.error ? e.error : "unknown";
+        ev("err:" + code);
         // no-speech and aborted are normal punctuation in a long dictation —
         // surfacing them would flash an error every time the manager pauses to
         // think, which is exactly when they're doing the hard part.
@@ -176,6 +182,7 @@ const webSpeechDictation = {
       };
 
       rec.onend = () => {
+        ev("end");
         segmentEndedAt = Date.now();   // start timing the gap
         if (stopped || restarts >= MAX_RESTARTS || Date.now() - startedAt > MAX_LISTEN_MS) {
           finish();
@@ -193,7 +200,9 @@ const webSpeechDictation = {
 
       try {
         rec.start();
+        ev("start" + (tries ? ":retry" + tries : ""));
       } catch (e) {
+        ev("throw");
         // Almost always InvalidStateError: the previous recognizer has not
         // released the mic yet. That is a "wait and try again", not a failure —
         // treating it as fatal is what ended dictation mid-turn.
@@ -762,6 +771,30 @@ export function speakRest(fullText) {
   // that it is between sentences.
   ttsTurnClosed = true;
   maybeSpeechIdle();
+}
+
+// GIVE THE MICROPHONE THE ROUTE. Pausing the element is not enough and pointing
+// it at a silent clip is not enough: until the media resource is dropped, iOS
+// keeps the route pointed at output, and a recognizer asking for input gets
+// nothing — then reports audio-capture, which surfaces as "No microphone found."
+// On Bluetooth it is worse, because the output-to-input switch is slower than on
+// the built-in mic.
+//
+// removeAttribute + load() is what actually makes WebKit relinquish it. That costs
+// the element its user-activation, so the element is thrown away and `primed` is
+// cleared: the next real tap builds a fresh one and primes it inside that gesture.
+// Which is exactly what the tap-to-talk fallback is.
+export function releaseAudioForCapture() {
+  const el = audioEl;
+  releaseUrl();
+  if (el) {
+    try { el.pause(); } catch (e) { /* no-op */ }
+    try { el.removeAttribute("src"); } catch (e) { /* no-op */ }
+    try { el.load(); } catch (e) { /* no-op */ }
+  }
+  audioEl = null;
+  primed = false;
+  try { if (browserSpeechAvailable()) window.speechSynthesis.cancel(); } catch (e) { /* no-op */ }
 }
 
 export function stopSpeaking() {
