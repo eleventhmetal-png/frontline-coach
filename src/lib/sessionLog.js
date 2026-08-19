@@ -29,20 +29,27 @@ export async function logSession({ userId, tool, input, output, model }) {
 // specific coaching result as wrong, offensive, or concerning. Ties back to
 // the exact session row when we have one, so review isn't guessing which
 // output someone meant.
+// Returns { ok, error } instead of a bare boolean. The old shape gave the caller
+// no way to tell the user WHY a report didn't send, and FeedbackRow's `if (ok)`
+// meant a failure did literally nothing on screen: the box stayed open, the
+// button un-greyed, and the person assumed it went. A flagging mechanism that
+// can fail invisibly is not a flagging mechanism, which is the whole point of
+// Guideline 4.7.
 export async function reportProblem({ userId, sessionId, reason }) {
-  if (!supabaseReady || !userId) return false;
+  if (!supabaseReady) return { ok: false, error: "Not connected. Check your connection and try again." };
+  if (!userId) return { ok: false, error: "You need to be signed in to report a response." };
   try {
     const { error } = await supabase
       .from("reports")
       .insert({ user_id: userId, session_id: sessionId || null, reason });
     if (error) {
-      console.error("Report failed:", error.message);
-      return false;
+      console.error("Report failed:", error.message, error.code || "", error.details || "");
+      return { ok: false, error: "Couldn't send that report. Email hello@otsowntheshift.com and we'll pick it up." };
     }
-    return true;
+    return { ok: true, error: null };
   } catch (e) {
     console.error("Report failed:", e.message);
-    return false;
+    return { ok: false, error: "Couldn't send that report. Email hello@otsowntheshift.com and we'll pick it up." };
   }
 }
 

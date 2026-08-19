@@ -608,15 +608,21 @@ function FeedbackRow({ tool, inputSummary, userId, sessionId }) {
     setSubmitted(true);
     await submitFeedback(tool, rating, inputSummary);
   }
+  const [reportErr, setReportErr] = useState("");
   async function handleReport() {
     if (!reportReason.trim() || reportBusy) return;
     setReportBusy(true);
-    const ok = await reportProblem({ userId, sessionId, reason: `[${tool}] ${reportReason.trim()}` });
+    setReportErr("");
+    const res = await reportProblem({ userId, sessionId, reason: `[${tool}] ${reportReason.trim()}` });
     setReportBusy(false);
-    if (ok) {
+    if (res && res.ok) {
       setReportSent(true);
       setReporting(false);
+      return;
     }
+    // Never fail silently. The old code did nothing here, so a dropped report
+    // looked identical to a sent one.
+    setReportErr((res && res.error) || "Couldn't send that report. Try again.");
   }
   return (
     <div className="pt-3 border-t border-neutral-800 mt-2">
@@ -666,17 +672,23 @@ function FeedbackRow({ tool, inputSummary, userId, sessionId }) {
               Submit report
             </button>
             <button
-              onClick={() => { setReporting(false); setReportReason(""); }}
+              onClick={() => { setReporting(false); setReportReason(""); setReportErr(""); }}
               className="text-xs text-neutral-500 hover:text-neutral-300 px-2"
             >
               Cancel
             </button>
           </div>
+          {reportErr && (
+            <div className="flex items-start gap-1.5 text-[11.5px] text-red-400 leading-snug">
+              <AlertTriangle size={13} className="mt-px shrink-0" />
+              <span>{reportErr}</span>
+            </div>
+          )}
         </div>
       ) : (
         <button
           onClick={() => setReporting(true)}
-          className="text-[11px] text-neutral-600 hover:text-neutral-400 mt-2"
+          className="text-xs text-neutral-400 hover:text-neutral-200 underline decoration-neutral-700 underline-offset-2 mt-2"
         >
           Report a problem with this response
         </button>
