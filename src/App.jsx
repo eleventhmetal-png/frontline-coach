@@ -23,7 +23,7 @@ import {
 import {
   dictationAvailable, startDictation, dictationErrorText,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
-  onSpeechIdle, releaseAudioSession,
+  onSpeechIdle,
   setSpeechCharacter,
   readAloudPref, setReadAloudPref,
 } from "./lib/voice";
@@ -2673,6 +2673,7 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 // into text. Roleplay uses it to switch the reply voice on.
 function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   const [listening, setListening] = useState(false);
+  const [muted, setMuted] = useState(false);
   // Mirrored into a ref because start() gets called from a closure captured at
   // SEND time, and at send time `listening` was true — the manager was mid-
   // sentence. Reading the state variable there made the hands-free reopen a
@@ -2688,6 +2689,12 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   // resumed mic that comes up deaf is indistinguishable from a listening one
   // without it.
   const heardRef = useRef(false);
+  // MUTED means the recognizer is running but what it hears is discarded. The mic
+  // has to be opened inside a tap to work at all on iOS, and the only tap
+  // available is the one that sends the turn — which happens before the
+  // counterpart has even replied. So it opens then, deaf on purpose, and comes
+  // live when the reply has finished being spoken.
+  const mutedRef = useRef(false);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { listeningRef.current = listening; }, [listening]);
   // Practice stays mounted behind a display:none wrapper, so leaving the tab does
@@ -2702,7 +2709,7 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   // `resumed` marks a start that no tap triggered — hands-free reopening the mic
   // after the counterpart finished talking. It skips primeSpeech, which is only
   // legal inside a user gesture and has already run on the first tap anyway.
-  function start({ resumed = false } = {}) {
+  function start({ resumed = false, muted = false } = {}) {
     if (listeningRef.current) return;
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
@@ -2714,12 +2721,29 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
     // after this render commits, and startDictation can call back before then.
     listeningRef.current = true;
     heardRef.current = false;
+    mutedRef.current = !!muted;
+    setMuted(!!muted);
     setListening(true);
     handleRef.current = startDictation({
-      onPartial: (t) => { if (t) { markUsed(); heardRef.current = true; } setValue(baseRef.current + t); },
-      onFinal: (t) => { if (t) { markUsed(); heardRef.current = true; setValue(baseRef.current + t); } },
+      // Dropped, not buffered. While muted the recognizer is transcribing OUR
+      // synthesized voice, and none of it is the manager's answer.
+      onPartial: (t) => {
+        if (mutedRef.current) return;
+        if (t) { markUsed(); heardRef.current = true; }
+        setValue(baseRef.current + t);
+      },
+      onFinal: (t) => {
+        if (mutedRef.current) return;
+        if (t) { markUsed(); heardRef.current = true; setValue(baseRef.current + t); }
+      },
       onError: (code) => setErr(dictationErrorText(code)),
-      onEnd: () => { listeningRef.current = false; setListening(false); handleRef.current = null; },
+      onEnd: () => {
+        listeningRef.current = false;
+        mutedRef.current = false;
+        setMuted(false);
+        setListening(false);
+        handleRef.current = null;
+      },
     });
   }
   function toggle() {
@@ -2734,12 +2758,25 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   }
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
+  // Go live on an already-running recognizer. Clearing the driver's accumulated
+  // text is the whole point: it is holding a transcript of the counterpart's
+  // reply, and without this the next onPartial hands that back with the
+  // manager's words tacked on the end.
+  function unmute() {
+    if (!listeningRef.current) return;
+    if (!mutedRef.current) return;
+    try { handleRef.current && handleRef.current.clear(); } catch (e) { /* no-op */ }
+    baseRef.current = (valueRef.current || "").replace(/\s+$/, "");
+    if (baseRef.current) baseRef.current += " ";
+    mutedRef.current = false;
+    setMuted(false);
+  }
   function cancel() {
     if (!listeningRef.current) return;
     try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
   }
   return {
-    available, listening, err, toggle, start, cancel,
+    available, listening, muted, err, toggle, start, cancel, unmute,
     // Live read, for callers deciding something at event time rather than render
     // time. `listening` is still the right thing to render from.
     isListening: () => listeningRef.current,
@@ -2751,14 +2788,21 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
 
 function MicButton({ dict, disabled, size = 48 }) {
   if (!dict.available) return null;   // no broken button on a platform that can't
-  const live = dict.listening;
+  const live = dict.listening && !dict.muted;
+  // Held open but deaf on purpose, waiting for the counterpart to finish. Shown
+  // as outlined-accent rather than filled: without a third state a manager sees a
+  // lit mic, talks into it, loses the answer, and concludes the app is broken.
+  const held = dict.listening && dict.muted;
+  const style = live
+    ? { backgroundColor: ACCENT, borderColor: ACCENT, color: "#0a0a0a", height: size, width: size }
+    : held
+      ? { backgroundColor: "#171717", borderColor: ACCENT, color: ACCENT, height: size, width: size }
+      : { backgroundColor: "#171717", borderColor: "#262626", color: "#a3a3a3", height: size, width: size };
   return (
     <button onClick={dict.toggle} disabled={disabled}
-      aria-label={live ? "Stop dictating" : "Say it out loud"}
+      aria-label={live ? "Stop dictating" : held ? "Mic opens when they finish" : "Say it out loud"}
       className="rounded-lg flex items-center justify-center shrink-0 border disabled:opacity-40"
-      style={live
-        ? { backgroundColor: ACCENT, borderColor: ACCENT, color: "#0a0a0a", height: size, width: size }
-        : { backgroundColor: "#171717", borderColor: "#262626", color: "#a3a3a3", height: size, width: size }}>
+      style={style}>
       <Mic size={18} className={live ? "animate-pulse" : ""} />
     </button>
   );
@@ -2931,42 +2975,20 @@ function Roleplay({ session } = {}) {
   // stopped talking — the phone speaker feeds straight back into the phone mic,
   // so starting a moment early records our own voice as the manager's answer.
   // With read-aloud off there is nothing to wait for.
-  function resumeMic() {
+  // Reopening the mic AFTER the reply cannot work on iOS: a recognizer started
+  // without a live user gesture comes up silently deaf, no error thrown. So the
+  // mic opens inside the send tap, while the gesture is still valid, and simply
+  // discards everything until the counterpart has finished talking.
+  function armHandsFree() {
+    if (!handsFreeRef.current || !dict.available) return;
+    dict.start({ resumed: true, muted: true });
+  }
+  // The counterpart has stopped. Whatever the recognizer transcribed of OUR voice
+  // gets thrown away and the next words in are the manager's.
+  function goLive() {
     if (!handsFreeRef.current) return;
-    if (!dict.available) return;
-    let retried = false;
-    const go = () => {
-      // Re-checked, not assumed: seconds pass while the voice talks, and the rep
-      // can be scored or abandoned inside that window. Every one of those paths
-      // clears handsFreeRef, so this one flag is the whole guard.
-      if (!handsFreeRef.current) return;
-      // Drop the loaded audio resource BEFORE asking for the mic. While it is
-      // loaded iOS keeps the session in playback mode and the recognizer comes up
-      // deaf: light on, nothing recorded.
-      releaseAudioSession();
-      dict.start({ resumed: true });
-      // A deaf mic is worse than no mic, because the manager talks into it and
-      // loses the whole answer. If nothing has been heard by now, tear the session
-      // down properly and take one more run at it.
-      setTimeout(() => {
-        if (retried) return;
-        if (!handsFreeRef.current) return;
-        if (dict.heard()) return;
-        if (!dict.isListening()) return;
-        retried = true;
-        dict.cancel();
-        releaseAudioSession();
-        setTimeout(() => {
-          if (!handsFreeRef.current || dict.isListening()) return;
-          dict.start({ resumed: true });
-        }, 700);
-      }, 3000);
-    };
-    if (!readAloudRef.current) { setTimeout(go, 200); return; }
-    // The tail after the last clip's `ended` event still bleeds into the mic on a
-    // speakerphone, and iOS needs a beat to hand the session over. 900ms reads as
-    // a natural pause before answering, so the wait costs nothing.
-    onSpeechIdle(() => setTimeout(go, 900));
+    if (!readAloudRef.current) { setTimeout(() => dict.unmute(), 150); return; }
+    onSpeechIdle(() => setTimeout(() => { if (handsFreeRef.current) dict.unmute(); }, 250));
   }
   async function send() {
     // Guarded on `loading` because the textarea's Enter handler calls send()
@@ -2981,6 +3003,9 @@ function Roleplay({ session } = {}) {
     // whole signal for hands-free. Spoken turn, keep the loop going.
     handsFreeRef.current = dict.isListening();
     dict.cancel();
+    // INSIDE THE TAP. Everything above this line is still synchronous with the
+    // user's gesture, and that is the only window iOS will give us a working mic.
+    armHandsFree();
     const sent = draft.trim();
     const next = [...history, { role: "user", content: sent }];
     setHistory([...next, { role: "assistant", content: "" }]);
@@ -3001,13 +3026,18 @@ function Roleplay({ session } = {}) {
         },
         { model: MODEL_FAST, max_tokens: 350, temperature: 0.9 });
       if (readAloudRef.current) speakRest(spoken);
-      resumeMic();
+      goLive();
     } catch (e) {
       // Roll the empty assistant placeholder back out of the transcript and give
       // the manager their line back. Left in place it poisoned every subsequent
       // turn: the next send shipped a message with empty content, which the API
       // rejects, so "Try sending again" could never work.
       setHistory(history);
+      // The mic was opened inside the send tap and is sitting there muted waiting
+      // for a reply that never came. Close it, or the manager's next attempt talks
+      // into a recognizer that is throwing every word away.
+      handsFreeRef.current = false;
+      dict.cancel();
       setDraft(sent);
       setError(errMessage(e, "No reply came back. Try sending again."));
     } finally {
@@ -3016,6 +3046,10 @@ function Roleplay({ session } = {}) {
   }
   async function endAndScore() {
     handsFreeRef.current = false;   // the rep is over; nothing left to answer
+    // The input row unmounts behind the score card but the hook does not, so
+    // without this the recognizer keeps running against a screen that has no
+    // textarea on it until the three-minute ceiling times it out.
+    dict.cancel();
     setLoading(true); setError(""); setSessionId(null);
     const up = lockedDirection.current === "up";
     const transcript = history.map((m) => `${m.role === "user" ? (up ? "LEADER" : "MANAGER") : (up ? "BOSS" : "EMPLOYEE")}: ${m.content}`).join("\n");
@@ -3327,7 +3361,9 @@ function Roleplay({ session } = {}) {
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               onFocus={handleFocus}
               placeholder={listening
-                ? "Listening… say it the way you'd say it"
+                ? (dict.muted
+                    ? "Let them finish, then talk…"
+                    : "Listening… say it the way you'd say it")
                 : (history.length === 0 ? "The first real thing you'd say…" : "Your response…")}
               rows={1}
               className="flex-1 rounded-lg bg-neutral-900 border p-3 text-[15px] text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none overflow-y-auto"

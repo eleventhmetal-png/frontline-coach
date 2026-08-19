@@ -224,6 +224,15 @@ const webSpeechDictation = {
         // Belt and braces: if onend never arrives, finish anyway.
         setTimeout(finish, 400);
       },
+      // Throw away what has been recognized WITHOUT ending the session. Used when
+      // the mic was deliberately left open through the counterpart's reply: iOS
+      // happily transcribes our own synthesized voice, and that text must not
+      // become the manager's answer.
+      clear() {
+        finalText = "";
+        pendingBreak = false;
+        segmentEndedAt = 0;
+      },
       cancel() {
         suppressed = true;
         stopped = true;
@@ -753,21 +762,6 @@ export function speakRest(fullText) {
   // that it is between sentences.
   ttsTurnClosed = true;
   maybeSpeechIdle();
-}
-
-// HAND THE MIC THE AUDIO SESSION. Pausing the element is not enough: on iOS a
-// media element with a real resource still loaded keeps the audio session in
-// playback mode, and a recognizer started underneath it comes up live but deaf —
-// the mic light is on and nothing lands. Pointing the element back at the silent
-// clip drops the loaded resource. Deliberately the same assignment primeSpeech
-// makes, so the element keeps the user-activation it earned on the first tap and
-// can still play later without another gesture.
-export function releaseAudioSession() {
-  const el = audioEl;
-  if (!el) return;
-  try { el.pause(); } catch (e) { /* no-op */ }
-  releaseUrl();
-  try { el.src = SILENT_WAV; } catch (e) { /* no-op */ }
 }
 
 export function stopSpeaking() {
