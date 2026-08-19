@@ -2705,12 +2705,19 @@ Return ONLY valid JSON, no markdown. Each field one or two tight sentences. Sche
 // into text. Roleplay uses it to switch the reply voice on.
 function useDictation({ value, setValue, onFirstUse }) {
   const [listening, setListening] = useState(false);
+  // Live copy, because toggle() runs from a tap handler whose closure may be one
+  // render behind the state.
+  const listeningRef = useRef(false);
+  // When the mic actually opened. A tap that lands within a moment of that is not
+  // somebody changing their mind, it is the second half of a double tap.
+  const openedAtRef = useRef(0);
   const [err, setErr] = useState("");
   const handleRef = useRef(null);
   const baseRef = useRef("");     // whatever was already in the field before the mic opened
   const valueRef = useRef(value); // so toggle() reads the live value without re-binding
   const usedRef = useRef(false);
   useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
   // Practice stays mounted behind a display:none wrapper, so leaving the tab does
   // NOT unmount it and would otherwise leave the mic hot.
   useEffect(() => () => { try { handleRef.current && handleRef.current.cancel(); } catch (e) {} }, []);
@@ -2720,26 +2727,44 @@ function useDictation({ value, setValue, onFirstUse }) {
     usedRef.current = true;
     if (onFirstUse) onFirstUse();
   }
+  // THE DOUBLE-TAP BUG. Proven on device: one tap opened the mic, a second tap
+  // milliseconds later called stop() on it, and the manager then talked into a
+  // recognizer that had already aborted. Nothing surfaced, because the driver
+  // deliberately swallows the "aborted" code so a normal pause does not flash an
+  // error. Two people tap twice: someone who double-taps by habit, and someone
+  // whose first tap looked like it did nothing.
+  // So the first 700ms of a live mic cannot be tapped shut. Changing your mind
+  // that fast is not a real intention; killing the mic you just asked for is not
+  // what that tap meant.
+  const OPEN_GRACE_MS = 700;
   function toggle() {
-    if (listening) { try { handleRef.current && handleRef.current.stop(); } catch (e) {} return; }
+    if (listeningRef.current) {
+      if (Date.now() - openedAtRef.current < OPEN_GRACE_MS) return;
+      try { handleRef.current && handleRef.current.stop(); } catch (e) {}
+      return;
+    }
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
     primeSpeech();    // must happen inside the tap or iOS stays mute later
     setErr("");
     const cur = valueRef.current || "";
     baseRef.current = cur ? cur.replace(/\s+$/, "") + " " : "";
+    // Set synchronously: startDictation can call back before this render commits,
+    // and a second tap can arrive before it too.
+    listeningRef.current = true;
+    openedAtRef.current = Date.now();
     setListening(true);
     handleRef.current = startDictation({
       onPartial: (t) => { if (t) markUsed(); setValue(baseRef.current + t); },
       onFinal: (t) => { if (t) { markUsed(); setValue(baseRef.current + t); } },
       onError: (code) => setErr(dictationErrorText(code)),
-      onEnd: () => { setListening(false); handleRef.current = null; },
+      onEnd: () => { listeningRef.current = false; setListening(false); handleRef.current = null; },
     });
   }
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
   function cancel() {
-    if (!listening) return;
+    if (!listeningRef.current) return;
     try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
   }
   return {

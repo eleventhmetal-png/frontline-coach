@@ -67,6 +67,12 @@ const webSpeechDictation = {
     // next dictation appended to the line you just sent.
     let suppressed = false;
     let restarts = 0;
+    // audio-capture means something else had the microphone. After read-aloud that
+    // something is almost always our own audio element, still holding the iOS
+    // audio session. One retry, after handing the session back, instead of telling
+    // a manager with a working phone that it has no microphone.
+    let captureRetried = false;
+    let releaseThenRestart = false;
     let finalText = "";
     let rec = null;
     let segmentEndedAt = 0;   // when the previous segment stopped hearing speech
@@ -147,8 +153,16 @@ const webSpeechDictation = {
           stopped = true;
           onError && onError("denied");
         } else if (code === "audio-capture") {
-          stopped = true;
-          onError && onError("no-mic");
+          if (captureRetried) {
+            stopped = true;
+            onError && onError("no-mic");
+          } else {
+            // Do NOT restart from in here. onend is about to fire and it owns the
+            // restart path; starting a second recognizer alongside this one is how
+            // you end up with two of them fighting over the same mic.
+            captureRetried = true;
+            releaseThenRestart = true;
+          }
         } else if (code === "network") {
           stopped = true;
           onError && onError("network");
@@ -161,6 +175,16 @@ const webSpeechDictation = {
         segmentEndedAt = Date.now();   // start timing the gap
         if (stopped || restarts >= MAX_RESTARTS || Date.now() - startedAt > MAX_LISTEN_MS) {
           finish();
+          return;
+        }
+        if (releaseThenRestart) {
+          releaseThenRestart = false;
+          releaseAudioSession();   // give up the session, then ask again
+          restarts++;
+          setTimeout(() => {
+            if (stopped || done) { finish(); return; }
+            boot();
+          }, 600);
           return;
         }
         restarts++;
