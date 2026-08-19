@@ -3304,11 +3304,23 @@ function DeleteAccount({ signOut }) {
   }
 
   if (!open) {
+    // FINDABLE ON PURPOSE. The first version of this was text-neutral-600, which
+    // is near-invisible on a black card — and "we were unable to locate the
+    // account deletion option" is a documented App Review rejection. A reviewer
+    // with sixty seconds has to see it. Divider above it so it reads as its own
+    // action rather than fine print trailing the privacy links.
     return (
-      <button onClick={() => setOpen(true)}
-        className="mt-4 w-full text-left text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:text-red-400">
-        Delete my account
-      </button>
+      <>
+        <div className="mt-4 border-t border-neutral-800" />
+        <button onClick={() => setOpen(true)}
+          className="mt-3 w-full flex items-center justify-between text-left group">
+          <span className="text-sm font-semibold text-neutral-300 group-hover:text-red-400">Delete my account</span>
+          <ArrowRight size={16} className="text-neutral-600 group-hover:text-red-400" />
+        </button>
+        <p className="text-[11px] text-neutral-600 mt-1 leading-snug">
+          Permanently removes your account and everything in it.
+        </p>
+      </>
     );
   }
   return (
