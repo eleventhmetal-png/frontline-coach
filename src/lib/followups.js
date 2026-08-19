@@ -17,6 +17,28 @@ import { supabase, supabaseReady } from "./supabaseClient";
 // `followUpQuestion` is a question to ask mid-conversation ("what's getting in your
 // way?"), not an action with a date. Putting it in a to-do list would be a
 // category error and would clutter the list with things that aren't tasks.
+// A COMMITMENT NEVER CONTAINS A BLANK. GUARDRAILS deliberately tells the model to
+// leave bracketed blanks like [DATE] for facts only the manager has, which is right
+// for a write-up. It is wrong here: the timing of a follow-up is something the coach
+// DECIDES. The model split the difference and produced "Check in after their next
+// [TWO SHIFTS]" — the answer was already inside the brackets, shouting.
+// That string went straight onto the Home screen. A visible placeholder in a store
+// screenshot is App Store Guideline 2.1 (App Completeness), so this is not cosmetic.
+//
+// A real blank is a CATEGORY the manager fills in. A bracketed value is content the
+// model chose and then wrapped for no reason. Unwrap the second kind, leave the
+// first alone, and lowercase a shouted unwrap so it reads as prose.
+const BLANK_LABELS = /^(date|dates|time|times|name|names|employee|employee name|manager|shift|location|department|policy|witness|amount|number|what was said|what they said|specific example|insert [\w\s]+|your [\w\s]+)$/i;
+export function unbracketCommitment(text) {
+  if (!text) return text;
+  return String(text).replace(/\[([^\[\]]{1,60})\]/g, (whole, inner) => {
+    const body = inner.trim();
+    if (!body || BLANK_LABELS.test(body)) return whole;   // a genuine fill-in-the-blank
+    // All caps means the model was shouting a value it had already chosen.
+    return /^[A-Z0-9 ,.'/-]+$/.test(body) ? body.toLowerCase() : body;
+  });
+}
+
 const COMMITMENT_FIELD = {
   coach: "followUp",
   convo: "followUpPlan",
@@ -83,7 +105,7 @@ export async function getOpenFollowUps(userId, limit = 25) {
       const field = COMMITMENT_FIELD[row.tool];
       const text =
         row.output && typeof row.output === "object" && typeof row.output[field] === "string"
-          ? row.output[field].trim()
+          ? unbracketCommitment(row.output[field].trim())
           : "";
       if (!text) continue;
       out.push({

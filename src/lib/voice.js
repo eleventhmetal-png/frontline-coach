@@ -31,7 +31,15 @@ function getSR() {
 // recognizer on every end and accumulate the finals ourselves. Bounded twice —
 // by count and by wall clock — because a recognizer that ends instantly (no mic
 // permission edge cases, backgrounded tab) would otherwise spin forever.
-const MAX_RESTARTS = 30;
+// PROVEN with a headless bench, not reasoned about: at 31 segments the session
+// ended with onEnd and NO error. The mic stopped mid-turn and said nothing.
+// iOS ends the recognizer at every pause, so one segment is one breath, and a
+// two-minute spoken turn with a pause every four seconds reaches 30 without
+// trying. MAX_LISTEN_MS is the bound that should decide this, not a segment count.
+// NOTE: the restart GAP below stays at 250ms. Shortening it to 60ms on 18 Aug
+// created two live recognizers fighting over one microphone, which broke both the
+// mic and the speaker. Raising the ceiling is safe; touching the gap is not.
+const MAX_RESTARTS = 200;
 const MAX_LISTEN_MS = 3 * 60 * 1000;
 
 // PUNCTUATION FROM PAUSES. The Web Speech API returns no punctuation at all, so a
@@ -174,6 +182,9 @@ const webSpeechDictation = {
       rec.onend = () => {
         segmentEndedAt = Date.now();   // start timing the gap
         if (stopped || restarts >= MAX_RESTARTS || Date.now() - startedAt > MAX_LISTEN_MS) {
+          // Only `stopped` means a human ended this. Hitting a ceiling is us
+          // giving up, and dying silently is what made a working mic look broken.
+          if (!stopped) onError && onError("timed-out");
           finish();
           return;
         }
@@ -258,6 +269,8 @@ export function dictationErrorText(code) {
   switch (code) {
     case "denied":
       return "Microphone access is off. Turn it on in Settings, then tap the mic again.";
+    case "timed-out":
+      return "Dictation stopped after a few minutes. Tap the mic to keep going.";
     case "no-mic":
       // audio-capture on iOS almost never means "this phone has no microphone."
       // It means something else still had it, usually playback that has not let

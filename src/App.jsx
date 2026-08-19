@@ -383,6 +383,17 @@ async function submitFeedback(tool, rating, inputSummary) {
 }
 // ---------- shared UI bits ----------
 const ACCENT = "#E8923C";
+
+// APP STORE GUIDELINE 2.2: "Apps that are still in a demo, trial, or test version
+// will be rejected." A BETA badge in the header is honest on the web, where it sets
+// expectations with pilot users, and it is a rejection flag in a submitted binary —
+// and in every screenshot taken from one. So it is a build switch, not a delete.
+// Set VITE_STORE_BUILD=1 for the Capacitor build ONLY. Leave it unset for Netlify.
+const IS_STORE_BUILD = import.meta.env.VITE_STORE_BUILD === "1";
+function BetaTag() {
+  if (IS_STORE_BUILD) return null;
+  return <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>;
+}
 // =====================================================
 // INDUSTRY LAYERS
 // The setting each AI tool operates in. "General" is the neutral default so the
@@ -582,6 +593,13 @@ EMPLOYMENT GUARDRAILS (non-negotiable):
   policies, witnesses, or employee behavior the user did not provide. If a specific detail is
   needed and wasn't given, insert a clearly marked blank like [DATE] or [WHAT WAS SAID] for the
   manager to fill — never guess it.
+- A BLANK IS ONLY FOR A FACT THE MANAGER HAS AND YOU DO NOT. Dates, times, names, exact
+  quotes, locations. It is NEVER for something you are being asked to decide. Follow-up
+  timing, the standard, the recommendation, the next step: decide those and state them
+  plainly. "Check in after their next two shifts" is the job. "Check in after their next
+  [TWO SHIFTS]" is you picking the answer and then hiding it in brackets, which reads as a
+  broken app.
+- Never wrap a value you already chose in brackets. If you know it, write it.
 - Any write-up, documentation, discipline, PIP, or performance content is a DRAFT for the
   manager to review and verify before use. Say so.
 - Keep all language behavior-based, specific, and objective. Describe observable actions and
@@ -4484,12 +4502,12 @@ export default function FrontlineCoach({ session, signOut } = {}) {
                 <Zap size={16} className="text-neutral-950" />
               </div>
               <span className="font-extrabold uppercase tracking-tight">Frontline Coach</span>
-              <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>
+              <BetaTag />
             </div>
           )}
           {tab === "home"
             ? <UsagePill session={session} trialDaysLeft={plan === "free" ? trialDays : null} />
-            : <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>}
+            : <BetaTag />}
         </header>
         {consentAsk && (
           <AiConsentSheet
