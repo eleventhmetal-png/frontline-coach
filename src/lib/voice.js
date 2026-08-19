@@ -17,6 +17,7 @@
 // Handlers: { onPartial(text), onFinal(text), onError(code), onEnd() }
 
 import { supabase } from "./supabaseClient";
+import { requireAiConsent } from "./aiConsent";
 
 // ---------- dictation ----------
 
@@ -495,6 +496,11 @@ function resetTtsTurn() {
 }
 
 async function fetchClip(text, mine) {
+  // Belt and braces on Guideline 5.1.2(i). In practice a reply only exists
+  // because a gated Claude call already succeeded, so consent is implied — but
+  // "implied by the call chain" is a worse answer than "checked here", and this
+  // is the only other place user-derived text leaves the device.
+  await requireAiConsent();
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: await authHeader(),

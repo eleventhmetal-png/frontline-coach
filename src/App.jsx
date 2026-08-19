@@ -17,6 +17,10 @@ import {
 } from "./lib/followups";
 import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
 import {
+  requireAiConsent, setConsentAsker, recordConsent, revokeConsent,
+  consentFromSession, resetConsentCache, CONSENT_VERSION,
+} from "./lib/aiConsent";
+import {
   dictationAvailable, startDictation, dictationErrorText,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
   setSpeechCharacter,
@@ -100,6 +104,11 @@ async function handleAuthFailure() {
 const MODEL_SMART = "claude-sonnet-5";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
 async function rawClaude(messages, { model, system, max_tokens, temperature } = {}) {
+  // Guideline 5.1.2(i): nothing goes to a third-party model until the user has
+  // been told which ones and said yes. Throws if they decline, and every tool's
+  // existing catch already turns a thrown error carrying userMessage into a
+  // readable notice, so no tool needed changing.
+  await requireAiConsent();
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: await authHeaders(),
@@ -212,6 +221,7 @@ function extractPartialJson(text) {
 }
 // streaming core — reads Anthropic SSE via the proxy, calls onText(fullSoFar)
 async function streamClaude(messages, { model, system, max_tokens, temperature, onText } = {}) {
+  await requireAiConsent();   // see rawClaude
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: await authHeaders(),
@@ -3258,6 +3268,44 @@ function Roleplay({ session } = {}) {
 // notice that costs nothing to give.
 export const PREMIUM_AFTER_BETA = new Set(["prep", "followups"]);
 
+// Guideline 5.1.2(i) requires the consent to be WITHDRAWABLE, not just given.
+// Lives in Tools so there is one obvious place to look, and states the current
+// state plainly rather than making the user infer it from a toggle.
+function DataAndPrivacy({ session }) {
+  const [on, setOn] = useState(() => consentFromSession(session));
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    setBusy(true);
+    const ok = on ? await revokeConsent() : await recordConsent();
+    if (ok) { resetConsentCache(); setOn(!on); }
+    setBusy(false);
+  }
+  return (
+    <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Shield size={18} style={{ color: ACCENT }} />
+        <span className="font-semibold text-neutral-100">Data and privacy</span>
+      </div>
+      <p className="text-xs text-neutral-500 leading-snug">
+        {on
+          ? "AI processing is on. What you write or say goes to Anthropic to generate coaching, and the reply text goes to OpenAI when read-aloud is on. Neither is used to train their models."
+          : "AI processing is off. Nothing is sent anywhere, and the tools cannot generate anything until you turn it back on."}
+      </p>
+      <button onClick={toggle} disabled={busy}
+        className="mt-3 w-full rounded-lg py-2.5 text-sm font-semibold border disabled:opacity-50"
+        style={on
+          ? { borderColor: "#404040", color: "#e5e5e5" }
+          : { borderColor: ACCENT, color: ACCENT }}>
+        {busy ? "Saving..." : on ? "Withdraw permission" : "Turn AI processing on"}
+      </button>
+      <div className="mt-3 flex items-center gap-3 text-[11px] text-neutral-600">
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Privacy Policy</a>
+        <span>&middot;</span>
+        <span>Consent version {CONSENT_VERSION}</span>
+      </div>
+    </div>
+  );
+}
 function MoreView({ go, session, signOut }) {
   const tools = [
     { id: "prep", label: "1:1 Prep", desc: "Build the agenda before you walk in", icon: Clock },
@@ -3305,6 +3353,7 @@ function MoreView({ go, session, signOut }) {
           <IndustryPicker id="industry-more" />
         </div>
       </div>
+      {session && <DataAndPrivacy session={session} />}
       {session && (
         <div className="mt-4">
           <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex items-center justify-between">
@@ -4084,6 +4133,71 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+// =====================================================
+// AI CONSENT SHEET — Guideline 5.1.2(i)
+// =====================================================
+// Shown the first time something is about to leave the device, not on app entry.
+// Names every processor out loud, because "powered by AI" is exactly what the
+// guideline rejects. No pre-checked box: the only way past it is a deliberate tap.
+function AiConsentSheet({ onAccept, onDecline }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 px-4 pb-4">
+      <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-950 p-5 max-h-[88vh] overflow-y-auto"
+        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Shield size={18} style={{ color: ACCENT }} />
+          <span className="font-extrabold uppercase tracking-tight text-neutral-100">Before anything leaves your phone</span>
+        </div>
+        <p className="text-[13.5px] text-neutral-300 leading-relaxed">
+          This app doesn't run the coaching itself. To answer you, it sends what you write or say to outside services. You should know exactly which ones.
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500">Anthropic, the coaching</div>
+            <p className="text-[13px] text-neutral-400 leading-snug mt-1">
+              What you type or dictate goes to Anthropic's Claude API, which writes the response. They don't use it to train their models.
+            </p>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500">OpenAI, the reply voice</div>
+            <p className="text-[13px] text-neutral-400 leading-snug mt-1">
+              Only if you turn read-aloud on in Practice. The reply you are about to hear gets sent to OpenAI to be turned into speech. Your own words never go there, and we have not opted into their training program.
+            </p>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500">Your phone, the microphone</div>
+            <p className="text-[13px] text-neutral-400 leading-snug mt-1">
+              Dictation is done by your own device, Apple on an iPhone, Google in Chrome, under their terms. We never receive the recording, only the text.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "rgba(232,146,60,0.35)", backgroundColor: "rgba(232,146,60,0.06)" }}>
+          <p className="text-[12.5px] text-neutral-300 leading-snug">
+            <span className="font-semibold">One ask.</span> You are often writing about a real person on your team. Use first names or none at all, and leave out anything medical, disciplinary, or personal you would not want repeated. The coaching works fine without it.
+          </p>
+        </div>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            disabled={busy}
+            onClick={async () => { setBusy(true); const ok = await onAccept(); if (!ok) setBusy(false); }}
+            className="w-full rounded-lg py-3 font-bold text-neutral-950 disabled:opacity-50"
+            style={{ backgroundColor: ACCENT }}>
+            {busy ? "Saving..." : "I understand, continue"}
+          </button>
+          <button disabled={busy} onClick={onDecline}
+            className="w-full rounded-lg py-2.5 text-sm font-semibold text-neutral-400 border border-neutral-800 hover:bg-neutral-900 disabled:opacity-50">
+            Not now
+          </button>
+        </div>
+        <p className="text-[11px] text-neutral-600 mt-3 leading-snug text-center">
+          You can withdraw this any time in Tools, under Data and privacy. Full detail in the{" "}
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="underline hover:text-neutral-400">Privacy Policy</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
 export default function FrontlineCoach({ session, signOut } = {}) {
   const [tab, setTab] = useState("home");
   // Trial state. `expired` flips when any tool gets a 402 from the proxy, which
@@ -4092,6 +4206,14 @@ export default function FrontlineCoach({ session, signOut } = {}) {
   const [trialDays, setTrialDays] = useState(null);
   const [expired, setExpired] = useState(false);
   const plan = planFromSession(session);
+  // AI consent. `consentAsk` holds the pending resolver: requireAiConsent()
+  // awaits a promise, the sheet resolves it, and the original AI call either
+  // continues or throws. One gate, every tool, nothing per-tool to wire.
+  const [consentAsk, setConsentAsk] = useState(null);
+  useEffect(() => {
+    setConsentAsker(() => new Promise((resolve) => setConsentAsk({ resolve })));
+    return () => setConsentAsker(null);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -4154,6 +4276,18 @@ export default function FrontlineCoach({ session, signOut } = {}) {
             ? <UsagePill session={session} trialDaysLeft={plan === "free" ? trialDays : null} />
             : <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>}
         </header>
+        {consentAsk && (
+          <AiConsentSheet
+            onAccept={async () => {
+              const ok = await recordConsent();
+              if (!ok) return false;          // keep the sheet up so they can retry
+              consentAsk.resolve(true);
+              setConsentAsk(null);
+              return true;
+            }}
+            onDecline={() => { consentAsk.resolve(false); setConsentAsk(null); }}
+          />
+        )}
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>
           <ErrorBoundary resetKey={tab}>
           {expired ? <Paywall session={session} /> : <>
