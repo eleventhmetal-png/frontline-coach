@@ -18,7 +18,7 @@
 // signup (see AuthGate.jsx), so bumping it starts recording a new accepted
 // version. Adding a processor is a data-use change, which §2 of the Terms says we
 // notify users about — announce it rather than letting the date change silently.
-export const LAST_UPDATED = "August 13, 2026";
+export const LAST_UPDATED = "August 18, 2026";
 
 export const TERMS_SECTIONS = [
   {

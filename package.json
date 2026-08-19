@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "pulse": "node scripts/pulse.mjs",
     "gen:pages": "node scripts/gen-pages.mjs",
     "gen:legal": "node scripts/gen-legal-html.mjs",
     "build": "node scripts/gen-pages.mjs && node scripts/gen-legal-html.mjs && vite build",
