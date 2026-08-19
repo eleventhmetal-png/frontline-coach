@@ -31,8 +31,23 @@ function getSR() {
 // recognizer on every end and accumulate the finals ourselves. Bounded twice —
 // by count and by wall clock — because a recognizer that ends instantly (no mic
 // permission edge cases, backgrounded tab) would otherwise spin forever.
-const MAX_RESTARTS = 30;
+// 30 was far too low and it failed SILENTLY. iOS ends the recognizer at every
+// pause, so one segment is one breath — a manager working through a hard
+// conversation pauses constantly, and a two-minute spoken turn burns 30 segments
+// without trying. Past the cap the mic just stopped, no error, mid-sentence.
+// The wall clock is the real bound; this counter only exists to stop a recognizer
+// that ends instantly from spinning forever, and 120 of those burn ~8 seconds
+// before giving up.
+const MAX_RESTARTS = 120;
 const MAX_LISTEN_MS = 3 * 60 * 1000;
+// THE DEAF WINDOW. Every restart is time the mic is not recording, and the words
+// spoken into it are gone. 250ms of deliberate delay plus iOS's own start-up
+// latency meant the first word after any pause could vanish — the "spotty"
+// dictation. Now we restart as fast as iOS will allow and treat the
+// InvalidStateError from restarting too fast as the expected case, backing off
+// only when it actually throws.
+const RESTART_GAP_MS = 60;
+const RESTART_LADDER = [80, 180, 350, 700];
 
 // PUNCTUATION FROM PAUSES. The Web Speech API returns no punctuation at all, so a
 // dictated turn arrives as one unbroken wall of words — ugly on screen and flat
@@ -41,8 +56,10 @@ const MAX_LISTEN_MS = 3 * 60 * 1000;
 // ending and speech resuming in the next IS a pause. A long gap is a sentence
 // boundary. Short gaps are the recognizer timing out mid-thought, which is not.
 //
-// Threshold has to clear our own 250ms restart delay plus recognition latency, so
-// 900ms — a real between-sentence beat, not a breath.
+// Threshold has to clear our own restart delay plus recognition latency. That
+// delay used to be 250ms and is now 60ms, so a measured gap is closer to the
+// true silence than it was and 900ms now means a genuine between-sentence beat
+// rather than a breath plus our own overhead.
 const SENTENCE_PAUSE_MS = 900;
 
 const webSpeechDictation = {
@@ -101,7 +118,8 @@ const webSpeechDictation = {
       return left + " " + cap(b);
     }
 
-    function boot() {
+    function boot(attempt) {
+      const tries = attempt || 0;
       try {
         rec = new SR();
       } catch (e) {
@@ -164,23 +182,35 @@ const webSpeechDictation = {
           return;
         }
         restarts++;
-        // Small gap before restarting: back-to-back start() calls on iOS throw
-        // InvalidStateError and kill the whole session.
+        // Back-to-back start() calls on iOS throw InvalidStateError, so there is
+        // still a gap — just the smallest one that usually works, with a ladder
+        // below to cover the times it doesn't.
         setTimeout(() => {
           if (stopped || done) { finish(); return; }
-          boot();
-        }, 250);
+          boot(0);
+        }, RESTART_GAP_MS);
       };
 
       try {
         rec.start();
       } catch (e) {
-        onError && onError("start-failed");
-        finish();
+        // Almost always InvalidStateError: the previous recognizer has not
+        // released the mic yet. That is a "wait and try again", not a failure —
+        // treating it as fatal is what ended dictation mid-turn.
+        const wait = RESTART_LADDER[tries];
+        if (wait === undefined) {
+          onError && onError("start-failed");
+          finish();
+          return;
+        }
+        setTimeout(() => {
+          if (stopped || done) { finish(); return; }
+          boot(tries + 1);
+        }, wait);
       }
     }
 
-    boot();
+    boot(0);
 
     return {
       stop() {
@@ -723,6 +753,21 @@ export function speakRest(fullText) {
   // that it is between sentences.
   ttsTurnClosed = true;
   maybeSpeechIdle();
+}
+
+// HAND THE MIC THE AUDIO SESSION. Pausing the element is not enough: on iOS a
+// media element with a real resource still loaded keeps the audio session in
+// playback mode, and a recognizer started underneath it comes up live but deaf —
+// the mic light is on and nothing lands. Pointing the element back at the silent
+// clip drops the loaded resource. Deliberately the same assignment primeSpeech
+// makes, so the element keeps the user-activation it earned on the first tap and
+// can still play later without another gesture.
+export function releaseAudioSession() {
+  const el = audioEl;
+  if (!el) return;
+  try { el.pause(); } catch (e) { /* no-op */ }
+  releaseUrl();
+  try { el.src = SILENT_WAV; } catch (e) { /* no-op */ }
 }
 
 export function stopSpeaking() {

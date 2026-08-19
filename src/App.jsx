@@ -23,7 +23,7 @@ import {
 import {
   dictationAvailable, startDictation, dictationErrorText,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
-  onSpeechIdle,
+  onSpeechIdle, releaseAudioSession,
   setSpeechCharacter,
   readAloudPref, setReadAloudPref,
 } from "./lib/voice";
@@ -2683,6 +2683,11 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
   const baseRef = useRef("");     // whatever was already in the field before the mic opened
   const valueRef = useRef(value); // so toggle() reads the live value without re-binding
   const usedRef = useRef(false);
+  // Per-START, unlike usedRef which stays true for the whole rep. This answers a
+  // narrower question: did THIS opening of the mic actually hear a human? A
+  // resumed mic that comes up deaf is indistinguishable from a listening one
+  // without it.
+  const heardRef = useRef(false);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { listeningRef.current = listening; }, [listening]);
   // Practice stays mounted behind a display:none wrapper, so leaving the tab does
@@ -2708,10 +2713,11 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
     // Set the ref synchronously. The effect that mirrors it does not run until
     // after this render commits, and startDictation can call back before then.
     listeningRef.current = true;
+    heardRef.current = false;
     setListening(true);
     handleRef.current = startDictation({
-      onPartial: (t) => { if (t) markUsed(); setValue(baseRef.current + t); },
-      onFinal: (t) => { if (t) { markUsed(); setValue(baseRef.current + t); } },
+      onPartial: (t) => { if (t) { markUsed(); heardRef.current = true; } setValue(baseRef.current + t); },
+      onFinal: (t) => { if (t) { markUsed(); heardRef.current = true; setValue(baseRef.current + t); } },
       onError: (code) => setErr(dictationErrorText(code)),
       onEnd: () => { listeningRef.current = false; setListening(false); handleRef.current = null; },
     });
@@ -2737,6 +2743,7 @@ function useDictation({ value, setValue, onFirstUse, onManualStop }) {
     // Live read, for callers deciding something at event time rather than render
     // time. `listening` is still the right thing to render from.
     isListening: () => listeningRef.current,
+    heard: () => heardRef.current,
     used: () => usedRef.current,
     reset: () => { usedRef.current = false; setErr(""); },
   };
@@ -2927,17 +2934,39 @@ function Roleplay({ session } = {}) {
   function resumeMic() {
     if (!handsFreeRef.current) return;
     if (!dict.available) return;
+    let retried = false;
     const go = () => {
       // Re-checked, not assumed: seconds pass while the voice talks, and the rep
       // can be scored or abandoned inside that window. Every one of those paths
       // clears handsFreeRef, so this one flag is the whole guard.
       if (!handsFreeRef.current) return;
+      // Drop the loaded audio resource BEFORE asking for the mic. While it is
+      // loaded iOS keeps the session in playback mode and the recognizer comes up
+      // deaf: light on, nothing recorded.
+      releaseAudioSession();
       dict.start({ resumed: true });
+      // A deaf mic is worse than no mic, because the manager talks into it and
+      // loses the whole answer. If nothing has been heard by now, tear the session
+      // down properly and take one more run at it.
+      setTimeout(() => {
+        if (retried) return;
+        if (!handsFreeRef.current) return;
+        if (dict.heard()) return;
+        if (!dict.isListening()) return;
+        retried = true;
+        dict.cancel();
+        releaseAudioSession();
+        setTimeout(() => {
+          if (!handsFreeRef.current || dict.isListening()) return;
+          dict.start({ resumed: true });
+        }, 700);
+      }, 3000);
     };
-    if (!readAloudRef.current) { setTimeout(go, 120); return; }
-    // The short tail after the last clip's `ended` event still bleeds into the
-    // mic on a speakerphone, so give it a beat.
-    onSpeechIdle(() => setTimeout(go, 350));
+    if (!readAloudRef.current) { setTimeout(go, 200); return; }
+    // The tail after the last clip's `ended` event still bleeds into the mic on a
+    // speakerphone, and iOS needs a beat to hand the session over. 900ms reads as
+    // a natural pause before answering, so the wait costs nothing.
+    onSpeechIdle(() => setTimeout(go, 900));
   }
   async function send() {
     // Guarded on `loading` because the textarea's Enter handler calls send()
