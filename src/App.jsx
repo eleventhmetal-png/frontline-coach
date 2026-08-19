@@ -3268,10 +3268,89 @@ function Roleplay({ session } = {}) {
 // notice that costs nothing to give.
 export const PREMIUM_AFTER_BETA = new Set(["prep", "followups"]);
 
+// Guideline 5.1.1(v): an app that creates accounts must let the user delete the
+// account from inside the app. Not a support email, not "deactivate".
+//
+// TWO STEPS AND A TYPED WORD on purpose. This is irreversible and there are no
+// backups (the Privacy Policy says so plainly), so a single mis-tap on a phone
+// must not be able to do it. Reviewers also look for exactly this.
+function DeleteAccount({ signOut }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const armed = typed.trim().toUpperCase() === "DELETE";
+
+  async function go() {
+    if (!armed) return;
+    setBusy(true); setErr("");
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      if (!res.ok) {
+        const body = await safeJson(res);
+        throw new Error(body?.error || "Could not delete the account");
+      }
+      // The account is gone, so the session is dead. Sign out to land on
+      // AuthGate instead of an app looping 401s against a deleted user.
+      if (signOut) await signOut();
+    } catch (e) {
+      setErr(e.message || "Could not delete the account. Try again.");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="mt-4 w-full text-left text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:text-red-400">
+        Delete my account
+      </button>
+    );
+  }
+  return (
+    <div className="mt-4 rounded-xl border p-4" style={{ borderColor: "#7f1d1d", backgroundColor: "rgba(127,29,29,0.08)" }}>
+      <div className="flex items-center gap-2 mb-2">
+        <AlertTriangle size={16} className="text-red-400" />
+        <span className="font-semibold text-sm text-neutral-100">Delete this account</span>
+      </div>
+      <p className="text-xs text-neutral-400 leading-snug">
+        This removes your profile, every coaching session and roleplay transcript, your practice patterns, and your follow-through list. It cannot be undone and there is no backup to restore from.
+      </p>
+      <p className="text-[11px] text-neutral-500 leading-snug mt-2">
+        One thing is kept: if you ever reported a problem with a response, that report stays so we can act on it, with your account no longer attached to it.
+      </p>
+      <input
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        placeholder="Type DELETE to confirm"
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
+        className="mt-3 w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+      />
+      <div className="mt-2 flex gap-2">
+        <button onClick={() => { setOpen(false); setTyped(""); setErr(""); }} disabled={busy}
+          className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-neutral-300 border border-neutral-700 hover:bg-neutral-900 disabled:opacity-50">
+          Keep my account
+        </button>
+        <button onClick={go} disabled={!armed || busy}
+          className="flex-1 rounded-lg py-2.5 text-sm font-bold text-neutral-950 disabled:opacity-40"
+          style={{ backgroundColor: armed ? "#dc2626" : "#404040", color: armed ? "#fff" : "#a3a3a3" }}>
+          {busy ? "Deleting..." : "Delete permanently"}
+        </button>
+      </div>
+      {err && <p className="text-[11.5px] text-red-400 mt-2">{err}</p>}
+    </div>
+  );
+}
 // Guideline 5.1.2(i) requires the consent to be WITHDRAWABLE, not just given.
 // Lives in Tools so there is one obvious place to look, and states the current
 // state plainly rather than making the user infer it from a toggle.
-function DataAndPrivacy({ session }) {
+function DataAndPrivacy({ session, signOut }) {
   const [on, setOn] = useState(() => consentFromSession(session));
   const [busy, setBusy] = useState(false);
   async function toggle() {
@@ -3303,6 +3382,7 @@ function DataAndPrivacy({ session }) {
         <span>&middot;</span>
         <span>Consent version {CONSENT_VERSION}</span>
       </div>
+      <DeleteAccount signOut={signOut} />
     </div>
   );
 }
@@ -3353,7 +3433,7 @@ function MoreView({ go, session, signOut }) {
           <IndustryPicker id="industry-more" />
         </div>
       </div>
-      {session && <DataAndPrivacy session={session} />}
+      {session && <DataAndPrivacy session={session} signOut={signOut} />}
       {session && (
         <div className="mt-4">
           <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex items-center justify-between">

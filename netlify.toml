@@ -37,6 +37,13 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+# Route account deletion to its function. Required to be reachable in-app by
+# App Store Guideline 5.1.1(v).
+[[redirects]]
+  from = "/api/delete-account"
+  to = "/.netlify/functions/delete-account"
+  status = 200
+
 # Route read-aloud speech to the TTS function.
 [[redirects]]
   from = "/api/tts"
