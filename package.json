@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/patch-speech-plugin.mjs",
     "dev": "vite",
     "pulse": "node scripts/pulse.mjs",
     "gen:pages": "node scripts/gen-pages.mjs",
@@ -11,7 +12,7 @@
     "build": "node scripts/gen-pages.mjs && node scripts/gen-legal-html.mjs && vite build",
     "build:store": "VITE_STORE_BUILD=1 node scripts/gen-pages.mjs && node scripts/gen-legal-html.mjs && VITE_STORE_BUILD=1 vite build && node scripts/store-clean.mjs",
     "preview": "vite preview",
-    "cap:sync": "npm run build:store && npx cap sync",
+    "cap:sync": "npm run build:store && npx cap sync && node scripts/gen-pages.mjs",
     "cap:ios": "npm run cap:sync && npx cap open ios",
     "cap:android": "npm run cap:sync && npx cap open android",
     "test:voice": "node --import ./test/voice/register.mjs test/voice/dictation.test.mjs"

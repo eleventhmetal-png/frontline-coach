@@ -195,6 +195,55 @@ if [[ $ANDROID -eq 1 ]]; then
   if [[ -d android ]]; then skip "android/ already exists"; else npx cap add android; ok "android/ created"; fi
 fi
 
+# -------------------------------------------- 5b. Xcode script sandboxing
+# Modern Xcode ships ENABLE_USER_SCRIPT_SANDBOXING = YES, which forbids build
+# scripts from reading files outside a narrow sandbox. CocoaPods' "[CP] Embed Pods
+# Frameworks" phase reads Pods-App-frameworks.sh, so every build dies with:
+#
+#   Sandbox: bash(NNNNN) deny(1) file-read-data .../Pods-App-frameworks.sh
+#
+# The two settings are simply incompatible. Turning sandboxing off is the standard
+# resolution and is what a CocoaPods-based project has always effectively done —
+# it restricts Xcode's own build scripts, not the shipped app, and has no bearing
+# on the App Store sandbox the app runs in on a user's device.
+#
+# Re-applied on every run because `cap add ios` regenerates the project with YES.
+say "Turning off Xcode script sandboxing (CocoaPods cannot build with it on)"
+PBX="ios/App/App.xcodeproj/project.pbxproj"
+if [[ ! -f "$PBX" ]]; then
+  die "Expected $PBX and it is not there."
+elif grep -q "ENABLE_USER_SCRIPT_SANDBOXING = YES;" "$PBX"; then
+  cp "$PBX" "$PBX.bak"
+  sed -i '' 's/ENABLE_USER_SCRIPT_SANDBOXING = YES;/ENABLE_USER_SCRIPT_SANDBOXING = NO;/g' "$PBX"
+  ok "sandboxing disabled in $(grep -c "ENABLE_USER_SCRIPT_SANDBOXING = NO;" "$PBX") build configuration(s)"
+else
+  skip "already off"
+fi
+
+# ------------------------------------------------------------- 5c. app icon
+# `cap add ios` ships a Capacitor PLACEHOLDER — a blue X on a white grid. It is
+# not obviously wrong on a home screen full of icons, and Apple rejects placeholder
+# artwork under Guideline 2.3.8, so this is a rejection that costs a review cycle
+# for a file nobody remembered to replace.
+#
+# marketing/app-icon-1024.png is the master: 1024x1024, RGB, fully opaque. Apple
+# rejects app icons containing an alpha channel, so do not "improve" this by
+# introducing transparency or rounded corners — iOS applies its own mask.
+say "Installing the real app icon"
+ICONSET="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+MASTER="marketing/app-icon-1024.png"
+if [[ -f "$MASTER" ]]; then
+  cp "$MASTER" "$ICONSET/AppIcon-512@2x.png"
+  ok "icon installed from $MASTER"
+elif [[ -f public/icon-512.png ]]; then
+  # sips is built into macOS, so this fallback needs nothing installed.
+  sips -s format png -z 1024 1024 public/icon-512.png --out "$ICONSET/AppIcon-512@2x.png" >/dev/null
+  ok "icon upscaled from public/icon-512.png (master missing — regenerate it)"
+else
+  printf "    \033[1;33mWARNING\033[0m no icon source found. The Capacitor placeholder will ship\n"
+  printf "            and Apple will reject it under Guideline 2.3.8.\n"
+fi
+
 # --------------------------------------------------- 6. iOS permissions etc
 say "Adding the iOS permission text and the sign-in URL scheme"
 PLIST="ios/App/App/Info.plist"
