@@ -1,3 +1,4 @@
+import { corsPreflight, withCors } from "./_cors.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 // =====================================================
@@ -26,7 +27,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const SERVICE_ROLE_ENV = "SUPABASE_SERVICE_ROLE_KEY";
 
-export default async (req) => {
+const handler = async (req) => {
   const json = (obj, status) =>
     new Response(JSON.stringify(obj), {
       status,
@@ -84,4 +85,12 @@ export default async (req) => {
     console.error("delete-account threw:", e);
     return json({ error: "Could not delete the account" }, 500);
   }
+};
+
+// CORS wrapper. Every response path — including the streaming one — goes through
+// withCors, so nothing can return uncovered. See ./_cors.mjs for why this exists.
+export default async (req) => {
+  const pre = corsPreflight(req);
+  if (pre) return pre;
+  return withCors(req, await handler(req));
 };

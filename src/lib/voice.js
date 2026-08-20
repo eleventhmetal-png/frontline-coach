@@ -18,6 +18,7 @@
 
 import { supabase } from "./supabaseClient";
 import { requireAiConsent } from "./aiConsent";
+import { apiUrl } from "./apiBase";
 
 // ---------- dictation ----------
 
@@ -587,7 +588,7 @@ async function fetchClip(text, mine) {
   // "implied by the call chain" is a worse answer than "checked here", and this
   // is the only other place user-derived text leaves the device.
   await requireAiConsent();
-  const res = await fetch("/api/tts", {
+  const res = await fetch(apiUrl("/api/tts"), {
     method: "POST",
     headers: await authHeader(),
     body: JSON.stringify({

@@ -24,6 +24,20 @@ export const APP_ID = "https://frontline-coach.com/#app";
 export const WEBSITE_ID = "https://frontline-coach.com/#website";
 export const PERSON_ID = "https://otsowntheshift.com/#ben-ryan";
 
+// GUIDELINE 2.2 — these generated pages ship INSIDE the Capacitor binary, because
+// gen-pages.mjs writes to public/ and Vite copies public/ into dist/. AuthGate links
+// to /pricing straight from the sign-in screen, so a reviewer can reach this copy in
+// two taps. The beta framing has to come off in the store build.
+//
+// This file is imported by gen-pages.mjs (Node), never by the browser bundle, so it
+// reads process.env rather than import.meta.env. `npm run build:store` sets it.
+//
+// Side effect worth knowing: a store build leaves store-flavoured HTML sitting in
+// public/. `npm run build` regenerates it, so a Netlify deploy self-heals — but don't
+// hand-deploy dist/ straight after a store build.
+const STORE_BUILD = process.env.VITE_STORE_BUILD === "1";
+const b = (web, store) => (STORE_BUILD ? store : web);
+
 export const PAGES = [
   {
     slug: "operator",
@@ -1220,8 +1234,10 @@ export const PAGES = [
     navLabel: "Pricing",
     related: ["new-manager-coach", "manager-roleplay", "operator"],
     title: "Pricing — Frontline Coach by Own The Shift",
-    description:
+    description: b(
       "Free for everyone during the beta. After that, seven days free with no card, then $14.99 a month or $119 a year. Priced for frontline supervisors.",
+      "Free for everyone right now. After that, seven days free with no card, then $14.99 a month or $119 a year. Priced for frontline supervisors."
+    ),
     h1: "Pricing",
     schema: [
       {
@@ -1242,12 +1258,20 @@ export const PAGES = [
       },
     ],
     blocks: [
-      { em: "Free for everyone during the beta. No card, no limits, no countdown." },
       {
-        p: "The beta runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you.",
+        em: b(
+          "Free for everyone during the beta. No card, no limits, no countdown.",
+          "Free for everyone right now. No card, no limits, no countdown."
+        ),
+      },
+      {
+        p: b(
+          "The beta runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you.",
+          "This runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you."
+        ),
       },
 
-      { h2: "After the beta" },
+      { h2: b("After the beta", "After 15 November") },
       {
         p: "Seven days free, then $14.99 a month or $119 a year. Still no card up front — you sign up, you use it for a week, and you decide at the end. If it hasn't earned it by then, walk away and nothing happens.",
       },
@@ -1272,7 +1296,10 @@ export const PAGES = [
         ],
       },
       {
-        p: "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens when the beta closes on 15 November. Both tools are live and free for every beta user until then. Saying so now rather than surprising anyone in November.",
+        p: b(
+          "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens when the beta closes on 15 November. Both tools are live and free for every beta user until then. Saying so now rather than surprising anyone in November.",
+          "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens on 15 November. Both tools are live and free for everyone until then. Saying so now rather than surprising anyone in November."
+        ),
       },
       {
         p: "Fair use applies rather than a hard ceiling: role play runs on a heavier model that stays in character properly, so it costs real money to serve. Use it like a supervisor and you'll never notice a limit.",
@@ -1280,7 +1307,10 @@ export const PAGES = [
 
       { h2: "Founding members" },
       {
-        p: "The first thirty people in the beta get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds.",
+        p: b(
+          "The first thirty people in the beta get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds.",
+          "The first thirty members get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds."
+        ),
       },
       {
         p: "Being straight about what that covers: Founding locks the Standard price. If we add a higher tier later it'll be separate, and this rate won't include it. Better you know that now than feel misled down the line.",
@@ -1293,7 +1323,10 @@ export const PAGES = [
       {
         faq: {
           q: "Do I need a credit card to start?",
-          a: "No. Signing up takes an email address or a Google account and nothing else. That's true during the beta and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end.",
+          a: b(
+            "No. Signing up takes an email address or a Google account and nothing else. That's true during the beta and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end.",
+            "No. Signing up takes an email address or a Google account and nothing else. That's true now and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end."
+          ),
         },
       },
       {
@@ -1328,8 +1361,11 @@ export const PAGES = [
       },
       {
         faq: {
-          q: "Is it really free during the beta?",
-          a: "Yes, and with no limits. Beta testers get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating.",
+          q: b("Is it really free during the beta?", "Is it really free right now?"),
+          a: b(
+            "Yes, and with no limits. Beta testers get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating.",
+            "Yes, and with no limits. You get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating."
+          ),
         },
       },
     ],

@@ -19,6 +19,10 @@ export const supabase = supabaseReady
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        // PKCE is required by exchangeCodeForSession() in src/native/googleAuth.js.
+        // On implicit the deep link returns tokens in the URL fragment instead of a
+        // ?code, the exchange finds nothing, and native sign-in hangs with no error.
+        flowType: "pkce",
       },
     })
   : null;

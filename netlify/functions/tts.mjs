@@ -1,3 +1,4 @@
+import { corsPreflight, withCors } from "./_cors.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 // =====================================================
@@ -78,7 +79,7 @@ async function fetchSpeech(body, key) {
   throw lastErr || new Error("tts upstream unavailable");
 }
 
-export default async (req) => {
+const handler = async (req) => {
   const json = (obj, status) =>
     new Response(JSON.stringify(obj), {
       status,
@@ -168,4 +169,12 @@ export default async (req) => {
     console.error("tts failed:", e);
     return json({ error: "Speech generation failed" }, 502);
   }
+};
+
+// CORS wrapper. Every response path — including the streaming one — goes through
+// withCors, so nothing can return uncovered. See ./_cors.mjs for why this exists.
+export default async (req) => {
+  const pre = corsPreflight(req);
+  if (pre) return pre;
+  return withCors(req, await handler(req));
 };

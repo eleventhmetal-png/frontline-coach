@@ -1,0 +1,19 @@
+{
+  "appId": "com.otsmedia.frontlinecoach",
+  "appName": "Frontline Coach",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "always"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SpeechRecognition": {
+      "permissions": ["speechRecognition", "microphone"]
+    }
+  }
+}

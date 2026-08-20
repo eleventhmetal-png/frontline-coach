@@ -1,3 +1,4 @@
+import { corsPreflight, withCors } from "./_cors.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 // Frontline Coach — creates a Stripe Checkout Session (Full Page mode) so a
@@ -38,7 +39,7 @@ const ALLOWED_PRICES = new Set([
   process.env.PRICE_STANDARD_ANNUAL || "price_1Tww1DD4QXJZIZVewzWwwlaT", // Standard, $119/yr (live)
 ]);
 
-export default async (req) => {
+const handler = async (req) => {
   const json = (obj, status) =>
     new Response(JSON.stringify(obj), {
       status,
@@ -113,4 +114,12 @@ export default async (req) => {
   } catch (err) {
     return json({ error: "Upstream request failed" }, 500);
   }
+};
+
+// CORS wrapper. Every response path — including the streaming one — goes through
+// withCors, so nothing can return uncovered. See ./_cors.mjs for why this exists.
+export default async (req) => {
+  const pre = corsPreflight(req);
+  if (pre) return pre;
+  return withCors(req, await handler(req));
 };

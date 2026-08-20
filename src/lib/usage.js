@@ -1,5 +1,6 @@
 import { supabase, supabaseReady } from "./supabaseClient";
 import { usageDay } from "./credits";
+import { apiUrl } from "./apiBase";
 
 // Client-side read of the usage meter. Read-only by design: the "usage: read own"
 // RLS policy grants SELECT and nothing else, so the browser can display the
@@ -63,7 +64,7 @@ export async function startCheckout(priceId) {
   try {
     const { data } = (await supabase?.auth?.getSession?.()) ?? { data: null };
     const token = data?.session?.access_token;
-    const res = await fetch("/api/create-checkout-session", {
+    const res = await fetch(apiUrl("/api/create-checkout-session"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

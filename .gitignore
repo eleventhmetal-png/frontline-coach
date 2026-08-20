@@ -16,3 +16,17 @@ deno.lock
 
 # Local Supabase CLI cache -- machine-specific, not project state
 supabase/.temp/
+
+# Backups written by scripts/native-setup.sh before it edits a source file.
+*.bak
+
+# Capacitor. The ios/ project itself IS committed -- it holds signing config and
+# the Info.plist permission strings, and regenerating it loses both.
+# These three are build output that lands inside it:
+ios/App/Pods/            # CocoaPods, restored by `pod install`
+ios/App/App/public/      # the web build, copied in by `cap sync`
+ios/App/Podfile.lock     # regenerated per machine, same reasoning as package-lock
+android/app/src/main/assets/public/
+android/.gradle/
+android/build/
+android/app/build/

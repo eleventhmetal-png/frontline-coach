@@ -16,6 +16,8 @@ import {
   ageLabel, isStale,
 } from "./lib/followups";
 import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
+import { IS_STORE_BUILD } from "./storeBuild";
+import { apiUrl } from "./lib/apiBase";
 import {
   requireAiConsent, setConsentAsker, recordConsent, revokeConsent,
   consentFromSession, resetConsentCache, CONSENT_VERSION,
@@ -109,7 +111,7 @@ async function rawClaude(messages, { model, system, max_tokens, temperature } = 
   // existing catch already turns a thrown error carrying userMessage into a
   // readable notice, so no tool needed changing.
   await requireAiConsent();
-  const res = await fetch("/api/claude", {
+  const res = await fetch(apiUrl("/api/claude"), {
     method: "POST",
     headers: await authHeaders(),
     body: JSON.stringify({
@@ -222,7 +224,7 @@ function extractPartialJson(text) {
 // streaming core — reads Anthropic SSE via the proxy, calls onText(fullSoFar)
 async function streamClaude(messages, { model, system, max_tokens, temperature, onText } = {}) {
   await requireAiConsent();   // see rawClaude
-  const res = await fetch("/api/claude", {
+  const res = await fetch(apiUrl("/api/claude"), {
     method: "POST",
     headers: await authHeaders(),
     body: JSON.stringify({
@@ -372,7 +374,11 @@ async function submitFeedback(tool, rating, inputSummary) {
       input: inputSummary?.slice(0, 200) || "",
       timestamp: new Date().toISOString(),
     });
-    await fetch("/", {
+    // Netlify Forms is a POST to the SITE ROOT, not to /api — so it needs the base
+    // too. On the web apiUrl("/") is just "/". In a store build a bare "/" would
+    // POST into the bundle and every piece of feedback would vanish, silently,
+    // because this whole function swallows errors by design.
+    await fetch(apiUrl("/"), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -384,12 +390,8 @@ async function submitFeedback(tool, rating, inputSummary) {
 // ---------- shared UI bits ----------
 const ACCENT = "#E8923C";
 
-// APP STORE GUIDELINE 2.2: "Apps that are still in a demo, trial, or test version
-// will be rejected." A BETA badge in the header is honest on the web, where it sets
-// expectations with pilot users, and it is a rejection flag in a submitted binary —
-// and in every screenshot taken from one. So it is a build switch, not a delete.
-// Set VITE_STORE_BUILD=1 for the Capacitor build ONLY. Leave it unset for Netlify.
-const IS_STORE_BUILD = import.meta.env.VITE_STORE_BUILD === "1";
+// Guideline 2.2 build switch — see src/storeBuild.js for the full reasoning.
+// Hides every "beta" surface in the store binary only.
 function BetaTag() {
   if (IS_STORE_BUILD) return null;
   return <span className="text-[10px] uppercase tracking-widest text-neutral-600">Beta</span>;
@@ -3426,7 +3428,7 @@ function DeleteAccount({ signOut }) {
     if (!armed) return;
     setBusy(true); setErr("");
     try {
-      const res = await fetch("/api/delete-account", {
+      const res = await fetch(apiUrl("/api/delete-account"), {
         method: "POST",
         headers: await authHeaders(),
         body: JSON.stringify({ confirm: "DELETE" }),
@@ -3569,8 +3571,9 @@ function MoreView({ go, session, signOut }) {
       </div>
       {anyPremium && (
         <p className="text-[11px] text-neutral-500 mt-3 leading-relaxed">
-          Premium tools are free for everyone through the beta. Use them as much as you
-          like — that's what the beta is for. They move to the Premium plan on 15 November.
+          {IS_STORE_BUILD
+            ? "Premium tools are open to everyone right now. Use them as much as you like. They move to the Premium plan on 15 November."
+            : "Premium tools are free for everyone through the beta. Use them as much as you like — that's what the beta is for. They move to the Premium plan on 15 November."}
         </p>
       )}
       <div className="mt-6">
@@ -3986,7 +3989,9 @@ function UsagePill({ session, trialDaysLeft = null }) {
               </p>
             ) : plan === "free" ? (
               <p className="text-[12px] text-neutral-500 leading-snug">
-                Free and unmetered while the beta runs. Nothing here counts against you.
+                {IS_STORE_BUILD
+                  ? "Free and unmetered right now. Nothing here counts against you."
+                  : "Free and unmetered while the beta runs. Nothing here counts against you."}
               </p>
             ) : (
               <p className="text-[12px] text-neutral-500 leading-snug">

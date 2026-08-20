@@ -6,8 +6,37 @@ import {
 import { supabase, supabaseReady } from "./lib/supabaseClient";
 import { TERMS_SECTIONS, PRIVACY_SECTIONS, LAST_UPDATED } from "./legalContent";
 import { INDUSTRY_CARDS } from "./lib/industryCards";
+import { IS_STORE_BUILD } from "./storeBuild";
+import { apiUrl } from "./lib/apiBase";
+import { hasOAuthDriver, runOAuthDriver } from "./lib/oauthDriver";
 
 const ACCENT = "#E8923C";
+
+// GUIDELINE 2.2 — the signup-closed path is the highest-risk beta surface, because a
+// reviewer who lands here sees the word "beta" AND cannot create an account, which
+// stacks 2.2 on a 2.1 App Completeness rejection. Same behaviour either way, neutral
+// noun in the store binary. See src/storeBuild.js.
+//
+// This copy is NOT the fix for the access problem. If sign-ups are capped or closed
+// when a reviewer tests, they still need the demo account credentials in App Review
+// Information to get in.
+const GATE_CLOSED = IS_STORE_BUILD ? "Sign-ups are closed." : "Beta signups are closed.";
+const GATE_FULL = IS_STORE_BUILD ? "Sign-ups are full right now." : "Beta is full right now.";
+const GATE_CLOSED_SIGNIN = IS_STORE_BUILD
+  ? "Sign-ups are closed. If you already have an account, use Sign In."
+  : "Beta signups are closed. If you already have an account, use Sign In.";
+const GATE_FULL_SIGNIN = IS_STORE_BUILD
+  ? "Sign-ups are full right now. If you already have an account, use Sign In."
+  : "Beta is full right now. If you already have an account, use Sign In.";
+const GATE_CLOSED_WAITLIST = IS_STORE_BUILD
+  ? "Sign-ups are closed right now."
+  : "Beta signups are closed right now.";
+const GATE_FULL_WAITLIST = IS_STORE_BUILD
+  ? "Sign-ups are full right now."
+  : "The beta is full right now.";
+const SIGNUP_BLOCKED = IS_STORE_BUILD
+  ? "This account can't be created right now. If you already have an account, try signing in instead."
+  : "This account can't be created right now. If you're joining the beta and already have an account, try signing in instead.";
 
 // Minimum password length enforced in the UI. Keep this >= the "Minimum password
 // length" setting in Supabase (Authentication → Sign In / Providers → Email), or
@@ -305,11 +334,7 @@ export default function AuthGate({ children }) {
       return;
     }
     if (mode === "signup" && signupClosed) {
-      setError(
-        betaStatus?.is_closed
-          ? "Beta signups are closed."
-          : "Beta is full right now."
-      );
+      setError(betaStatus?.is_closed ? GATE_CLOSED : GATE_FULL);
       return;
     }
     setBusy(true);
@@ -351,7 +376,7 @@ export default function AuthGate({ children }) {
         // blocked-domain rule. All of them surface as generic errors through
         // Supabase's signup API. Keep this message generic on purpose; naming
         // which rule fired would leak what the rules are.
-        setError("This account can't be created right now. If you're joining the beta and already have an account, try signing in instead.");
+        setError(SIGNUP_BLOCKED);
       } else {
         setError(msg);
       }
@@ -363,15 +388,22 @@ export default function AuthGate({ children }) {
   const handleGoogle = async () => {
     resetFeedback();
     if (mode === "signup" && signupClosed) {
-      setError(
-        betaStatus?.is_closed
-          ? "Beta signups are closed. If you already have an account, use Sign In."
-          : "Beta is full right now. If you already have an account, use Sign In."
-      );
+      setError(betaStatus?.is_closed ? GATE_CLOSED_SIGNIN : GATE_FULL_SIGNIN);
       return;
     }
     setBusy(true);
     try {
+      // NATIVE: Google refuses OAuth inside an embedded webview
+      // (disallowed_useragent), so signInWithOAuth() below cannot work in a
+      // Capacitor build. On device a driver is registered that hands the authorize
+      // URL to the real system browser and comes back through a deep link. See
+      // src/lib/oauthDriver.js and src/native/googleAuth.js.
+      if (hasOAuthDriver()) {
+        await runOAuthDriver();
+        // Leave busy set. The session arrives asynchronously via the deep link, and
+        // clearing it here would re-enable the button while the browser is still up.
+        return;
+      }
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: window.location.origin + "/" },
@@ -434,7 +466,9 @@ export default function AuthGate({ children }) {
         reason: betaStatus?.is_closed ? "signups-closed" : "beta-full",
         timestamp: new Date().toISOString(),
       });
-      const res = await fetch("/", {
+      // Netlify Forms posts to the site root — needs the API base in a store build,
+      // same as the feedback form in App.jsx. See src/lib/apiBase.js.
+      const res = await fetch(apiUrl("/"), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
@@ -593,8 +627,10 @@ export default function AuthGate({ children }) {
             beta line gets to be the one thing that stands out. */}
         <div className="mb-12 max-w-xl mx-auto">
           <div className="rounded-xl border px-4 py-3 mb-3 text-center" style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.07)" }}>
+            {/* Guideline 2.2: the sign-in screen is the first surface a reviewer sees,
+                so the beta framing has to come off here too. See src/storeBuild.js. */}
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>
-              Free for everyone during the beta
+              {IS_STORE_BUILD ? "Free for everyone right now" : "Free for everyone during the beta"}
             </span>
             <span className="text-[13px] text-neutral-400"> — no card, no limits.</span>
           </div>
@@ -721,9 +757,7 @@ export default function AuthGate({ children }) {
         ) : mode === "signup" && signupClosed ? (
           <div>
             <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-[12px] text-amber-400 leading-snug">
-              {betaStatus?.is_closed
-                ? "Beta signups are closed right now."
-                : "The beta is full right now."}{" "}
+              {betaStatus?.is_closed ? GATE_CLOSED_WAITLIST : GATE_FULL_WAITLIST}{" "}
               Leave your email and we'll tell you the moment a spot opens. Already have an
               account?{" "}
               <button
