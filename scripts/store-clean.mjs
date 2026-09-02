@@ -38,14 +38,14 @@ const dist = join(root, "dist");
 // Exact strings, not regexes, so a silent no-op is impossible to miss: every entry
 // must match or the script fails. If copy in index.html changes, this list changes.
 const REWRITES = [
-  [
-    "Free for all users during the beta, which runs to 15 November 2026.",
-    "Free for all users right now, through 15 November 2026.",
-  ],
-  [
-    "Free for everyone during the beta — no card, no limits.",
-    "Free for everyone right now — no card, no limits.",
-  ],
+  // The two beta-wording rewrites that used to live here are gone, and deliberately
+  // not replaced. On 1 Sep 2026 the web copy stopped saying "free during the beta" at
+  // all — new accounts get a rolling seven-day trial, so the claim was false on the web
+  // too, not just risky in a store build. index.html now reads "Seven days free — no
+  // card, no limits", which needs no rewrite because it contains no beta framing and is
+  // true in both builds.
+  // If beta wording ever returns to index.html, add a rule here: the guard below fails
+  // the build on any surviving "beta", which is what catches it.
   // PRICING CLAUSE, removed outright rather than reworded. Guideline 3.1.1: a store
   // build must not point at a purchase made outside the App Store, and pricing.html is
   // deleted from dist below, so the link would be dead in the binary regardless. The
@@ -55,11 +55,13 @@ const REWRITES = [
     '<span>See <a href="/pricing">what it costs</a> after the beta (a seven-day free trial, then $14.99 a month).</span>',
     "",
   ],
-  // Same reason, in the JSON-LD Offer description. Rule 1 above already rewrote the
-  // first sentence of this same string; this strips the pricing sentence that follows it.
+  // Same reason, in the JSON-LD Offer description: the store binary must carry no
+  // prices at all, and the price guard below fails the build if one survives in any
+  // dist HTML. The web keeps the full sentence — pricing in structured data is worth
+  // having on a page Google actually crawls.
   [
-    " After that, a seven-day free trial with no card required, then $14.99 per month or $119 per year.",
-    "",
+    "A seven-day free trial with no card required, then $14.99 per month or $119 per year. The first 100 subscribers keep $7.99 per month for as long as they stay subscribed.",
+    "A seven-day free trial with no card required.",
   ],
   // SERVICE WORKER. Inside a native binary a service worker caching the app shell
   // fights Capacitor's own asset loader, and a cached shell can outlive an app

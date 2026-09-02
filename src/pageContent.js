@@ -1240,10 +1240,8 @@ export const PAGES = [
     navLabel: "Pricing",
     related: ["new-manager-coach", "manager-roleplay", "operator"],
     title: "Pricing — Frontline Coach by Own The Shift",
-    description: b(
-      "Free for everyone during the beta. After that, seven days free with no card, then $14.99 a month or $119 a year. Priced for frontline supervisors.",
-      "Free for everyone right now. After that, seven days free with no card, then $14.99 a month or $119 a year. Priced for frontline supervisors."
-    ),
+    description:
+      "Seven days free with no card, then $14.99 a month or $119 a year. The first 100 subscribers lock $7.99 for good. Priced for frontline supervisors.",
     h1: "Pricing",
     schema: [
       {
@@ -1265,19 +1263,13 @@ export const PAGES = [
     ],
     blocks: [
       {
-        em: b(
-          "Free for everyone during the beta. No card, no limits, no countdown.",
-          "Free for everyone right now. No card, no limits, no countdown."
-        ),
+        em: "Seven days free. No card up front, no limits while you're trying it.",
       },
       {
-        p: b(
-          "The beta runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you.",
-          "This runs until 15 November 2026. Until then every tool is open and nothing is metered — you're helping work out what this should be, and being rationed while you do that would be a strange way to say thank you."
-        ),
+        p: "Every tool is open for those seven days and nothing is rationed. You don't enter a card to start, so there's no renewal to cancel and nothing happens automatically at the end — you decide, or you walk away.",
       },
 
-      { h2: b("After the beta", "After 15 November") },
+      { h2: "After the seven days" },
       {
         p: "Seven days free, then $14.99 a month or $119 a year. Still no card up front — you sign up, you use it for a week, and you decide at the end. If it hasn't earned it by then, walk away and nothing happens.",
       },
@@ -1302,10 +1294,7 @@ export const PAGES = [
         ],
       },
       {
-        p: b(
-          "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens when the beta closes on 15 November. Both tools are live and free for every beta user until then. Saying so now rather than surprising anyone in November.",
-          "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — opens on 15 November. Both tools are live and free for everyone until then. Saying so now rather than surprising anyone in November."
-        ),
+        p: "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — is Premium, at $24.99 a month or $199 a year. Both tools are open to everyone until 15 November. Saying so now rather than surprising anyone in November.",
       },
       {
         p: "Fair use applies rather than a hard ceiling: role play runs on a heavier model that stays in character properly, so it costs real money to serve. Use it like a supervisor and you'll never notice a limit.",
@@ -1334,10 +1323,7 @@ export const PAGES = [
       {
         faq: {
           q: "Do I need a credit card to start?",
-          a: b(
-            "No. Signing up takes an email address or a Google account and nothing else. That's true during the beta and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end.",
-            "No. Signing up takes an email address or a Google account and nothing else. That's true now and it stays true afterwards — the seven days run without a card on file, and you only enter payment details if you decide to carry on at the end."
-          ),
+          a: "No. Signing up takes an email address or a Google account and nothing else. The seven days run without a card on file, and you only enter payment details if you decide to carry on at the end.",
         },
       },
       {
@@ -1372,11 +1358,8 @@ export const PAGES = [
       },
       {
         faq: {
-          q: b("Is it really free during the beta?", "Is it really free right now?"),
-          a: b(
-            "Yes, and with no limits. Beta testers get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating.",
-            "Yes, and with no limits. You get the full product until 15 November 2026 — every tool, no metering, no countdown. Rationing the people helping you figure out what to build would be self-defeating."
-          ),
+          q: "What do I actually get in the seven days?",
+          a: "All of it, unrationed — every tool, the full model, no metering. A trial that hands you a hobbled version tells you nothing about whether the real thing is worth $14.99, so you get the real thing.",
         },
       },
     ],

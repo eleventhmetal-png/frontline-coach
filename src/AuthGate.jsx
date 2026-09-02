@@ -690,10 +690,14 @@ export default function AuthGate({ children }) {
             beta line gets to be the one thing that stands out. */}
         <div className="mb-12 max-w-xl mx-auto">
           <div className="rounded-xl border px-4 py-3 mb-3 text-center" style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.07)" }}>
-            {/* Guideline 2.2: the sign-in screen is the first surface a reviewer sees,
-                so the beta framing has to come off here too. See src/storeBuild.js. */}
+            {/* NO LONGER A BUILD SWITCH. This said "Free for everyone during the beta"
+                on the web and "right now" in the store build, and as of 1 Sep 2026 both
+                were false: new accounts get a rolling seven-day trial, not free access
+                until 15 November. One sentence, true everywhere, and it stops being a
+                Guideline 2.2 surface at the same time.
+                See supabase/migrations/20260901000000_open_signups_rolling_trial.sql. */}
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>
-              {IS_STORE_BUILD ? "Free for everyone right now" : "Free for everyone during the beta"}
+              Seven days free
             </span>
             <span className="text-[13px] text-neutral-400"> — no card, no limits.</span>
           </div>
