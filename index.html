@@ -59,15 +59,12 @@
          or subdirectories. Google still decides algorithmically — this is a strong
          hint, not a guarantee — and it can take a few crawls to update.
 
-         APP STORE LINK — the SoftwareApplication node carries downloadUrl and installUrl
-         with the placeholder APPLE_ID_HERE. Replace it with the ten-digit Apple ID from
-         App Store Connect (App Information → General Information → Apple ID), and set the
-         same number in src/appStore.js, which is what the landing-page badge and the
-         generated pages read. Two places for one number, because this file is
-         hand-maintained static HTML with no build-time templating — grep apps.apple.com
-         to find both.
-         UNTIL IT IS FILLED IN, delete those two lines rather than deploying the
-         placeholder. A structured-data URL that 404s is worse than a missing one.
+         APP STORE LINK — Apple ID 6803339678, filled in 2 Sep 2026. The same number
+         lives in src/appStore.js, which is what the landing-page badge reads. Two places
+         for one number, because this file is hand-maintained static HTML with no
+         build-time templating — grep apps.apple.com to find both.
+         These URLs 404 until the version is actually RELEASED (it was approved but
+         Pending Developer Release when this was added). Release first, then deploy.
          Note there are no HTML comments inside the block below: it is JSON, and a
          comment there breaks the whole node silently. -->
     <script type="application/ld+json">
@@ -93,8 +90,8 @@
           "applicationCategory": "BusinessApplication",
           "applicationSubCategory": "Leadership and Management Coaching",
           "operatingSystem": "iOS 15.0 or later; Android; any modern web browser",
-          "downloadUrl": "https://apps.apple.com/us/app/frontline-coach/idAPPLE_ID_HERE",
-          "installUrl": "https://apps.apple.com/us/app/frontline-coach/idAPPLE_ID_HERE",
+          "downloadUrl": "https://apps.apple.com/us/app/frontline-coach/id6803339678",
+          "installUrl": "https://apps.apple.com/us/app/frontline-coach/id6803339678",
           "description": "An AI leadership-coaching app for newly promoted managers and shift leads. Describe a people problem on your shift and get a plan you can run today, get the exact words when an employee pushes back, rehearse a hard conversation against an AI employee, diagnose whether a performance issue is skill or will, and turn rough notes into a clean factual record.",
           "disambiguatingDescription": "Frontline Coach by Own The Shift coaches frontline supervisors and shift leads in hourly-workforce operations through employee conversations, performance issues, and documentation. It is a separate and unrelated product from the sales and customer-experience roleplay platform at frontline.coach.",
           "featureList": [

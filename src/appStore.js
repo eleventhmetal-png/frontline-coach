@@ -21,7 +21,14 @@
 // US-ONLY LISTING. The /us/ segment is deliberate. If availability ever expands past
 // the United States, drop it and Apple will redirect each visitor to their own
 // storefront.
-export const APP_STORE_ID = "";
+// Read from App Store Connect 2 Sep 2026 (App Information → Apple ID). Verified
+// against the "View on App Store" link there:
+// https://apps.apple.com/us/app/frontline-coach/id6803339678
+//
+// ORDER OF OPERATIONS: this link 404s until the version is actually RELEASED. It is
+// approved but Pending Developer Release as of writing, so release first, then deploy
+// the site — not the other way round.
+export const APP_STORE_ID = "6803339678";
 
 export const APP_STORE_URL = APP_STORE_ID
   ? `https://apps.apple.com/us/app/frontline-coach/id${APP_STORE_ID}`

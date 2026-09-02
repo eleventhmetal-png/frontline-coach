@@ -129,7 +129,20 @@ const handler = async (req) => {
     return json({ error: "Invalid request body" }, 400);
   }
 
-  const price = PRICE_BY_ID.get(priceId);
+  // DEFAULT TO STANDARD MONTHLY when the client sends no priceId.
+  //
+  // BUG THIS FIXES, found 2 Sep 2026: the Paywall's main CTA is
+  // `onClick={() => go()}` with no argument, so startCheckout() posted an empty body
+  // and this endpoint answered 400 "Unknown or unavailable price". The one button in
+  // the product that takes money has never worked. It went unnoticed because a web
+  // trial has to actually expire while someone is looking at it, and MRR is $0.
+  //
+  // Defaulting here rather than in the client because the client is the thing being
+  // validated: the allowlist still governs, and a caller cannot reach any price by
+  // omitting it — only the cheapest paid tier. Explicit priceIds (annual, founding,
+  // premium) keep working exactly as before.
+  const DEFAULT_PRICE_ID = PRICES[0].id; // Standard monthly, $14.99
+  const price = PRICE_BY_ID.get(priceId || DEFAULT_PRICE_ID);
   if (!price) {
     return json({ error: "Unknown or unavailable price" }, 400);
   }
@@ -183,7 +196,10 @@ const handler = async (req) => {
 
   const params = new URLSearchParams();
   params.set("mode", "subscription");
-  params.set("line_items[0][price]", priceId);
+  // price.id, NOT the raw priceId from the body — those differ whenever the client
+  // sent nothing and the default kicked in. Using priceId here would have sent
+  // undefined to Stripe and turned a working default into a 400 from their API.
+  params.set("line_items[0][price]", price.id);
   params.set("line_items[0][quantity]", "1");
   // The one field that links a completed Stripe checkout back to a specific
   // Frontline Coach account. The webhook (Phase 5) reads this to know whose
