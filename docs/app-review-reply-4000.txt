@@ -1,0 +1,45 @@
+DEMO ACCOUNT
+Email: appreview@otsowntheshift.com
+Password: [[PASSWORD]]
+One account type. Full access to every feature, no time limit, no payment required.
+
+2. DEVICES TESTED
+iPhone 17 Pro Max, iOS [[VERSION]]. Physical device, not simulator. Submitted for iPhone only; iPad support is not declared.
+
+3. WHAT THE APP DOES AND WHO IT IS FOR
+A leadership tool for frontline and shift managers in retail, restaurants, hospitality, car washes and similar hourly-workforce settings.
+
+Most are promoted off the floor for being good at the work, then are expected to run difficult employee conversations (attendance, slipping standards, pushback, an employee about to quit) with no management training. They avoid the conversation or handle it badly.
+
+The app gives them a plan before the conversation, a place to rehearse it, and feedback after. Five tools: Coach (describe a situation, get a specific plan), Pushback (words to use when an employee pushes back), Practice (rehearse aloud against an AI employee, then get scored), Diagnose skill vs. will (training gap or accountability gap), and Follow-through (what the manager said they would check).
+
+Content is original to OTS Media LLC. Every screen shows: "Not legal or HR advice. Always follow your company's policies."
+
+4. SETUP AND ACCESS
+1. Sign in with the demo account above. "Continue with Google" also works but is not needed.
+2. On the first AI action a consent sheet appears naming each processor. Accept it. Revocable in More > Settings.
+3. On Home, pick a setting under "Coaching For". "General" works for any team.
+4. Tap "Coach me through a situation" and type any workplace scenario, e.g. "An employee has been 10 to 15 minutes late four shifts in a row." A written plan is returned.
+5. Tap "Practice a conversation" to rehearse against an AI employee. Typing works; the microphone button enables speaking, and iOS prompts for Microphone and Speech Recognition on first use. Tap "End & score" for the debrief.
+6. "Handle pushback" and "Diagnose skill vs. will" are on Home and the tab bar.
+7. Every AI response has a "Report a problem with this response" link.
+8. Account deletion: More > Settings > Delete account. Permanently deletes the account and all associated content.
+No sample files needed. Any typed scenario works.
+
+5. EXTERNAL SERVICES
+- Anthropic (Claude): all written coaching output and the AI employee in Practice. Proxied through our own server function; the API key is not in the binary.
+- OpenAI: text-to-speech only, for optional read-aloud. No user text used for training.
+- Apple Speech framework, on-device: speech-to-text for the Practice microphone. The only use of the microphone.
+- Supabase: authentication and the database holding each user's own content.
+- Netlify: hosting and the functions that proxy AI calls.
+- Stripe: payment processing. Not exercised during the current free period; no purchase is required or presented to reach any feature in this build.
+Per 5.1.2(i), users see a consent sheet naming Anthropic, OpenAI and on-device dictation before any text leaves the device. Consent is recorded per account and revocable in Settings.
+
+6. REGIONAL DIFFERENCES
+None. United States only, English only. Identical for every user. No region-dependent behavior, geofencing, or location data collection.
+
+7. REGULATED INDUSTRY / THIRD-PARTY MATERIAL
+Not applicable. This is a general workplace communication and leadership skills app. It is not a regulated service, provides no legal, HR, medical or financial advice, and holds no protected third-party material. All content is owned by OTS Media LLC.
+
+USER-GENERATED CONTENT
+No social layer. Users cannot see, share with, or message each other, and nothing a user writes is visible to any other account. The reporting link lets users flag an inappropriate AI response, which we review.

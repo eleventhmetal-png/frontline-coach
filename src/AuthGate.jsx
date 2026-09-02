@@ -2,11 +2,15 @@ import React, { useState, useEffect } from "react";
 import {
   Zap, Loader2, Mail, Lock, AlertTriangle, X, Check, Briefcase,
   MessageSquare, Shield, Play, ClipboardList, Target, FileText,
+  Smartphone, ArrowRight,
 } from "lucide-react";
 import { supabase, supabaseReady } from "./lib/supabaseClient";
-import { TERMS_SECTIONS, PRIVACY_SECTIONS, LAST_UPDATED } from "./legalContent";
+import LegalModal from "./LegalModal";
+// LAST_UPDATED is still needed here — signup stamps it as tos_version.
+import { LAST_UPDATED } from "./legalContent";
 import { INDUSTRY_CARDS } from "./lib/industryCards";
 import { IS_STORE_BUILD } from "./storeBuild";
+import { APP_STORE_URL, isIOSBrowser } from "./appStore";
 import { apiUrl } from "./lib/apiBase";
 import { hasOAuthDriver, runOAuthDriver } from "./lib/oauthDriver";
 
@@ -74,50 +78,9 @@ function GoogleMark() {
   );
 }
 
-function LegalModal({ onClose }) {
-  const [view, setView] = useState("terms"); // "terms" | "privacy"
-  const sections = view === "terms" ? TERMS_SECTIONS : PRIVACY_SECTIONS;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center px-4">
-      <div className="w-full max-w-md max-h-[85vh] bg-neutral-950 border border-neutral-800 rounded-xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 shrink-0">
-          <div className="flex rounded-lg border border-neutral-800 p-1">
-            {[
-              { id: "terms", label: "Terms" },
-              { id: "privacy", label: "Privacy" },
-            ].map((v) => (
-              <button
-                key={v.id}
-                onClick={() => setView(v.id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                  view === v.id ? "bg-neutral-800 text-neutral-100" : "text-neutral-500"
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-200">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="overflow-y-auto px-5 py-4 space-y-4">
-          <p className="text-[11px] text-neutral-600">Last updated {LAST_UPDATED}</p>
-          {sections.map((s) => (
-            <div key={s.heading}>
-              <div className="text-sm font-semibold text-neutral-200 mb-1">{s.heading}</div>
-              {s.body.map((p, i) => (
-                <p key={i} className="text-xs text-neutral-500 leading-relaxed mb-1">
-                  {p}
-                </p>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+// LegalModal moved to ./LegalModal.jsx on 25 Aug 2026 — the app needs the same
+// viewer, because the in-app <a target="_blank"> links to privacy.html do nothing
+// inside Capacitor's WKWebView. See the comment in that file.
 
 /**
  * Gates the app behind Supabase auth. Renders sign-in/sign-up while
@@ -125,6 +88,96 @@ function LegalModal({ onClose }) {
  * Passes { session, profile, signOut } to children via render prop so
  * downstream code (session logging, team lookups) can use them.
  */
+// =====================================================
+// STORE INTRO — the signed-out screen inside the native app
+// =====================================================
+// The web build's signed-out screen is a full marketing landing page: hero, a
+// phone mockup, feature grid, industry cards, and three links including
+// "What it costs — Free now. 7-day trial, then $14.99".
+//
+// That page is correct on the web and WRONG inside an iOS binary, for two
+// reasons that both matter:
+//
+//   1. GUIDELINE 3.1.1. A price for digital content, displayed in the app,
+//      outside In-App Purchase. It was the first thing visible in the App Review
+//      demo video — three seconds in, before the app had done anything.
+//   2. It reads as a website in a wrapper, which is the exact impression
+//      Guideline 4.2 rejects apps for.
+//
+// Someone who has downloaded the app does not need to be sold the app. They need
+// to know what it is and get to a sign-in field. So: name, one line, form.
+// No pricing, no hero image, no marketing links, nothing that leaves the app.
+//
+// This is also where account deletion lands. Deleting signs the user out, which
+// unmounts the app and renders this — so the last thing they see is a clean
+// sign-in screen, not a pitch to buy what they just cancelled.
+// max-w-sm, wider than the form below it on purpose: at max-w-xs the name wrapped
+// and left a word stranded on its own line, which reads as a mistake.
+function StoreIntro({ onLegal }) {
+  return (
+    <div className="max-w-sm mx-auto px-6 pt-14 pb-2 text-center">
+      {/* THE REAL APP ICON, not the Zap glyph the web header draws.
+          public/app-icon.png is a copy of the 1024px iOS AppIcon asset, so what
+          somebody sees on this screen is the same mark they just tapped on their
+          home screen and the same one on the store listing. The glyph version is
+          close but not identical — flat fill instead of the gradient, and a
+          smaller bolt that does not bleed to the edges.
+          Radius is 22.5% of the size, which is Apple's squircle proportion; the OS
+          masks the real icon and this has to match it or it reads as a sticker. */}
+      <img
+        src="/app-icon.png"
+        alt=""
+        width={64}
+        height={64}
+        className="mx-auto mb-4"
+        style={{ borderRadius: 14 }}
+      />
+      {/* PRODUCT NAME ONLY, and only here.
+          The web landing page and the web auth form still carry the full
+          "Own The Shift — Frontline Coach" lockup, because that is the string
+          Google's OAuth verification compares against the consent screen's App
+          name field, and Google reviews the WEBSITE — not this binary.
+          Inside the app the full lockup was the odd one out: the header on Home
+          says "FRONTLINE COACH", so the sign-in screen introduced a longer name
+          than anything the user was about to see, and wrapped doing it. */}
+      {/* Matches the Home header's treatment exactly — font-extrabold, uppercase,
+          tracking-tight — just bigger, because this is the first screen and the
+          header version is a 16px chrome element. There is no webfont in this
+          project: Tailwind's default stack resolves to -apple-system, so both are
+          SF Pro at weight 800 and they render as the same mark at two sizes.
+          Do not add a Google font here to "fix" it; it would load over the network
+          on a cold launch and flash unstyled text on the one screen where the app
+          gets its first impression. */}
+      <div className="font-extrabold uppercase tracking-tight text-3xl mb-5 leading-tight">
+        Frontline Coach
+      </div>
+
+      <div className="flex items-center justify-center gap-2 mb-7">
+        <Shield size={13} style={{ color: ACCENT }} />
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
+          Veteran-Owned &amp; Operated
+        </span>
+      </div>
+
+      <p className="text-[15px] text-neutral-400 leading-relaxed mb-2">
+        Coaching for frontline managers. Plan the hard conversation, rehearse it,
+        then keep a clean record.
+      </p>
+
+      <p className="text-[11px] text-neutral-600 leading-snug mt-6">
+        Coaching guidance only — not legal or HR advice. Always follow your
+        company's policies.
+        <br />
+        {/* In-app modal, not an outbound link. A reviewer tapping Terms should not
+            be thrown into Safari and out of the app. */}
+        <button type="button" onClick={onLegal} className="underline mt-1.5" style={{ color: ACCENT }}>
+          Terms &amp; Privacy Policy
+        </button>
+      </p>
+    </div>
+  );
+}
+
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
@@ -493,6 +546,16 @@ export default function AuthGate({ children }) {
           Root app shell locks html/body/#root to a fixed viewport height for
           the in-app screens, so this outer div owns its own scroll instead of
           relying on document scroll (which is disabled globally). */}
+      {/* VERTICAL CENTERING, STORE BUILD ONLY.
+          min-h-full plus justify-center is the pairing that survives both cases:
+          when the content is shorter than the screen it sits centered, and when it
+          grows past it — Sign Up adds the terms checkbox, the waitlist form is
+          taller again, and a smaller phone shrinks the room — the wrapper simply
+          gets taller and the parent scrolls. Using justify-center on the scroll
+          container itself instead would centre it too, right up until the content
+          overflows and the top of it becomes unreachable. */}
+      <div className={IS_STORE_BUILD ? "min-h-full flex flex-col justify-center" : ""}>
+      {IS_STORE_BUILD ? <StoreIntro onLegal={() => setShowLegal(true)} /> : (
       <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-6 md:px-10 pt-16 pb-14">
         <div className="flex items-center gap-2 mb-10 justify-center">
           <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: ACCENT }}>
@@ -635,6 +698,34 @@ export default function AuthGate({ children }) {
             <span className="text-[13px] text-neutral-400"> — no card, no limits.</span>
           </div>
 
+          {/* APP STORE BADGE — iOS browsers only, and only once APP_STORE_ID is set.
+              Approved 25 Aug 2026. An iPhone visitor should get the real app, not the
+              installable web version: it has native dictation through Apple's own
+              recognizer, it survives a cold launch without the network, and it puts a
+              real icon on their home screen instead of a Safari bookmark.
+              NOT shown on Android — Play is still in review, so the PWA is the only
+              app-shaped option there and the manifest stays exactly as it is.
+              Never shown inside the native app: this whole landing block is behind
+              !IS_STORE_BUILD, and isIOSBrowser() checks window.Capacitor as well. */}
+          {APP_STORE_URL && isIOSBrowser() && (
+            <a
+              href={APP_STORE_URL}
+              className="flex items-center gap-3 rounded-xl border px-4 py-3 mb-3 transition duration-200"
+              style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.07)" }}
+            >
+              <Smartphone size={20} style={{ color: ACCENT }} className="shrink-0" />
+              <span className="flex-1 text-left">
+                <span className="block text-[13px] font-semibold text-neutral-100">
+                  Get it on the App Store
+                </span>
+                <span className="block text-[11px] text-neutral-500 leading-snug">
+                  The iPhone app adds hands-free dictation. Same account, same history.
+                </span>
+              </span>
+              <ArrowRight size={16} className="shrink-0 text-neutral-600" />
+            </a>
+          )}
+
           <div className="grid sm:grid-cols-3 gap-3">
             {[
               { href: "/new-manager-coach", icon: Play, label: "Just promoted?", sub: "Where to start when nobody trained you" },
@@ -677,10 +768,24 @@ export default function AuthGate({ children }) {
           </a>.
         </p>
       </div>
+      )}
 
-      {/* Sign in / sign up */}
-      <div id="auth" className="border-t border-neutral-900 pt-14 pb-20 flex items-center justify-center px-6">
+      {/* Sign in / sign up.
+          In the store build the marketing page above is gone, so the divider and
+          its big top margin would just be a rule under a heading. Sit the form
+          straight under the intro instead. */}
+      <div
+        id="auth"
+        className={
+          IS_STORE_BUILD
+            ? "pt-6 pb-16 flex items-center justify-center px-6"
+            : "border-t border-neutral-900 pt-14 pb-20 flex items-center justify-center px-6"
+        }
+      >
       <div className="w-full max-w-xs">
+        {/* StoreIntro already carries the wordmark a few pixels above this, so in
+            the app it would appear twice on one short screen. */}
+        {!IS_STORE_BUILD && (
         <div className="flex items-center gap-2 mb-8 justify-center">
           <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: ACCENT }}>
             <Zap size={16} className="text-neutral-950" />
@@ -689,6 +794,7 @@ export default function AuthGate({ children }) {
             Own The Shift <span className="text-neutral-600 mx-0.5">—</span> Frontline Coach
           </span>
         </div>
+        )}
 
         <div className="flex rounded-lg border border-neutral-800 p-1 mb-6">
           {["signin", "signup"].map((m) => (
@@ -821,19 +927,37 @@ export default function AuthGate({ children }) {
           </div>
         ) : (
           <>
-        <button
-          onClick={handleGoogle}
-          disabled={busy}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30"
-        >
-          <GoogleMark /> Continue with Google
-        </button>
+        {/* APP STORE GUIDELINE 4.8 — LOGIN SERVICES. Rejected 25 Aug 2026 for
+            offering Google sign-in with no equivalent option (Apple's example of
+            an equivalent is Sign in with Apple: name and email only, private
+            relay address, no ad tracking without consent).
+            4.8 only bites when the app offers a THIRD-PARTY login service.
+            Email and password is first-party, so hiding this button in the store
+            binary removes the obligation outright — no Services ID, no signing
+            key, no Supabase Apple provider, nothing new that can fail in review.
+            The WEB app keeps Google: the guideline is an App Store rule and
+            pilot users signed up with it.
+            DO NOT delete this button or handleGoogle. When Sign in with Apple
+            ships, drop the !IS_STORE_BUILD and put SIWA beside it — that is the
+            outcome 4.8 actually wants, and it is required the moment any
+            third-party login is visible in a store build again. */}
+        {!IS_STORE_BUILD && (
+          <>
+            <button
+              onClick={handleGoogle}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-neutral-100 text-neutral-900 py-2.5 font-semibold text-sm mb-4 disabled:opacity-50 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30"
+            >
+              <GoogleMark /> Continue with Google
+            </button>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-px bg-neutral-800 flex-1" />
-          <span className="text-[10px] uppercase tracking-widest text-neutral-600">or</span>
-          <div className="h-px bg-neutral-800 flex-1" />
-        </div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-px bg-neutral-800 flex-1" />
+              <span className="text-[10px] uppercase tracking-widest text-neutral-600">or</span>
+              <div className="h-px bg-neutral-800 flex-1" />
+            </div>
+          </>
+        )}
 
         <form onSubmit={handleEmailAuth} className="space-y-3">
           <div className="relative">
@@ -905,6 +1029,7 @@ export default function AuthGate({ children }) {
         )}
           </>
         )}
+      </div>
       </div>
       </div>
       {showLegal && <LegalModal onClose={() => setShowLegal(false)} />}

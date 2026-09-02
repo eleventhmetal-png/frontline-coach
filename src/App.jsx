@@ -17,17 +17,22 @@ import {
 } from "./lib/followups";
 import { shouldShow as shouldShowWhatsNew, markSeen as markWhatsNewSeen, currentRelease } from "./lib/whatsNew";
 import { IS_STORE_BUILD } from "./storeBuild";
+import LegalModal from "./LegalModal";
+import { openLegal, setLegalOpener } from "./lib/legalSheet";
 import { apiUrl } from "./lib/apiBase";
 import {
   requireAiConsent, setConsentAsker, recordConsent, revokeConsent,
   consentFromSession, resetConsentCache, CONSENT_VERSION,
 } from "./lib/aiConsent";
 import {
-  dictationAvailable, startDictation, dictationErrorText,
+  dictationAvailable, startDictation, dictationErrorText, dictationDriverId,
   readAloudAvailable, primeSpeech, speakStream, speakRest, stopSpeaking, resetReadAloud, warmVoices,
   setSpeechCharacter,
   readAloudPref, setReadAloudPref,
+  setTurnSpokenHandler,
+  setVoiceLimitHandler,
 } from "./lib/voice";
+import { isNative } from "./native/platform";
 
 // ---------- Claude API helpers ----------
 // All calls go through the Netlify proxy function — API key never touches the browser.
@@ -2359,8 +2364,43 @@ function rpOpening(scenario) {
 // scrubVoice(): the instruction is the first line of defense, the deterministic
 // strip is the one that always holds. Only complete *...* pairs are removed, so
 // a half-streamed token never flickers on screen.
-function cleanTurn(t) {
+// Openers the prompt explicitly endorses as sounding human. Endorsing them is what
+// makes them a problem: given a list of approved crutches the model picks the first
+// one and then reaches for it every single turn.
+const RP_OPENERS = ["look", "honestly", "man", "listen", "okay", "alright", "yeah", "so"];
+
+// The opening filler of a turn, or "" — used to stop the next turn reusing it.
+function openerOf(t) {
+  const m = String(t || "").trim().match(/^([A-Za-z]+)\s*,/);
+  if (!m) return "";
+  const w = m[1].toLowerCase();
+  return RP_OPENERS.includes(w) ? w : "";
+}
+
+// `prevOpener` is the opener the PREVIOUS assistant turn used. Ben caught three
+// consecutive employee turns opening "Look," on device 21 Aug 2026 — "Look, I don't
+// know what you want me to say", "Look, nobody said the feedback was disrespectful",
+// "Look, I know." Once you see it you cannot unsee it, and read aloud it is worse.
+//
+// The prompt already carries the rule ("never the same opener twice running") and the
+// model ignored it, which is exactly the history of "like" and "I mean" — both of
+// which ended up with deterministic backstops here for the same reason. A rule the
+// model follows most of the time is not a rule; a real person's hesitations land
+// somewhere different every time, and one phrase arriving on every turn is the tell.
+//
+// Stable under streaming: prevOpener is fixed for the whole turn, so this strips the
+// same characters on every partial rather than flickering as the text grows.
+// `recent` is the openers of the last TWO counterpart turns, not one. Checking only
+// the previous turn leaves "Look, / (stripped) / Look," alternating, which is still
+// a pattern a reader picks up — the stripped turn in the middle reads as a gap in
+// the tic, not as variety.
+function cleanTurn(t, recent) {
   if (!t) return t;
+  const used = Array.isArray(recent) ? recent : recent ? [recent] : [];
+  const o = openerOf(t);
+  if (o && used.includes(o)) {
+    t = String(t).replace(/^\s*[A-Za-z]+\s*,\s*/, "");
+  }
   return t
     // stage directions: *looks up*, *sighs*
     .replace(/\*[^*\n]{1,80}\*/g, "")
@@ -2542,6 +2582,7 @@ Talk like a real hourly employee getting pulled aside, not like an AI. That mean
 - These words get SPOKEN OUT LOUD, not read on a page, so write them the way a mouth makes them: contractions always, a false start you correct, a word repeated, a sentence you abandon and restart. Clean well-formed prose is the tell. "I don't know what you want me to say here" beats "I am uncertain what you are asking of me" every time.
 - NEVER use "I mean" as a hesitation. Not "I mean...", not "so I mean,", not "yeah, I mean." It is banned on exactly the same grounds as "like": one crutch phrase arriving in every single answer is a machine tell, because a real person's hesitations land somewhere different every time. "I mean it" as actual emphasis is fine; "I mean" as a throat-clear is not.
 - RATION WHAT IS LEFT. At most ONE filler per turn and never the same opener twice running. Most turns should carry none — the texture comes from short sentences, a thought you drop halfway, and answering only the part you want to answer. NEVER use "like" as a filler or as a quotative: not "but like," not "it's like," not "I was like," not "like, I don't know." It is the single tic that reads as a machine imitating a young person, and grown adults on a shift do not talk that way. "Like" is allowed ONLY as a real comparison or a real verb: "runs like a machine," "I don't like it." The fillers that actually sound like a person are "look," "honestly," "man," "whatever," repeating a word, and just stopping mid-sentence. "I mean" is NOT one of them, for the same reason.
+- "LOOK," IS THE ONE YOU WILL OVERUSE. Treated as a licence rather than a rare option it has opened three consecutive turns in real sessions, which is a louder machine tell than any of the words banned above. Never open two turns in a row with the same word, and do not open with "look," more than once in a whole conversation. THE DEFAULT IS NO OPENER AT ALL: start on the actual first word of what you are saying. "Nobody said the feedback was disrespectful" is the line. "Look, nobody said the feedback was disrespectful" is the line wearing a costume.
 - You're a person with a side to the story, not a problem to be solved.
 - React to what the manager ACTUALLY says. If they're vague, you don't know what they want and you say so. If they come in hot or accusatory, you get defensive or shut down. If they're clear, fair, and specific, you give a little ground over a few turns, but slowly. Don't fold on turn one.
 - Don't be articulate about your own feelings. People aren't.
@@ -2735,7 +2776,6 @@ function useDictation({ value, setValue, onFirstUse }) {
   // 400ms for onend. Through that window `listening` is still true, so a tap
   // meaning "open it again" lands in the stop branch and is swallowed.
   const stoppingRef = useRef(false);
-  const pendingStartRef = useRef(false);
   // SESSION TOKEN. Every startDictation call gets its own handlers, and a dying
   // session's onEnd used to fire straight into this hook's state with no idea it
   // was stale. Start a new mic before the old recognizer has finished winding down
@@ -2770,7 +2810,13 @@ function useDictation({ value, setValue, onFirstUse }) {
   // that fast is not a real intention; killing the mic you just asked for is not
   // what that tap meant.
   const OPEN_GRACE_MS = 700;
-  function open({ resumed = false } = {}) {
+  // VOICE TRACE. Every one of these logs exists because this feature has now cost
+  // several nights to two separate bugs that were invisible from the outside: the
+  // symptom is always "the mic loops", and the question is always "who asked it
+  // to". Xcode console is the only place that can answer that on a real device, so
+  // the answer is printed there. `[dict]`/`[tts]` prefixes to filter on.
+  function open({ resumed = false, reason = "tap" } = {}) {
+    console.warn(`[dict] open reason=${reason} listening=${listeningRef.current} stopping=${stoppingRef.current}`);
     if (listeningRef.current) return;
     if (!available) { setErr(dictationErrorText("unsupported")); return; }
     stopSpeaking();   // never dictate over our own voice — the mic hears it
@@ -2783,7 +2829,6 @@ function useDictation({ value, setValue, onFirstUse }) {
     const mine = ++sessionRef.current;
     listeningRef.current = true;
     stoppingRef.current = false;
-    pendingStartRef.current = false;
     openedAtRef.current = Date.now();
     setListening(true);
     handleRef.current = startDictation({
@@ -2805,20 +2850,34 @@ function useDictation({ value, setValue, onFirstUse }) {
         stoppingRef.current = false;
         setListening(false);
         handleRef.current = null;
-        if (pendingStartRef.current) {
-          pendingStartRef.current = false;
-          // Safe outside a gesture: the device log showed audiostart firing on
-          // every start, whether a tap triggered it or not.
-          setTimeout(() => { if (!listeningRef.current) open({ resumed: true }); }, 120);
-        }
+        // NOTHING REOPENS THE MIC HERE. See the note on toggle() below — this
+        // block used to queue a restart 120ms after a session ended, and that is
+        // the loop Ben caught on device 21 Aug 2026.
       },
     });
   }
   function toggle() {
-    // Already closing. The only thing this tap can sensibly mean is "open it
-    // again", so honour it once the old session lands instead of starting a second
-    // recognizer alongside a dying one.
-    if (stoppingRef.current) { pendingStartRef.current = true; return; }
+    // THE MIC ONLY EVER OPENS FROM A TAP, AND ONE TAP OPENS IT ONCE.
+    //
+    // This used to queue a restart for when the dying session landed. Ben's device
+    // log, 21 Aug 2026, is what that produced. Dictation worked perfectly — full
+    // partials, "Hey we need to talk about some things that are going on with you
+    // and your reactions to feedback" — and then a second `start` fired straight
+    // into a still-busy audio session:
+    //
+    //     AudioSession::beginInterruption but session is already interrupted!
+    //     ERROR: Recognition request was canceled
+    //
+    // iOS gives the speaker and the microphone ONE audio session. Read-aloud was
+    // still holding it, so every reopened recognizer was killed on arrival, and the
+    // UI sat on "Listening…" forever. On screen that was a 1.3s-on / 0.7s-off blink,
+    // ten cycles, not one character transcribed.
+    //
+    // This is the same speaker-vs-mic wall that killed four earlier attempts at
+    // hands-free. It cannot be fixed with a longer delay; the session is genuinely
+    // in use. So a tap arriving while the mic is closing is IGNORED. Losing one
+    // impatient tap is a papercut. Reopening the mic on its own is the bug.
+    if (stoppingRef.current) return;
     if (listeningRef.current) {
       if (Date.now() - openedAtRef.current < OPEN_GRACE_MS) return;
       stoppingRef.current = true;
@@ -2830,14 +2889,30 @@ function useDictation({ value, setValue, onFirstUse }) {
   // cancel() throws the in-flight transcript away. Use it any time the field is
   // about to be cleared or abandoned; stop() would put the words straight back.
   function cancel() {
-    pendingStartRef.current = false;   // a send or a reset outranks a queued tap
     if (!listeningRef.current) return;
     stoppingRef.current = false;
     listeningRef.current = false;
-    try { handleRef.current && handleRef.current.cancel(); } catch (e) {}
+    // NEVER swallow this silently again. A bare try/catch here hid a driver that
+    // had no cancel() at all for weeks: the call threw, the catch ate it, and the
+    // recogniser stayed live and fought the next one for the microphone.
+    const h = handleRef.current;
+    if (!h) return;
+    try {
+      if (typeof h.cancel === "function") h.cancel();
+      else {
+        console.warn(`[dictation] driver "${dictationDriverId()}" has no cancel() — falling back to stop(). The spoken line may reappear in the box after send.`);
+        h.stop();
+      }
+    } catch (e) {
+      console.error("[dictation] cancel failed:", e);
+    }
   }
   return {
     available, listening, err, toggle, cancel,
+    // Programmatic open, for hands-free only. Deliberately NOT the same entry
+    // point as toggle(): this one must only ever be called from the turn-spoken
+    // handoff in voice.js, never on a timer and never from a tap.
+    openHandsFree: () => { if (!listeningRef.current) open({ resumed: true, reason: "hands-free" }); },
     used: () => usedRef.current,
     reset: () => { usedRef.current = false; setErr(""); },
   };
@@ -2896,6 +2971,25 @@ function Roleplay({ session } = {}) {
   // the current utterance and then the next streaming tick queued another one.
   const readAloudRef = useRef(false);
   const canSpeak = readAloudAvailable();
+
+  // VOICE ALLOWANCE RAN OUT. tts.mjs answers 402 once the free 20 lifetime minutes are
+  // gone (or a Premium month is spent), voice.js stops asking and calls this once.
+  //
+  // Deliberately an inline card, not a modal. This fires MID-ROLEPLAY, while someone is
+  // in the middle of rehearsing a hard conversation — throwing a dialog over that to
+  // ask for money would be the single worst-timed interruption in the product. The
+  // reply keeps being spoken by the device voice either way, so nothing is broken;
+  // this explains why it suddenly sounds different.
+  const [voiceLimit, setVoiceLimit] = useState(null);
+  useEffect(() => {
+    setVoiceLimitHandler((info) => {
+      setVoiceLimit(info || {});
+      // Flip the toggle off so the UI stops claiming the good voice is on.
+      setReadAloud(false);
+      setReadAloudPref(false);
+    });
+    return () => setVoiceLimitHandler(null);
+  }, []);
   // First time somebody actually speaks into this thing, turn the counterpart's
   // voice on. Standing somewhere you can talk out loud is the only honest signal
   // that a voice coming out of the phone is welcome. Explicitly switching it off
@@ -2931,6 +3025,51 @@ function Roleplay({ session } = {}) {
     if (listening) el.scrollTop = el.scrollHeight;
   }, [draft, listening]);
   useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
+
+  // ===================================================================
+  // HANDS-FREE: tap once, then talk it out like a real conversation
+  // ===================================================================
+  // Ben's spec, 21 Aug 2026: "I hit the mic, speak, hit send, the mic shuts off,
+  // AI speaks and finishes, the mic turns on... rinse repeat until the
+  // conversation is over." Which is right — a manager rehearsing a hard
+  // conversation should not be tapping a button between every sentence.
+  //
+  // WHY THIS CAN WORK NOW WHEN IT FAILED FOUR TIMES BEFORE: every earlier attempt
+  // was in the PWA, where opening the mic requires a real user gesture and a
+  // callback is not one. In the native shell the Capacitor plugin has no gesture
+  // rule — the device log proves a programmatic `start` reaches the plugin fine.
+  // The only thing that ever killed it was WHEN it fired, not that it fired.
+  //
+  // So this hangs off the one honest signal: setTurnSpokenHandler runs after the
+  // reply has finished speaking AND releaseAudioSession() has handed the iOS audio
+  // session back. Not a timer. Not onEnd of the previous dictation. Fire it a beat
+  // earlier and you get the cancelled-recogniser loop back.
+  //
+  // Native only, and only when the reply voice is on — with read-aloud off there
+  // is no "AI finished speaking" moment to hand off from, so the mic would reopen
+  // instantly and fight the user.
+  const handsFree = readAloud && isNative() && dict.available;
+  // Armed by send(), burned by the turn-spoken handler. Nothing else may set it —
+  // in particular open() and stopSpeaking() must never re-arm it, or the one-shot
+  // becomes a loop again.
+  const handsFreeTokenRef = useRef(false);
+  const dictRef = useRef(dict);
+  useEffect(() => { dictRef.current = dict; });
+  useEffect(() => {
+    if (!started || score || !handsFree) { setTurnSpokenHandler(null); return; }
+    setTurnSpokenHandler(() => {
+      // ONE-SHOT PER REPLY. The token is armed in send() and burned here, so a
+      // reply can hand the mic over exactly once. Without it any later drain of
+      // the TTS queue — and open() itself drains it, via stopSpeaking() — reopens
+      // the mic again, which is the blink loop.
+      if (!handsFreeTokenRef.current) return;
+      handsFreeTokenRef.current = false;
+      // Re-check at fire time: the turn may have ended while the tail was flushing.
+      const d = dictRef.current;
+      if (d && d.available) d.openHandsFree();
+    });
+    return () => setTurnSpokenHandler(null);
+  }, [started, score, handsFree]);
   function toggleReadAloud() {
     const next = !readAloud;
     setReadAloud(next);
@@ -3031,12 +3170,22 @@ function Roleplay({ session } = {}) {
     setHistory([...next, { role: "assistant", content: "" }]);
     setDraft(""); setLoading(true); setError(""); scrollDown();
     const sys = buildRpSystem();
+    // Openers the counterpart used in its last two turns, so this one cannot reuse
+    // either. Computed once before the stream starts, so every partial strips
+    // identically rather than the first word flickering as the text grows.
+    const recentOpeners = history
+      .filter((m) => m.role === "assistant" && m.content)
+      .slice(-2)
+      .map((m) => openerOf(m.content))
+      .filter(Boolean);
     try {
       let spoken = "";
       resetReadAloud();
+      // Arm the single hands-free handoff for THIS reply. Here and nowhere else.
+      handsFreeTokenRef.current = handsFree;
       await streamChat(sys, next,
         (t) => {
-          const clean = cleanTurn(t);
+          const clean = cleanTurn(t, recentOpeners);
           spoken = clean;
           setHistory([...next, { role: "assistant", content: clean }]);
           // Speak only completed sentences as they land. Feeding half-clauses to
@@ -3297,6 +3446,39 @@ function Roleplay({ session } = {}) {
           </button>
         </div>
       </div>
+      {voiceLimit && (
+        <div className="mb-3 rounded-xl border p-3"
+          style={{ borderColor: "rgba(232,146,60,0.35)", backgroundColor: "rgba(232,146,60,0.06)" }}>
+          <div className="flex items-start gap-2">
+            <VolumeX size={16} style={{ color: ACCENT }} className="shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-[13px] text-neutral-200 leading-snug">
+                {voiceLimit.plan === "premium"
+                  ? "That's this month's read-aloud minutes. They reset at the start of next month."
+                  : "You've used your twenty free minutes of the practice voice."}
+              </p>
+              <p className="text-[12px] text-neutral-500 leading-snug mt-1">
+                Your device voice will keep reading replies. It's the same coaching — it just
+                doesn't sound like a person.
+              </p>
+              {/* GUIDELINE 3.1.1. No purchase button in the store build: the Paywall is
+                  gated by IS_STORE_BUILD and this must not become the back door that
+                  reintroduces an external checkout into the binary. When the Stripe
+                  link-out returns for iOS, this is one of the places it belongs. */}
+              {!IS_STORE_BUILD && voiceLimit.plan !== "premium" && (
+                <a href="/pricing" className="inline-block text-[12px] font-semibold underline mt-2"
+                  style={{ color: ACCENT }}>
+                  What Premium includes
+                </a>
+              )}
+            </div>
+            <button onClick={() => setVoiceLimit(null)} aria-label="Dismiss"
+              className="shrink-0 text-neutral-600 hover:text-neutral-300">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="space-y-3 mb-3">
         {history.map((m, i) => {
           if (m.role === "assistant" && !m.content) return null;
@@ -3533,7 +3715,7 @@ function DataAndPrivacy({ session, signOut }) {
         {busy ? "Saving..." : on ? "Withdraw permission" : "Turn AI processing on"}
       </button>
       <div className="mt-3 flex items-center gap-3 text-[11px] text-neutral-600">
-        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Privacy Policy</a>
+        <button type="button" onClick={() => openLegal("privacy")} className="hover:text-neutral-400 underline">Privacy Policy</button>
         <span>&middot;</span>
         <span>Consent version {CONSENT_VERSION}</span>
       </div>
@@ -3619,9 +3801,9 @@ function MoreView({ go, session, signOut }) {
         <ArrowRight size={18} className="ml-auto text-neutral-600" />
       </a>
       <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-neutral-600">
-        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Terms</a>
+        <button type="button" onClick={() => openLegal("terms")} className="hover:text-neutral-400 underline">Terms</button>
         <span>·</span>
-        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-400">Privacy</a>
+        <button type="button" onClick={() => openLegal("privacy")} className="hover:text-neutral-400 underline">Privacy</button>
       </div>
       <p className="mt-3 text-center text-[10px] text-neutral-700">© 2026 OTS Media LLC</p>
     </div>
@@ -3830,35 +4012,60 @@ function Paywall({ session }) {
         no bill coming. Everything you've written stays exactly where it is.
       </p>
 
-      <button
-        onClick={() => go()}
-        disabled={busy}
-        className="w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-        style={{ backgroundColor: ACCENT }}
-      >
-        {busy && <Loader2 size={16} className="animate-spin" />}
-        Keep going — $14.99/mo
-      </button>
+      {/* GUIDELINE 3.1.1 — NO EXTERNAL PURCHASE PATH IN A STORE BUILD.
+          `startCheckout` opens a Stripe web checkout. Inside the App Store binary
+          that is a payment mechanism other than In-App Purchase, which 3.1.1
+          forbids outright, and it is also what drew the 2.1(b) "explain your
+          business model" question on 25 Aug 2026. Prices, the CTA and the pricing
+          link are all part of it — 3.1.1 covers steering to an external purchase,
+          not just the transaction.
+          So the store build sells nothing. It states the position and stops.
+          When paid access reaches iOS it goes through StoreKit / IAP, not by
+          removing this gate. The web build is unchanged: Stripe there is fine. */}
+      {IS_STORE_BUILD ? (
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+          <p className="text-[13px] text-neutral-300 leading-relaxed">
+            There's nothing to buy here. Frontline Coach isn't selling subscriptions in the
+            app right now, and no purchase is required to have an account.
+          </p>
+          <p className="text-[13px] text-neutral-400 leading-relaxed mt-3">
+            Nothing disappears in the meantime. Your conversations, your history and
+            everything the coach remembers about your people stay exactly where they are.
+          </p>
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={() => go()}
+            disabled={busy}
+            className="w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            style={{ backgroundColor: ACCENT }}
+          >
+            {busy && <Loader2 size={16} className="animate-spin" />}
+            Keep going — $14.99/mo
+          </button>
 
-      <p className="text-[12px] text-neutral-500 text-center mt-3">
-        Or $119 a year. Cancel any time.
-      </p>
+          <p className="text-[12px] text-neutral-500 text-center mt-3">
+            Or $119 a year. Cancel any time.
+          </p>
 
-      {err && <p className="text-[12px] text-red-400 text-center mt-3">{err}</p>}
+          {err && <p className="text-[12px] text-red-400 text-center mt-3">{err}</p>}
 
-      <div className="mt-6 pt-5 border-t border-neutral-800">
-        <p className="text-[12px] text-neutral-500 leading-relaxed">
-          Not ready? Nothing disappears. Your conversations, your history and everything the
-          coach remembers about your people are still here whenever you come back.
-        </p>
-        <a
-          href="/pricing"
-          className="inline-block text-[12px] underline mt-2"
-          style={{ color: ACCENT }}
-        >
-          What's included
-        </a>
-      </div>
+          <div className="mt-6 pt-5 border-t border-neutral-800">
+            <p className="text-[12px] text-neutral-500 leading-relaxed">
+              Not ready? Nothing disappears. Your conversations, your history and everything the
+              coach remembers about your people are still here whenever you come back.
+            </p>
+            <a
+              href="/pricing"
+              className="inline-block text-[12px] underline mt-2"
+              style={{ color: ACCENT }}
+            >
+              What's included
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -4430,7 +4637,7 @@ function AiConsentSheet({ onAccept, onDecline }) {
         </div>
         <p className="text-[11px] text-neutral-600 mt-3 leading-snug text-center">
           You can withdraw this any time in Tools, under Data and privacy. Full detail in the{" "}
-          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="underline hover:text-neutral-400">Privacy Policy</a>.
+          <button type="button" onClick={() => openLegal("privacy")} className="underline hover:text-neutral-400">Privacy Policy</button>.
         </p>
       </div>
     </div>
@@ -4451,6 +4658,38 @@ export default function FrontlineCoach({ session, signOut } = {}) {
   useEffect(() => {
     setConsentAsker(() => new Promise((resolve) => setConsentAsk({ resolve })));
     return () => setConsentAsker(null);
+  }, []);
+
+  // FIRST-ENTRY CONSENT — STORE BUILDS ONLY. Guidelines 5.1.1(i) / 5.1.2(i).
+  //
+  // The chokepoint gate in aiConsent.js is the correct design and it stays: it is
+  // what the guideline literally asks for, it keeps Home browsable, and it covers
+  // every tool including ones that don't exist yet.
+  //
+  // But it only fires when something is about to leave the device, and App Review
+  // rejected the build on 25 Aug 2026 saying no permission was asked. A reviewer
+  // who signs in, taps around, and never sends a message never sees the sheet —
+  // and if their account already carries a consent record from earlier testing,
+  // they cannot see it at all. Either way the reviewer's conclusion is the same.
+  //
+  // So in the store binary the sheet also opens on first entry, before any tool is
+  // touched. Web keeps the original behaviour, because the web app's problem is
+  // people not coming back and a wall at the door makes that worse.
+  //
+  // "Not now" still works — consent has to be refusable to be consent. Declining
+  // here just closes the sheet, and the chokepoint asks again the moment they
+  // actually try to use a tool. Nothing is sent either way.
+  const [entryConsent, setEntryConsent] = useState(
+    () => IS_STORE_BUILD && !!session?.user && !consentFromSession(session)
+  );
+
+  // LEGAL VIEWER. Terms and Privacy render in-app, because <a target="_blank"> is a
+  // dead tap inside Capacitor's WKWebView — see src/LegalModal.jsx. Registered as a
+  // seam so links four components deep can open it without prop drilling.
+  const [legalView, setLegalView] = useState(null); // null | "terms" | "privacy"
+  useEffect(() => {
+    setLegalOpener((view) => setLegalView(view === "privacy" ? "privacy" : "terms"));
+    return () => setLegalOpener(null);
   }, []);
 
   useEffect(() => {
@@ -4503,9 +4742,20 @@ export default function FrontlineCoach({ session, signOut } = {}) {
             // credits pill. On non-home screens the back button holds the left,
             // and the pill isn't shown — it's a Home-only readout.
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: ACCENT }}>
-                <Zap size={16} className="text-neutral-950" />
-              </div>
+              {/* The real app icon, same asset as the sign-in screen and the store
+                  listing. The old version drew a lucide Zap on a flat ACCENT square,
+                  which is close but not the mark: the real one has the gradient and
+                  a bolt that runs to the edges. Radius is Apple's 22.5% squircle
+                  proportion at 28px, so it reads as the app icon rather than a
+                  button with a lightning glyph in it. */}
+              <img
+                src="/app-icon.png"
+                alt=""
+                width={28}
+                height={28}
+                className="shrink-0"
+                style={{ borderRadius: 6 }}
+              />
               <span className="font-extrabold uppercase tracking-tight">Frontline Coach</span>
               <BetaTag />
             </div>
@@ -4514,16 +4764,25 @@ export default function FrontlineCoach({ session, signOut } = {}) {
             ? <UsagePill session={session} trialDaysLeft={plan === "free" ? trialDays : null} />
             : <BetaTag />}
         </header>
-        {consentAsk && (
+        {/* z-[60], above the consent sheet, because the sheet's own Privacy Policy
+            link opens it. */}
+        {legalView && <LegalModal initialView={legalView} onClose={() => setLegalView(null)} />}
+        {/* Two ways this opens: a tool is about to send something (consentAsk holds
+            the pending resolver), or it is a store build and this is first entry
+            (entryConsent, no resolver to settle). One sheet, one accept path. */}
+        {(consentAsk || entryConsent) && (
           <AiConsentSheet
             onAccept={async () => {
               const ok = await recordConsent();
               if (!ok) return false;          // keep the sheet up so they can retry
-              consentAsk.resolve(true);
-              setConsentAsk(null);
+              setEntryConsent(false);
+              if (consentAsk) { consentAsk.resolve(true); setConsentAsk(null); }
               return true;
             }}
-            onDecline={() => { consentAsk.resolve(false); setConsentAsk(null); }}
+            onDecline={() => {
+              setEntryConsent(false);
+              if (consentAsk) { consentAsk.resolve(false); setConsentAsk(null); }
+            }}
           />
         )}
         <main ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: "touch" }}>

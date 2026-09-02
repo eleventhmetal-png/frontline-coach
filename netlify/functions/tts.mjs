@@ -103,13 +103,21 @@ const handler = async (req) => {
   const token = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   if (!token) return json({ error: "Sign in required" }, 401);
 
+  let user = null;
   try {
     const supa = createClient(supabaseUrl, anonKey);
     const { data, error } = await supa.auth.getUser(token); // verifies the JWT with Supabase
     if (error || !data?.user) return json({ error: "Invalid or expired session" }, 401);
+    user = data.user;
   } catch (e) {
     return json({ error: "Auth check failed" }, 401);
   }
+
+  // Read from app_metadata, which only the service role can write, so a user cannot
+  // grant themselves a tier by editing local state. Same normalisation as claude.mjs
+  // and planFromSession() in src/lib/usage.js.
+  const claimedPlan = user?.app_metadata?.plan;
+  const plan = claimedPlan === "premium" ? "premium" : claimedPlan === "paid" ? "paid" : "free";
 
   let payload = null;
   try {
@@ -122,6 +130,80 @@ const handler = async (req) => {
   if (!text) return json({ error: "Nothing to speak" }, 400);
   if (text.length > MAX_INPUT_CHARS) {
     return json({ error: `Text too long (max ${MAX_INPUT_CHARS} characters)` }, 400);
+  }
+
+  // =====================================================
+  // VOICE ALLOWANCE — the real gate. Guideline: a client-side label is decoration.
+  // =====================================================
+  // Decided 1 Sep 2026. Premium only, with a one-time taste for the free tier so
+  // people hear what they'd be buying; Standard gets none, matching PLAN_LIMITS in
+  // src/lib/credits.js, and that includes founding members because Founding buys
+  // Standard.
+  //
+  // ENFORCEMENT IS DATED, NOT IMMEDIATE. Read-aloud has been open to everyone all
+  // through the beta, and switching it off mid-session for the people who have been
+  // testing it is how you lose the few users who actually come back. Same
+  // label-now/enforce-later approach as the Premium tools, and the same date. Metering
+  // runs from today either way, so there is real data before anything gets refused.
+  // Override with VOICE_ENFORCE_FROM to test enforcement early.
+  const ENFORCE_FROM = new Date(process.env.VOICE_ENFORCE_FROM || "2026-11-15T05:00:00Z");
+  const enforcing = Date.now() >= ENFORCE_FROM.getTime();
+
+  // premium: 120 min/month, per the pricing on the $24.99 tier.
+  // free: 20 minutes ONCE, ever. Not monthly — a repeating free allowance on a feature
+  // that costs $0.06–0.10/min is a subscription we would be paying for. Twenty minutes
+  // is roughly $1.20–2.00 per free user, one time, and it is enough for two or three
+  // full roleplays rather than a single teaser — which is the point: the upgrade
+  // decision should come after someone has actually used the thing.
+  // paid: nothing, deliberately.
+  const MONTHLY_LIMIT = { premium: 120 * 60, paid: 0, free: 0 };
+  const LIFETIME_LIMIT = { premium: null, paid: 0, free: 20 * 60 };
+
+  // Rough seconds from characters. Speech runs about 14 characters a second at a
+  // natural pace, which is close enough for a budget — we are metering cost, not
+  // billing to the millisecond, and the alternative is decoding the mp3 we just paid
+  // for. Always at least a second so a two-word clip is never free.
+  const estimatedSecs = Math.max(1, Math.ceil(text.length / 14));
+
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let admin = null;
+  if (serviceKey) admin = createClient(supabaseUrl, serviceKey);
+
+  if (admin) {
+    try {
+      const { data: usage } = await admin.rpc("voice_usage", { p_user_id: user.id });
+      const row = Array.isArray(usage) ? usage[0] : usage;
+      const monthSecs = row?.month_secs ?? 0;
+      const lifetimeSecs = row?.lifetime_secs ?? 0;
+
+      const monthCap = MONTHLY_LIMIT[plan];
+      const lifetimeCap = LIFETIME_LIMIT[plan];
+      const overMonth = typeof monthCap === "number" && monthCap > 0 && monthSecs >= monthCap;
+      const overLifetime = typeof lifetimeCap === "number" && lifetimeSecs >= lifetimeCap;
+      const noAllowance = monthCap === 0 && lifetimeCap === 0; // Standard
+
+      if (enforcing && (noAllowance || overMonth || overLifetime)) {
+        // 402, not 403: this is a payment boundary, and it lets the client tell it
+        // apart from an auth failure. voice.js falls back to the device voice on any
+        // error, so the reply is still spoken — just not in the good voice.
+        return json(
+          {
+            error: "voice-not-included",
+            plan,
+            userMessage:
+              plan === "premium"
+                ? "You've used this month's read-aloud minutes. They reset at the start of next month."
+                : "Read-aloud is part of Premium. Your device voice will keep reading replies.",
+          },
+          402
+        );
+      }
+    } catch (e) {
+      // FAIL OPEN on a metering error, deliberately, and the opposite of the consent
+      // gate's fail-closed. Nothing private leaks if a clip is served unmetered; a
+      // database hiccup silently muting a paying Premium customer mid-roleplay is the
+      // worse outcome. The cost of being wrong here is cents.
+    }
   }
 
   const voice = ALLOWED_VOICES.has(payload?.voice) ? payload.voice : DEFAULT_VOICE;
@@ -155,6 +237,21 @@ const handler = async (req) => {
     }
 
     const audio = await res.arrayBuffer();
+
+    // Record AFTER OpenAI actually returned audio. A failed synthesis must not spend
+    // anyone's allowance, which is why this sits here and not next to the check above.
+    // Fire-and-forget: the clip is already paid for and already in hand, so a metering
+    // write that fails must not turn a working reply into an error. Under-counting by
+    // one clip is cheaper than a broken roleplay.
+    if (admin) {
+      admin
+        .rpc("consume_voice", { p_user_id: user.id, p_secs: estimatedSecs })
+        .then(({ error }) => {
+          if (error) console.warn(`consume_voice failed: ${error.message}`);
+        })
+        .catch(() => { /* ignore */ });
+    }
+
     return new Response(audio, {
       status: 200,
       headers: {

@@ -57,6 +57,19 @@ const SETTLE_MS = 250;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Plugin error string -> our error code, or null for "this was our own teardown".
+// "Recognition request was canceled" is what the plugin reports when a session is
+// torn down, so surfacing it would flash a warning every time somebody finishes
+// talking normally.
+function mapErr(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  if (msg.includes("cancel")) return null;
+  if (msg.includes("permission") || msg.includes("denied")) return "denied";
+  if (msg.includes("audio") || msg.includes("busy")) return "no-mic";
+  if (msg.includes("network")) return "network";
+  return "unsupported";
+}
+
 // SERIALIZE, DO NOT REFUSE.
 //
 // An earlier version of this file kept a boolean and rejected any start that
@@ -87,9 +100,18 @@ export const capacitorDictation = {
     const { onPartial, onFinal, onError, onEnd } = handlers || {};
     let stopped = false;
     let finished = false;
+    // CANCEL vs STOP — the web driver has carried this distinction since day one
+    // and this driver was missing it entirely, which is the bug behind the 21 Aug
+    // 2026 mic loop. stop() means "I'm done talking, keep the words." cancel()
+    // means "throw this turn away" and is what send() calls, so the spoken line
+    // does not land back in the box after the draft is cleared.
+    let suppressed = false;
     let text = "";
     let listener = null;
     let timer = null;
+    // The pending SpeechRecognition.start() promise. See where it is assigned:
+    // it stays pending for the whole task, so it is what teardown waits on.
+    let startTask = null;
 
     // Resolves when this session has fully torn down, so the next start can wait
     // on it rather than racing it.
@@ -98,10 +120,14 @@ export const capacitorDictation = {
     const previous = CURRENT;
     const self = { stop: () => handle.stop(), done };
     CURRENT = self;
+    // If this ever prints previous=true, a session was still live when a new one
+    // was requested. That is the shape of every mic bug this feature has had.
+    console.warn(`[dict] native start previous=${!!previous}`);
 
     const finish = (code) => {
       if (finished) return;
       finished = true;
+      console.warn(`[dict] native finish code=${code} suppressed=${suppressed} chars=${text.trim().length}`);
       clearTimeout(timer);
       if (listener) {
         try {
@@ -117,12 +143,19 @@ export const capacitorDictation = {
       // the next session waits for a real teardown rather than a hopeful one.
       SpeechRecognition.stop()
         .catch(() => {})
+        // AND the start promise. stop() resolving only means the stop call was
+        // delivered; the plugin's cancelled-task handler runs async after that and
+        // nils its recognitionRequest. Start the next session before that lands and
+        // it collides with a task that is still winding down — which is the
+        // "Recognition request was canceled" pair in the device log.
+        .then(() => startTask)
+        .catch(() => {})
         .then(() => settleDone());
       if (CURRENT === self) CURRENT = null;
       if (code) onError && onError(code);
       // onFinal before onEnd, matching the web driver — Practice reads the text
       // on onFinal and clears its listening state on onEnd.
-      if (text.trim()) onFinal && onFinal(text.trim());
+      if (!suppressed && text.trim()) onFinal && onFinal(text.trim());
       onEnd && onEnd();
     };
 
@@ -181,28 +214,58 @@ export const capacitorDictation = {
         // resolves once at the end and the manager watches a dead text box while
         // they talk, which reads as broken.
         if (stopped) return finish(null);
-        await SpeechRecognition.start({
+        // DO NOT AWAIT THIS.
+        // The plugin leaves the start() promise pending for the WHOLE recognition
+        // task, not until recognition has begun. Awaiting it meant the timeout on
+        // the next line was not armed until the session had already ended, so
+        // MAX_LISTEN_MS never once ran while anybody was actually listening.
+        //
+        // Keeping the promise is also the fix for the teardown race. This promise
+        // settling is the only honest signal that the task is over and the audio
+        // session has been handed back — stop() returning just means the stop call
+        // was delivered, while the plugin's cancelled-task handler runs async
+        // afterwards. finish() below waits on this before it resolves `done`.
+        startTask = SpeechRecognition.start({
           language: "en-US",
           partialResults: true,
           popup: false,
         });
-
+        startTask.catch((err) => {
+          // A start rejecting after we asked to stop is our own teardown landing,
+          // not a fault. Only a rejection we did not ask for is a real failure.
+          if (stopped || finished) return;
+          finish(mapErr(err));
+        });
         timer = setTimeout(() => finish("timed-out"), MAX_LISTEN_MS);
       } catch (err) {
-        const msg = String(err?.message || err || "").toLowerCase();
-        // "Recognition request was canceled" is what the plugin reports when a
-        // session is torn down. That is our own stop, not a fault — surfacing it
-        // as an error would flash a warning every time the user finishes talking.
-        if (msg.includes("cancel")) return finish(null);
-        if (msg.includes("permission") || msg.includes("denied")) return finish("denied");
-        if (msg.includes("audio") || msg.includes("busy")) return finish("no-mic");
-        if (msg.includes("network")) return finish("network");
-        finish("unsupported");
+        finish(mapErr(err));
       }
     })();
 
     const handle = {
       stop() {
+        stopped = true;
+        finish(null);
+      },
+      // WITHOUT THIS METHOD, EVERYTHING ABOVE LEAKS.
+      // App.jsx calls handleRef.current.cancel() on every send, inside a bare
+      // try/catch. On this driver that threw TypeError: cancel is not a function,
+      // the catch swallowed it, and the recogniser was never torn down — it stayed
+      // live as CURRENT. The next start() then found a `previous` session still
+      // holding the audio hardware and tried to take over, which is the second
+      // `start` in Ben's device log and the "Recognition request was canceled"
+      // that followed it.
+      //
+      // It also explains the stale duplicate transcript. The abandoned session's
+      // finals were still being delivered, which is why the log showed two
+      // alternatives arriving in the NEW session's listener:
+      //   {"matches":["...let's sit down we're gonna get going",
+      //               "...let's sit down and we're gonna get going"]}
+      //
+      // An empty catch around a call to an optional method is how a missing method
+      // survives for weeks. App.jsx now falls back to stop() and logs instead.
+      cancel() {
+        suppressed = true;
         stopped = true;
         finish(null);
       },

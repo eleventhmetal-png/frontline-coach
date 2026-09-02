@@ -24,6 +24,12 @@ export const APP_ID = "https://frontline-coach.com/#app";
 export const WEBSITE_ID = "https://frontline-coach.com/#website";
 export const PERSON_ID = "https://otsowntheshift.com/#ben-ryan";
 
+// The App Store listing lives in its own dependency-free module so the browser bundle
+// can read it too — this file reads process.env and must never reach the browser.
+// Set APP_STORE_ID there, in one place.
+export { APP_STORE_ID, APP_STORE_URL } from "./appStore.js";
+import { APP_STORE_URL } from "./appStore.js";
+
 // GUIDELINE 2.2 — these generated pages ship INSIDE the Capacitor binary, because
 // gen-pages.mjs writes to public/ and Vite copies public/ into dist/. AuthGate links
 // to /pricing straight from the sign-in screen, so a reviewer can reach this copy in
@@ -1307,13 +1313,18 @@ export const PAGES = [
 
       { h2: "Founding members" },
       {
+        // Raised from thirty to 100 on 1 Sep 2026, when the iOS app was approved and
+        // signups opened nationally. "First 100 to SUBSCRIBE" — not to sign up. The
+        // wording matters and is enforced that way: the slot is claimed by the Stripe
+        // webhook when a payment succeeds, never at registration. See
+        // supabase/migrations/20260901000002_founding_on_purchase.sql.
         p: b(
-          "The first thirty people in the beta get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds.",
-          "The first thirty members get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds."
+          "The first 100 people to subscribe get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds.",
+          "The first 100 members to subscribe get $7.99 a month, locked for as long as they stay subscribed. Not a first-year discount — the rate holds."
         ),
       },
       {
-        p: "Being straight about what that covers: Founding locks the Standard price. If we add a higher tier later it'll be separate, and this rate won't include it. Better you know that now than feel misled down the line.",
+        p: "Being straight about what that covers: Founding locks the Standard price, and Standard is what you get — Premium tools stay on the Premium plan. If we add a higher tier later it'll be separate, and this rate won't include it. Better you know that now than feel misled down the line.",
       },
       {
         p: "Cancel and the rate goes with you — you'd rejoin at $14.99. That's the trade for a price nobody else gets.",

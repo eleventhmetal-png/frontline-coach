@@ -5,12 +5,58 @@
 html, body { height: 100%; }
 body { margin: 0; background: #0a0a0a; }
 
+/* SAFE AREA IS APPLIED EXACTLY ONCE — in CSS, never by the container.
+   capacitor.config.json must stay `"ios": { "contentInset": "never" }`.
+
+   "always" sets WKWebView's contentInsetAdjustmentBehavior to .always, which
+   pushes the content down by the safe-area inset at the native layer. The header
+   in App.jsx ALSO pads by `calc(1rem + env(safe-area-inset-top))`, and the footer
+   by `calc(0.5rem + env(safe-area-inset-bottom))`. With both switched on the inset
+   is counted twice and you get fat black bars top and bottom — reported 21 Aug 2026,
+   right after the zoom fix, and easy to misread as a CSS height problem.
+
+   With "never" the webview fills the screen, viewport-fit=cover in index.html makes
+   the env() values real, and the CSS padding does the job alone. Backgrounds then
+   extend behind the status bar and the home indicator, which is what we want.
+
+   If black bars ever come back, check this config key BEFORE touching heights. */
+
 /* Lock the shell: no page-level rubber-banding, no body scroll.
    Only the <main> content area scrolls; header + bottom nav stay pinned.
    NOTE: no position:fixed here — iOS 26 refuses to extend fixed full-height
    containers into the bottom bar / home-indicator area, which caused the
    permanent black gap under the nav. Shell now lives in normal flow. */
 html, body { overflow: hidden; overscroll-behavior: none; }
+
+/* Kills double-tap-to-zoom, the other way a user gets stuck at a scale they can't
+   undo. Separate from the pinch lock in src/native/lockZoom.js — that one blocks
+   the gesture events, this one stops the browser treating a fast second tap as a
+   zoom request at all. Also removes the 300ms tap delay, so buttons feel native.
+   Safe on the web: it does not affect pinch-zoom or Accessibility Zoom. */
+html, body { touch-action: manipulation; }
+
+/* ---------------------------------------------------------------------------
+   16px MINIMUM ON FORM CONTROLS — this is the one that actually caused the bug.
+
+   iOS zooms the entire webview when a text field with a font-size UNDER 16px
+   receives focus, and it does not reliably zoom back out afterwards. Every input
+   in AuthGate.jsx was 14px, so the sequence was: log out, tap the email field,
+   iOS zooms, and the app stays scaled and cut off after sign-in. A cold start
+   does not help, because the trigger fires on the way back in. Reported by Ben
+   21 Aug 2026 and reproduced exactly that way.
+
+   Specificity note: `#root input` is (1,0,1) and beats Tailwind's `text-[15px]`
+   at (0,1,0). A bare `input {}` rule loses to the utility class and silently does
+   nothing — which is the version of this fix that looks right and isn't.
+
+   Scoped to coarse pointers so desktop web keeps its intended type scale; the
+   zoom behaviour only exists on touch.
+   --------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  #root input,
+  #root textarea,
+  #root select { font-size: 16px; }
+}
 
 /* App height: dvh tracks the real window. (The iOS 26 standalone shortfall
    was caused by black-translucent status-bar mode — fixed in index.html by

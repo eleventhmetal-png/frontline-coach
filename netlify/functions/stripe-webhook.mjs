@@ -21,6 +21,18 @@ import { createClient } from "@supabase/supabase-js";
 // the Stripe SDK, matching the plain-fetch style already used elsewhere in
 // this codebase (claude.mjs, create-checkout-session.mjs).
 
+// Which tier a Stripe object's metadata grants. create-checkout-session.mjs stamps
+// metadata[plan] on both the checkout session and the subscription, from its own price
+// catalogue, so this function never has to know price IDs or call the Stripe API.
+//
+// Only "premium" is special-cased. Anything else — including missing metadata from a
+// subscription created before 1 Sep 2026, or one made by hand in the dashboard —
+// resolves to "paid". Failing to "free" would lock out a customer who has actually
+// been charged, and that is a far worse error than briefly over-granting.
+function planFromMetadata(metadata) {
+  return metadata?.plan === "premium" ? "premium" : "paid";
+}
+
 function verifyStripeSignature(rawBody, sigHeader, secret, toleranceSeconds = 300) {
   if (!sigHeader) return false;
 
@@ -96,17 +108,47 @@ export default async (req) => {
         const userId = session.client_reference_id;
         if (!userId) break; // shouldn't happen -- create-checkout-session.mjs always sets this
 
+        // WHICH TIER. create-checkout-session.mjs stamps metadata[plan] with the plan
+        // the purchased price grants — "paid" for Standard and Founding, "premium" for
+        // Premium. Hardcoding "paid" here (as this did until 1 Sep 2026) meant a
+        // customer could buy Premium at $24.99 and still be locked out of the two
+        // tools they paid for, because PREMIUM_AFTER_BETA in App.jsx gates on
+        // plan === "premium".
+        //
+        // Falls back to "paid" rather than "free" if the metadata is missing: money
+        // has changed hands, so the failure mode has to be "they get access we can
+        // correct" and never "they paid and got nothing".
+        const plan = planFromMetadata(session.metadata);
+
         const { error: planError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-          app_metadata: { plan: "paid" },
+          app_metadata: { plan },
         });
-        if (planError) throw new Error(`updateUserById (plan=paid) failed: ${planError.message}`);
+        if (planError) throw new Error(`updateUserById (plan=${plan}) failed: ${planError.message}`);
+
+        // FOUNDING CLAIM. This is the only place a slot is ever spent, and it happens
+        // here rather than at checkout creation because creating a session is not a
+        // purchase — an abandoned checkout must not burn one of the hundred.
+        //
+        // founding_slot_claimed_at is written ONCE and never cleared: the slot stays
+        // spent even if they cancel, so nobody inherits it and the "first 100 to
+        // purchase" claim can be audited later without replaying Stripe history.
+        // is_founding is the live entitlement, cleared on cancellation below.
+        //
+        // The service role has no auth.uid(), so lock_profile_role() lets these two
+        // columns through — which is exactly why that guard is wrapped in an
+        // auth.uid() check. A browser cannot write either one.
+        const profileUpdate = {
+          stripe_customer_id: session.customer,
+          stripe_subscription_id: session.subscription,
+        };
+        if (session.metadata?.founding === "1") {
+          profileUpdate.is_founding = true;
+          profileUpdate.founding_slot_claimed_at = new Date().toISOString();
+        }
 
         const { error: profileError } = await supabaseAdmin
           .from("profiles")
-          .update({
-            stripe_customer_id: session.customer,
-            stripe_subscription_id: session.subscription,
-          })
+          .update(profileUpdate)
           .eq("id", userId);
         if (profileError) throw new Error(`profiles update failed: ${profileError.message}`);
         break;
@@ -119,7 +161,12 @@ export default async (req) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object;
         const activeStatuses = ["active", "trialing"];
-        const newPlan = activeStatuses.includes(subscription.status) ? "paid" : "free";
+        // Same tier logic, read from the subscription's own metadata — which
+        // create-checkout-session.mjs sets via subscription_data[metadata][plan]
+        // precisely so these later events don't need the checkout session.
+        const newPlan = activeStatuses.includes(subscription.status)
+          ? planFromMetadata(subscription.metadata)
+          : "free";
 
         const { data: profile, error: lookupError } = await supabaseAdmin
           .from("profiles")
@@ -152,6 +199,23 @@ export default async (req) => {
             app_metadata: { plan: "free" },
           });
           if (planError) throw new Error(`updateUserById (plan=free) failed: ${planError.message}`);
+
+          // THE FOUNDING RATE ENDS WITH THE SUBSCRIPTION, the claim does not.
+          // The pricing page: "Cancel and the rate goes with you — you'd rejoin at
+          // $14.99." So clear is_founding, and deliberately leave
+          // founding_slot_claimed_at in place. That does two things: the checkout gate
+          // refuses to sell them $7.99 again, and the slot stays spent rather than
+          // being handed to the next person, which is what "first 100 to purchase"
+          // means when read literally.
+          if (subscription.metadata?.founding === "1") {
+            const { error: foundingError } = await supabaseAdmin
+              .from("profiles")
+              .update({ is_founding: false })
+              .eq("id", profile.id);
+            if (foundingError) {
+              throw new Error(`clearing is_founding failed: ${foundingError.message}`);
+            }
+          }
         }
         break;
       }

@@ -18,7 +18,7 @@
 // signup (see AuthGate.jsx), so bumping it starts recording a new accepted
 // version. Adding a processor is a data-use change, which §2 of the Terms says we
 // notify users about — announce it rather than letting the date change silently.
-export const LAST_UPDATED = "August 18, 2026";
+export const LAST_UPDATED = "August 25, 2026";
 
 export const TERMS_SECTIONS = [
   {
@@ -184,6 +184,7 @@ export const PRIVACY_SECTIONS = [
   {
     heading: "4. AI Processing and Voice Features",
     body: [
+      "Before anything you write or say leaves your device, the app asks your permission and names every service it goes to. Nothing is sent until you agree, and you can withdraw that permission at any time under Tools, Data and privacy — after which the coaching tools stop working, because they cannot run without it.",
       "Your inputs are sent to Anthropic's Claude API to generate responses. Anthropic processes this data under its commercial/API terms and does not use API inputs or outputs to train its models. We send only what's needed to produce your result.",
       "Read-aloud (optional): when this is on, the practice counterpart's generated reply is sent as text to OpenAI's API to be turned into speech. The audio is played to you and is not stored by us. OpenAI processes it under its API terms, and we have not enabled OpenAI's optional data-sharing program, so this content is not used to train OpenAI's models. Your own words are not sent to OpenAI — only the reply you are about to hear.",
       "Dictation (optional): speech-to-text is performed by the speech service built into your browser or operating system, not by us. Depending on your device that vendor may be Apple (Safari and iOS) or Google (Chrome), and the audio is handled under their terms. Your device will ask for microphone permission; you can decline or revoke it at any time and keep typing instead.",
@@ -200,7 +201,8 @@ export const PRIVACY_SECTIONS = [
     heading: "6. Who Can See Your Content",
     body: [
       "Access is restricted by database policy so that you can only read your own session history — other users cannot, and managers do not automatically get access to content created by other people. Broader access is limited to what's needed for abuse review, support, and running the Service.",
-      "We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), OpenAI (speech synthesis, only when read-aloud is on), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in) — and when required by law or to address fraud, safety, or security.",
+      "We share data only with the providers needed to operate Frontline Coach — Anthropic (AI), OpenAI (speech synthesis, only when read-aloud is on), Supabase (storage/auth), Netlify (hosting), and Google (optional sign-in on the web) — and when required by law or to address fraud, safety, or security.",
+      "Each of those providers is bound by a written agreement that requires them to protect your information to the same or an equivalent standard as this policy, to process it only on our instructions and only for the purpose we engaged them for, not to use it for their own purposes or to train their models, and to keep it secure. We do not share your information with anyone who does not meet that standard.",
     ],
   },
   {

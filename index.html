@@ -57,7 +57,19 @@
          above homepage search results (developers.google.com/search/docs/appearance/site-names).
          It only works on the homepage and only for the root domain, not subdomains
          or subdirectories. Google still decides algorithmically — this is a strong
-         hint, not a guarantee — and it can take a few crawls to update. -->
+         hint, not a guarantee — and it can take a few crawls to update.
+
+         APP STORE LINK — the SoftwareApplication node carries downloadUrl and installUrl
+         with the placeholder APPLE_ID_HERE. Replace it with the ten-digit Apple ID from
+         App Store Connect (App Information → General Information → Apple ID), and set the
+         same number in src/appStore.js, which is what the landing-page badge and the
+         generated pages read. Two places for one number, because this file is
+         hand-maintained static HTML with no build-time templating — grep apps.apple.com
+         to find both.
+         UNTIL IT IS FILLED IN, delete those two lines rather than deploying the
+         placeholder. A structured-data URL that 404s is worse than a missing one.
+         Note there are no HTML comments inside the block below: it is JSON, and a
+         comment there breaks the whole node silently. -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -80,7 +92,9 @@
           "url": "https://frontline-coach.com/",
           "applicationCategory": "BusinessApplication",
           "applicationSubCategory": "Leadership and Management Coaching",
-          "operatingSystem": "Web browser, iOS and Android (installable PWA)",
+          "operatingSystem": "iOS 15.0 or later; Android; any modern web browser",
+          "downloadUrl": "https://apps.apple.com/us/app/frontline-coach/idAPPLE_ID_HERE",
+          "installUrl": "https://apps.apple.com/us/app/frontline-coach/idAPPLE_ID_HERE",
           "description": "An AI leadership-coaching app for newly promoted managers and shift leads. Describe a people problem on your shift and get a plan you can run today, get the exact words when an employee pushes back, rehearse a hard conversation against an AI employee, diagnose whether a performance issue is skill or will, and turn rough notes into a clean factual record.",
           "disambiguatingDescription": "Frontline Coach by Own The Shift coaches frontline supervisors and shift leads in hourly-workforce operations through employee conversations, performance issues, and documentation. It is a separate and unrelated product from the sales and customer-experience roleplay platform at frontline.coach.",
           "featureList": [
@@ -198,9 +212,14 @@
           <p>
             Just promoted and nobody trained you? <a href="/new-manager-coach">Start here</a>.
             Built by a Navy veteran and eighteen-year frontline operator who learned this the
-            wrong way first — <a href="/operator">read why I built it</a>, or see
-            <a href="/pricing">what it costs</a> after the beta (a seven-day free
-            trial, then $14.99 a month).
+            wrong way first — <a href="/operator">read why I built it</a>.
+            <!-- PRICING CLAUSE — kept on ONE line on purpose. scripts/store-clean.mjs deletes
+                 this whole line from dist/index.html in a store build: Guideline 3.1.1 says the
+                 binary must not point at a purchase made outside the App Store, and /pricing.html
+                 is stripped from dist too, so the link would be dead there anyway. Keep it a
+                 single line or the exact-string rewrite in store-clean stops matching and the
+                 build fails, which is the intended behaviour. -->
+            <span>See <a href="/pricing">what it costs</a> after the beta (a seven-day free trial, then $14.99 a month).</span>
           </p>
 
           <p class="fine">

@@ -18,6 +18,9 @@
 
 import { supabase } from "./supabaseClient";
 import { requireAiConsent } from "./aiConsent";
+// Runtime check only, and safe to import here: platform.js has no imports of its
+// own, so this cannot create a cycle with the native layer that imports us.
+import { isNative } from "../native/platform";
 import { apiUrl } from "./apiBase";
 
 // ---------- dictation ----------
@@ -42,6 +45,12 @@ function getSR() {
 // mic and the speaker. Raising the ceiling is safe; touching the gap is not.
 const MAX_RESTARTS = 200;
 const MAX_LISTEN_MS = 3 * 60 * 1000;
+// Consecutive restarts allowed with ZERO new transcript before we call the
+// recognizer dead. Four, because iOS legitimately ends a segment on a pause and
+// a manager gathering their thoughts can burn two or three; nobody produces four
+// empty segments in a row and is still talking. At the observed 2.0s cycle this
+// surfaces an error in about 8 seconds instead of spinning for three minutes.
+const MAX_BARREN_RESTARTS = 4;
 
 // PUNCTUATION FROM PAUSES. The Web Speech API returns no punctuation at all, so a
 // dictated turn arrives as one unbroken wall of words — ugly on screen and flat
@@ -82,6 +91,11 @@ const webSpeechDictation = {
     // a manager with a working phone that it has no microphone.
     let captureRetried = false;
     let releaseThenRestart = false;
+    // Consecutive restarts that produced no new transcript. See the circuit
+    // breaker in rec.onend for why a count of *barren* restarts is the only
+    // ceiling that catches a recognizer which is running but cannot hear.
+    let barrenRestarts = 0;
+    let barrenMark = 0;
     let finalText = "";
     let rec = null;
     let segmentEndedAt = 0;   // when the previous segment stopped hearing speech
@@ -182,6 +196,35 @@ const webSpeechDictation = {
 
       rec.onend = () => {
         segmentEndedAt = Date.now();   // start timing the gap
+
+        // BARREN-RESTART CIRCUIT BREAKER.
+        // Measured from Ben's 21 Aug 2026 screen recording on a real iPhone: the
+        // mic button cycled 1.3s on / 0.7s off, exactly 2.0s per cycle, ten times
+        // in a row, and not one character of transcript ever landed. Metronomic
+        // regularity like that is a timer, not a person talking.
+        //
+        // The old ceilings could not catch it. MAX_RESTARTS is 200 and
+        // MAX_LISTEN_MS is three minutes, so a recognizer that ends instantly and
+        // produces nothing would have spun for the full three minutes with the box
+        // saying "Listening…" the whole time. Both ceilings bound a session that is
+        // WORKING. Neither notices one that is failing.
+        //
+        // So bound the failure directly: restarts that yield no new text at all.
+        // A real speaker produces something within a few segments; four empty ones
+        // back to back means this recognizer cannot hear and never will.
+        if (finalText.length > barrenMark) {
+          barrenMark = finalText.length;
+          barrenRestarts = 0;
+        } else if (restarts > 0) {
+          barrenRestarts++;
+        }
+        if (barrenRestarts >= MAX_BARREN_RESTARTS) {
+          stopped = true;
+          onError && onError("unsupported");
+          finish();
+          return;
+        }
+
         if (stopped || restarts >= MAX_RESTARTS || Date.now() - startedAt > MAX_LISTEN_MS) {
           // Only `stopped` means a human ended this. Hitting a ceiling is us
           // giving up, and dying silently is what made a working mic look broken.
@@ -425,7 +468,17 @@ function releaseUrl() {
 export function primeSpeech() {
   if (primed) return;
   primed = true;
-  if (browserSpeechAvailable()) {
+  // WEB ONLY. This silent utterance is what unlocks speechSynthesis behind a
+  // gesture in a browser. In the native shell it does not unlock anything and it
+  // is the source of the SSML noise on every send in the device log:
+  //   Could not parse SSML: ... "No single root node found. Found 0 nodes at
+  //   top-level"
+  // WebKit hands SpeechSynthesisUtterance to AVSpeechSynthesizer, which tries to
+  // parse it as SSML; a lone space has no root node. Worth killing rather than
+  // filing under harmless, because a failed native utterance leaves the audio
+  // session interrupted, and an interrupted session is exactly what the next
+  // recognition start cannot survive.
+  if (!isNative() && browserSpeechAvailable()) {
     try {
       const u = new window.SpeechSynthesisUtterance(" ");
       u.volume = 0;
@@ -547,11 +600,25 @@ function releaseAudioSession() {
   releaseUrl();
   if (el) {
     try { el.pause(); } catch (e) { /* no-op */ }
-    try { el.removeAttribute("src"); } catch (e) { /* no-op */ }
-    try { el.load(); } catch (e) { /* no-op */ }
   }
-  audioEl = null;
-  primed = false;
+  // NATIVE KEEPS ITS ELEMENT. The destroy below exists for the web, where only
+  // removeAttribute + load() makes WebKit let go of the session. It costs the
+  // element its user-activation, which is fine on the web because the next tap
+  // rebuilds and re-primes it.
+  //
+  // Hands-free has no next tap. Destroying the element there sets primed = false
+  // and the following turn's play() runs from the turn-spoken handoff, which is
+  // not a gesture — so read-aloud goes mute from turn two and never comes back.
+  // Inside the native shell pause() is enough; the container is not enforcing the
+  // web's autoplay rules on us.
+  if (!isNative()) {
+    if (el) {
+      try { el.removeAttribute("src"); } catch (e) { /* no-op */ }
+      try { el.load(); } catch (e) { /* no-op */ }
+    }
+    audioEl = null;
+    primed = false;
+  }
   // speechSynthesis holds the session too when it covered for us this turn.
   try { if (browserSpeechAvailable()) window.speechSynthesis.cancel(); } catch (e) { /* no-op */ }
 }
@@ -571,8 +638,27 @@ function maybeReleaseAfterTurn(mine) {
       } catch (e) { /* no-op */ }
     }
     releaseAudioSession();
+    // HANDS-FREE HANDOFF POINT. This exact line is the only moment in the whole
+    // voice feature when the reply has finished speaking AND the iOS audio session
+    // has actually been handed back. Anything that wants the microphone next has
+    // to wait for here — Ben's 21 Aug device log is what happens if it doesn't:
+    //     AudioSession::beginInterruption but session is already interrupted!
+    //     ERROR: Recognition request was canceled
+    // The speaker and the mic share one session. There is no delay you can tune
+    // your way past; you wait for the release or you get cancelled.
+    if (onTurnSpoken) {
+      console.warn("[tts] turn spoken, audio session released — handing off to hands-free");
+      const fn = onTurnSpoken;
+      try { fn(); } catch (e) { /* a listener must never break the audio path */ }
+    }
   }, 400);
 }
+
+// Set by whoever wants to know the counterpart has stopped talking. One slot, not
+// a list: two things racing for the microphone is the bug this feature keeps
+// producing, so the API makes it impossible to have two.
+let onTurnSpoken = null;
+export function setTurnSpokenHandler(fn) { onTurnSpoken = typeof fn === "function" ? fn : null; }
 
 function resetTtsTurn() {
   ttsUpTo = 0;
@@ -580,6 +666,33 @@ function resetTtsTurn() {
   ttsChunks = 0;
   ttsAnyPlayed = false;
   ttsFullText = "";
+}
+
+// =====================================================
+// VOICE LIMIT SEAM
+// =====================================================
+// Same registration pattern as setConsentAsker in ./aiConsent.js and setLegalOpener in
+// ./legalSheet.js. voice.js has no business knowing what an upgrade prompt looks like,
+// and App.jsx has no business polling for a 402 that happens three layers down inside a
+// streaming queue.
+//
+// Fired AT MOST ONCE per page load. `ttsUnavailable` already stops further requests,
+// but the guard is belt and braces: a queue that had four sentences in flight when the
+// allowance ran out would otherwise resolve four rejections and show the prompt four
+// times, and nothing turns a fair offer into an annoyance faster.
+let voiceLimitHandler = null;
+let voiceLimitFired = false;
+
+export function setVoiceLimitHandler(fn) {
+  voiceLimitHandler = typeof fn === "function" ? fn : null;
+}
+
+function notifyVoiceLimit(info) {
+  if (voiceLimitFired) return;
+  voiceLimitFired = true;
+  try {
+    voiceLimitHandler && voiceLimitHandler(info || {});
+  } catch (e) { /* a broken prompt must never break the reply */ }
 }
 
 async function fetchClip(text, mine) {
@@ -602,6 +715,22 @@ async function fetchClip(text, mine) {
     // No key on the server. Stop asking for the rest of the session.
     ttsUnavailable = true;
     throw new Error("tts-unconfigured");
+  }
+  // 402 — the voice allowance is used up. Free tier gets 20 minutes for life,
+  // Standard gets none, Premium gets 120 min/month. See netlify/functions/tts.mjs.
+  //
+  // TWO THINGS HAPPEN, and the order matters. First stop asking, for the rest of the
+  // session: without that flag every remaining sentence of a streaming reply fires its
+  // own doomed request, so one exhausted allowance turns into a dozen 402s and a
+  // stuttering fallback. Then tell the shell once, so it can offer the upgrade — a
+  // silent downgrade to the device voice reads as the app breaking, which is the worst
+  // possible framing for the feature you want someone to pay for.
+  if (res.status === 402) {
+    ttsUnavailable = true;
+    let info = null;
+    try { info = await res.json(); } catch (e) { /* body is optional */ }
+    notifyVoiceLimit(info);
+    throw new Error("tts-402");
   }
   if (!res.ok) throw new Error("tts-" + res.status);
   return await res.blob();
@@ -769,7 +898,13 @@ export function speakRest(fullText) {
 }
 
 export function stopSpeaking() {
-  // Stop BOTH: the API driver may have handed this turn to the browser.
+  // CLOSE THE TURN FIRST, AND DO IT BEFORE ANYTHING DRAINS.
+  // A manual stop is not "the counterpart finished talking". Without this line
+  // the feature eats itself: open() calls stopSpeaking(), that drains the queue,
+  // the drain reaches maybeReleaseAfterTurn, which fires the hands-free handoff,
+  // which calls open() again. That is the 1.3s-on / 0.7s-off blink — the mic
+  // reopening into a session the OS has already refused, ten times over.
+  ttsTurnClosed = false;
   apiSpeech.stop();
   browserSpeech.stop();
 }

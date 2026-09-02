@@ -3,7 +3,7 @@
   "appName": "Frontline Coach",
   "webDir": "dist",
   "ios": {
-    "contentInset": "always"
+    "contentInset": "never"
   },
   "android": {
     "allowMixedContent": false

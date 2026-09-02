@@ -16,9 +16,15 @@ import { isNative, platform } from "./platform";
 // because those genuinely are native-only.
 import { registerDictationDriver } from "../lib/voice";
 import { registerOAuthDriver } from "../lib/oauthDriver";
+import { lockZoom } from "./lockZoom";
 
 export async function initNative() {
   if (!isNative()) return;
+
+  // First, and synchronous. Everything below awaits the network, and a pinch during
+  // those few hundred milliseconds is exactly when a user is most likely to fiddle
+  // with a screen that hasn't finished loading.
+  lockZoom();
 
   // Dynamic imports so the Capacitor packages are only pulled in on a real device.
   // A web visitor never downloads plugin code that cannot run for them.
@@ -46,8 +52,26 @@ export async function initNative() {
   // a dead one on any platform where the plugin is missing.
   try {
     const ok = await probeDictation();
-    if (ok) registerDictationDriver(capacitorDictation);
-    else console.warn(`Speech recognition unavailable on ${platform()} — keeping the web driver.`);
+    if (ok) {
+      registerDictationDriver(capacitorDictation);
+    } else {
+      // DO NOT fall back to the web driver here. That fallback is what produced
+      // the 21 Aug 2026 bug: window.webkitSpeechRecognition exists inside
+      // WKWebView but cannot actually hear, so the web driver's restart loop ran
+      // forever — mic button blinking on a 2.0s cycle, "Listening…" in the box,
+      // not one word transcribed, and no error ever shown. A mic that is honestly
+      // absent beats one that pretends to work.
+      registerDictationDriver({
+        id: "native-unavailable",
+        available: () => false,
+        start(h) {
+          h.onError && h.onError("unsupported");
+          h.onEnd && h.onEnd();
+          return { stop() {}, cancel() {} };
+        },
+      });
+      console.warn(`Speech recognition unavailable on ${platform()} — dictation disabled.`);
+    }
   } catch (err) {
     console.error("Could not set up native dictation:", err);
   }
