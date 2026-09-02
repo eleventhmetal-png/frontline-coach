@@ -10,7 +10,7 @@ import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "
 import { getLatestMemory } from "./lib/memory";
 import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
-import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout, startUpgrade } from "./lib/usage";
+import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout, startUpgrade, subscribeUrl } from "./lib/usage";
 // Shared with netlify/functions/claude.mjs so the enforcement date and the tool list
 // cannot drift apart. See src/lib/plans.js.
 import { PREMIUM_TOOLS, enforcementActive, ENFORCE_FROM_LABEL } from "./lib/plans";
@@ -4049,11 +4049,20 @@ function PremiumNotice({ session }) {
           browser, which is the permitted shape. */}
       {IS_STORE_BUILD ? (
         // Link out, never charge in-app. Same 3.1.1 reasoning as the Paywall above.
+        // Asks for premium specifically, so the web side goes straight to that checkout
+        // rather than making them pick the tier a second time.
         <button
-          onClick={() => openExternal(`${WEB_ORIGIN}/subscribe`)}
-          className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 flex items-center justify-center gap-1.5"
+          onClick={async () => {
+            setBusy(true);
+            const url = await subscribeUrl(WEB_ORIGIN, "premium");
+            await openExternal(url);
+            setBusy(false);
+          }}
+          disabled={busy}
+          className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 disabled:opacity-60 flex items-center justify-center gap-1.5"
           style={{ backgroundColor: ACCENT }}
         >
+          {busy && <Loader2 size={14} className="animate-spin" />}
           Upgrade on the web <ArrowRight size={14} />
         </button>
       ) : msg ? (
@@ -4146,6 +4155,19 @@ function Paywall({ session }) {
     // On success the browser navigates to Stripe, so no need to clear busy.
   }
 
+  // STORE BUILD ONLY. Hands the session to the web so the user is not asked to sign in
+  // again just to pay — the Safari view has its own cookies and knows nothing about the
+  // app's session. subscribeUrl() falls back to the plain page if the link cannot be
+  // minted, so this button always goes somewhere useful.
+  async function openWeb() {
+    setBusy(true); setErr("");
+    const url = await subscribeUrl(WEB_ORIGIN, null);
+    await openExternal(url);
+    // Cleared, unlike go(): the app stays on screen behind the Safari sheet, and a
+    // permanently spinning button on a screen you come back to looks broken.
+    setBusy(false);
+  }
+
   const did = [
     ["conversation plan", sum?.plans],
     ["role play", sum?.roleplays],
@@ -4220,15 +4242,17 @@ function Paywall({ session }) {
             and everything you've written is waiting when you come back.
           </p>
           <button
-            onClick={() => openExternal(`${WEB_ORIGIN}/subscribe`)}
-            className="mt-3 w-full rounded-lg py-3 font-bold uppercase tracking-wide text-sm text-neutral-950 flex items-center justify-center gap-2"
+            onClick={openWeb}
+            disabled={busy}
+            className="mt-3 w-full rounded-lg py-3 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-60 flex items-center justify-center gap-2"
             style={{ backgroundColor: ACCENT }}
           >
+            {busy && <Loader2 size={16} className="animate-spin" />}
             See plans on the web <ArrowRight size={16} />
           </button>
           <p className="text-[11px] text-neutral-500 mt-3 leading-snug">
-            Opens frontline-coach.com. Nothing has been charged — you never gave us a card,
-            so there's no renewal to cancel and no bill coming.
+            Opens frontline-coach.com, already signed in as you. Nothing has been charged —
+            you never gave us a card, so there's no renewal to cancel and no bill coming.
           </p>
         </div>
       ) : (

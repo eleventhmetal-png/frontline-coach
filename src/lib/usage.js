@@ -81,6 +81,35 @@ export async function startCheckout(priceId) {
   }
 }
 
+// Builds the URL the store build should open to sell something.
+//
+// Asks the server for a one-time link that signs this user in on the web, so the person
+// who just tapped Upgrade lands on Stripe instead of on a login form. The Safari view the
+// app opens has its own cookies and knows nothing about the app's session, and "sign in
+// again" is where link-out purchases go to die.
+//
+// FALLS BACK TO THE PLAIN PAGE on any failure — expired session, rate limit, function
+// down. That costs the user one sign-in and still sells them something. A dead button
+// would cost the sale, and this is a convenience layer over a path that already works.
+export async function subscribeUrl(origin, tier) {
+  const plain = tier ? `${origin}/subscribe` : `${origin}/subscribe`;
+  try {
+    const { data } = (await supabase?.auth?.getSession?.()) ?? { data: null };
+    const token = data?.session?.access_token;
+    if (!token) return plain;
+    const res = await fetch(apiUrl("/api/web-session-link"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(tier ? { subscribe: tier } : {}),
+    });
+    if (!res.ok) return plain;
+    const body = await res.json().catch(() => null);
+    return body?.url || plain;
+  } catch (e) {
+    return plain;
+  }
+}
+
 // Moves an EXISTING subscriber to a Premium price in place, rather than opening a second
 // checkout — see netlify/functions/upgrade-subscription.mjs for why that distinction is
 // the whole point of a separate endpoint.

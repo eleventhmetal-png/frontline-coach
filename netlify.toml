@@ -56,6 +56,13 @@
   to = "/.netlify/functions/create-checkout-session"
   status = 200
 
+# Route the one-time web sign-in link to its function. This is what stops an iOS user
+# having to log in again in Safari just to pay — see the function's own notes.
+[[redirects]]
+  from = "/api/web-session-link"
+  to = "/.netlify/functions/web-session-link"
+  status = 200
+
 # Route the in-place plan change to its function. Separate from checkout on purpose:
 # create-checkout-session is for somebody with no subscription, and pointing an existing
 # subscriber at it creates a SECOND subscription and bills them twice.
