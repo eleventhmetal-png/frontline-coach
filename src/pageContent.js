@@ -1271,7 +1271,11 @@ export const PAGES = [
 
       { h2: "After the seven days" },
       {
-        p: "Seven days free, then $14.99 a month or $119 a year. Still no card up front — you sign up, you use it for a week, and you decide at the end. If it hasn't earned it by then, walk away and nothing happens.",
+        // Do not reintroduce "Seven days free, then…" here. This section used to be
+        // "After the beta", so it had to introduce the trial. The trial is now the
+        // page's lead sentence, and saying it twice in the first two paragraphs read
+        // like a page that had been edited around a deleted idea — which it had.
+        p: "$14.99 a month, or $119 a year. You sign up, you use it for a week, and you decide at the end. If it hasn't earned it by then, walk away and nothing happens.",
       },
       {
         p: "Seven days rather than thirty because of how this actually gets used. Nobody opens a coaching app daily; you open it when something happens on a shift, which is two or three times a week. A week is long enough to hit two or three real situations and see whether the app helped. A month is long enough to forget you signed up.",
