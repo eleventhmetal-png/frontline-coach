@@ -4030,23 +4030,39 @@ function PremiumNotice({ session }) {
           ? "1:1 Prep, Follow-through and the practice voice are Premium. Your plan is Standard."
           : `You have these until ${ENFORCE_FROM_LABEL}. After that they move to Premium and Standard won't include them.`}
       </p>
-      {msg ? (
+      {/* GUIDELINE 3.1.1 — NOT IN THE STORE BUILD.
+          This button charges the card on file through Stripe, from inside the app. That
+          is an in-app purchase using a processor other than Apple's, which 3.1.1 still
+          prohibits outright. The US-storefront carve-out in 3.1.1(a) permits LINKING OUT
+          to your own checkout; it does not permit taking the payment in the app. The two
+          get conflated easily and the difference is a rejection.
+          The store build gets the explanation and no transaction. The next binary adds an
+          Upgrade row that opens frontline-coach.com/?subscribe=premium in the system
+          browser, which is the permitted shape. */}
+      {IS_STORE_BUILD ? (
+        <p className="text-[11px] text-neutral-500 mt-2 leading-snug">
+          Premium is managed on the web at frontline-coach.com, with the same account you
+          use here.
+        </p>
+      ) : msg ? (
         <p className="text-[12px] mt-2 font-semibold" style={{ color: ACCENT }}>{msg}</p>
       ) : (
-        <button
-          onClick={upgrade}
-          disabled={busy}
-          className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{ backgroundColor: ACCENT }}
-        >
-          {busy && <Loader2 size={14} className="animate-spin" />}
-          Upgrade to Premium — $24.99/mo
-        </button>
+        <>
+          <button
+            onClick={upgrade}
+            disabled={busy}
+            className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2"
+            style={{ backgroundColor: ACCENT }}
+          >
+            {busy && <Loader2 size={14} className="animate-spin" />}
+            Upgrade to Premium — $24.99/mo
+          </button>
+          <p className="text-[10px] text-neutral-600 mt-2 leading-snug">
+            Charged the difference now, prorated. Your renewal date doesn't change.
+          </p>
+        </>
       )}
       {err && <p className="text-[11px] text-red-400 mt-2">{err}</p>}
-      <p className="text-[10px] text-neutral-600 mt-2 leading-snug">
-        Charged the difference now, prorated. Your renewal date doesn't change.
-      </p>
     </div>
   );
 }
@@ -4898,6 +4914,51 @@ export default function FrontlineCoach({ session, signOut } = {}) {
   const [entryConsent, setEntryConsent] = useState(
     () => IS_STORE_BUILD && !!session?.user && !consentFromSession(session)
   );
+
+  // ?subscribe=standard|premium|founding — arrive here from anywhere and go straight to
+  // checkout for that tier.
+  //
+  // WHY A URL PARAMETER: the marketing pages are static HTML generated at build time, so
+  // /pricing cannot know who is signed in or whether they already pay. It links here
+  // instead, and this runs once the session exists — which it always does, because
+  // AuthGate only mounts this component with one. So "Subscribe" on the pricing page
+  // becomes: sign in if needed, then checkout, with no extra screen in between.
+  //
+  // It is also the shape the in-app Upgrade button will use in the next build: the store
+  // binary opens this URL in the system browser, which is the Guideline 3.1.1(a)
+  // external-purchase link the US storefront permits.
+  //
+  // Runs ONCE, and only for a free plan. Firing it for an existing subscriber would open
+  // a checkout that creates a second subscription and bills them twice — the same trap
+  // /api/upgrade-subscription exists to avoid.
+  const subscribeHandled = useRef(false);
+  useEffect(() => {
+    if (subscribeHandled.current) return;
+    // NEVER in the store build. Guideline 3.1.1 forbids taking payment in the app through
+    // anything but In-App Purchase, and this opens Stripe checkout. Capacitor loads the
+    // app from capacitor://localhost with no query string, so today it could not fire
+    // there anyway — but that is an assumption about the shell, and a deep link is not a
+    // thing to bet a rejection on. In the store build the equivalent is an Upgrade row
+    // that opens this URL in the SYSTEM browser, which is the permitted shape.
+    if (IS_STORE_BUILD) return;
+    if (plan !== "free") return;
+    let tier = null;
+    try {
+      tier = new URLSearchParams(window.location.search).get("subscribe");
+    } catch (e) { return; }
+    if (!tier) return;
+    subscribeHandled.current = true;
+    const priceId =
+      tier === "premium" ? PRICE.premiumMonthly
+      : tier === "founding" ? PRICE.founding
+      : PRICE.standardMonthly;
+    // Strip the parameter before leaving, so a browser back-button from Stripe does not
+    // immediately bounce them into checkout again.
+    try {
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch (e) { /* ignore */ }
+    startCheckout(priceId);
+  }, [plan]);
 
   // LEGAL VIEWER. Terms and Privacy render in-app, because <a target="_blank"> is a
   // dead tap inside Capacitor's WKWebView — see src/LegalModal.jsx. Registered as a

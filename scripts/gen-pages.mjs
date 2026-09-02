@@ -339,6 +339,11 @@ ${p.blocks.map(renderBlock).join("\n")}
 
   <div class="cta">
     <a class="btn" href="/">Try Frontline Coach</a>
+${p.slug === "pricing" ? `    <p class="fine" style="margin-top:14px">
+      Already used your seven days?
+      <a href="/?subscribe=standard">Subscribe here</a>.
+    </p>
+` : ""}
     <p class="fine">
       Coaching guidance only &mdash; not legal or HR advice. Always follow your
       company's policies. See our <a href="/terms.html">Terms</a> and
