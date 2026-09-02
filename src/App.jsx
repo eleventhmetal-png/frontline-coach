@@ -4976,11 +4976,16 @@ export default function FrontlineCoach({ session, signOut } = {}) {
       tier = new URLSearchParams(window.location.search).get("subscribe");
     } catch (e) { return; }
     if (!tier) return;
-    subscribeHandled.current = true;
+    // STRICT MAP, no default. This used to fall through to Standard for any unrecognised
+    // value, which meant ?subscribe=anything charged somebody $14.99 for a tier they
+    // never asked for. A typo in a link should do nothing at all.
     const priceId =
       tier === "premium" ? PRICE.premiumMonthly
       : tier === "founding" ? PRICE.founding
-      : PRICE.standardMonthly;
+      : tier === "standard" ? PRICE.standardMonthly
+      : null;
+    if (!priceId) return;
+    subscribeHandled.current = true;
     // Strip the parameter before leaving, so a browser back-button from Stripe does not
     // immediately bounce them into checkout again.
     try {

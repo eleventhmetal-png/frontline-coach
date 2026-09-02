@@ -113,6 +113,62 @@ function GoogleMark() {
 // sign-in screen, not a pitch to buy what they just cancelled.
 // max-w-sm, wider than the form below it on purpose: at max-w-xs the name wrapped
 // and left a word stranded on its own line, which reads as a mistake.
+// =====================================================
+// ?subscribe= — arriving here to buy something
+// =====================================================
+// Somebody who taps a plan on /subscribe lands on the app root. If they are signed out
+// they hit this gate first, and App.jsx's checkout effect only runs after a session
+// exists. Two things have to happen in between:
+//
+//   1. The parameter has to survive sign-in. It does for email/password (no navigation)
+//      and NOT for Google (a full redirect), which is why handleGoogle appends it to
+//      redirectTo. A flow that works for half your users is worse than one that fails
+//      for all of them, because nobody reports it.
+//
+//   2. The reason has to be visible. Tapping "$7.99 Founding" and landing on a bare
+//      sign-in form reads as a broken link, and the person most likely to bounce is the
+//      one who had just decided to pay.
+//
+// Whitelisted values only. This string is echoed into the page and appended to an OAuth
+// redirect, so it is never taken from the URL unvalidated.
+const SUBSCRIBE_TIERS = {
+  founding: "the founding rate, $7.99 a month",
+  standard: "Standard, $14.99 a month",
+  premium: "Premium, $24.99 a month",
+};
+
+function subscribeTier() {
+  try {
+    const t = new URLSearchParams(window.location.search).get("subscribe");
+    return t && SUBSCRIBE_TIERS[t] ? t : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// "?subscribe=founding" or "" — safe to concatenate onto a redirect URL.
+function subscribeQuery() {
+  const t = subscribeTier();
+  return t ? `?subscribe=${t}` : "";
+}
+
+function SubscribeNotice() {
+  const tier = subscribeTier();
+  if (!tier) return null;
+  return (
+    <div className="max-w-xs mx-auto mb-5 rounded-xl border px-4 py-3 text-center"
+      style={{ borderColor: `${ACCENT}55`, backgroundColor: "rgba(232,146,60,0.07)" }}>
+      <p className="text-[13px] text-neutral-200 leading-snug">
+        Sign in to continue to checkout for{" "}
+        <span className="font-semibold" style={{ color: ACCENT }}>{SUBSCRIBE_TIERS[tier]}</span>.
+      </p>
+      <p className="text-[11px] text-neutral-500 leading-snug mt-1">
+        New here? Create an account first — you'll get seven days free before anything is charged.
+      </p>
+    </div>
+  );
+}
+
 function StoreIntro({ onLegal }) {
   return (
     <div className="max-w-sm mx-auto px-6 pt-14 pb-2 text-center">
@@ -459,7 +515,13 @@ export default function AuthGate({ children }) {
       }
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin + "/" },
+        // CARRY ?subscribe= THROUGH THE ROUND TRIP. This was origin + "/" with no query
+        // string, which silently broke the purchase flow for Google users only: they tap
+        // a plan on /subscribe, get sent to Google, come back to a bare "/" with nothing
+        // for App.jsx to act on, and never reach checkout. Email/password users were
+        // fine, because that path never navigates and location.search survives — so the
+        // bug only existed for half the users and looked like nothing at all.
+        options: { redirectTo: window.location.origin + "/" + subscribeQuery() },
       });
       if (oauthError) throw oauthError;
     } catch (err) {
@@ -787,6 +849,10 @@ export default function AuthGate({ children }) {
         }
       >
       <div className="w-full max-w-xs">
+        {/* Above the wordmark on purpose: this is the answer to "why am I being asked to
+            sign in", and it has to be the first thing read. Renders nothing unless the
+            URL carries a recognised ?subscribe= tier. */}
+        <SubscribeNotice />
         {/* StoreIntro already carries the wordmark a few pixels above this, so in
             the app it would appear twice on one short screen. */}
         {!IS_STORE_BUILD && (
