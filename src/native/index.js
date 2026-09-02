@@ -16,6 +16,7 @@ import { isNative, platform } from "./platform";
 // because those genuinely are native-only.
 import { registerDictationDriver } from "../lib/voice";
 import { registerOAuthDriver } from "../lib/oauthDriver";
+import { registerExternalOpener } from "../lib/externalLink";
 import { lockZoom } from "./lockZoom";
 
 export async function initNative() {
@@ -31,7 +32,19 @@ export async function initNative() {
   const [
     { capacitorDictation, probeDictation },
     { attachOAuthDeepLink, signInWithGoogleNative },
-  ] = await Promise.all([import("./dictation"), import("./googleAuth")]);
+    { capacitorExternal },
+  ] = await Promise.all([
+    import("./dictation"),
+    import("./googleAuth"),
+    import("./externalBrowser"),
+  ]);
+
+  // External browser first, and outside any try/catch that could skip it: it is the only
+  // way an iOS user can reach checkout (Guideline 3.1.1 forbids taking the payment in the
+  // app), and if it is not registered the Upgrade button silently does nothing — which is
+  // exactly the dead tap the legal links used to be. No probe needed; @capacitor/browser
+  // has been installed since the Google OAuth work.
+  registerExternalOpener(capacitorExternal);
 
   // Deep link first. If the app was cold-started BY the OAuth redirect, the
   // appUrlOpen event can arrive while boot is still in progress — attaching after

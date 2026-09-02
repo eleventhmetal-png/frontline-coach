@@ -133,6 +133,14 @@ console.log(`store-clean: rewrote ${rewrote} beta string(s) in dist/index.html`)
 // to them, and Apple requires both reachable.
 const MARKETING = [
   "pricing",
+  // MUST be stripped, not just tidy-up. /subscribe is the purchase page, and the store
+  // build links to the LIVE one at frontline-coach.com in the system browser — that is
+  // the Guideline 3.1.1(a) link-out the US storefront permits. A copy bundled inside the
+  // binary is the opposite thing: a purchase page in the app, whose buttons point at
+  // ?subscribe= and open Stripe checkout in the webview. That is prohibited, entitlement
+  // or not. The price guard below caught this when the page was added, which is what it
+  // is for.
+  "subscribe",
   "operator",
   "new-manager-coach",
   "employee-pushback",
@@ -242,8 +250,11 @@ for (const file of walk(dist)) {
 }
 if (priceFindings.length) {
   console.error(`\nstore-clean: FAILED — ${priceFindings.length} price string(s) left in dist/`);
-  console.error("Guideline 3.1.1: a store build must not sell anything or point at an");
-  console.error("external purchase. Gate the surface behind IS_STORE_BUILD (src/storeBuild.js).\n");
+  console.error("Guideline 3.1.1: the binary must not complete a purchase or contain a");
+  console.error("purchase page. Linking OUT to frontline-coach.com in the system browser is");
+  console.error("permitted on the US storefront (3.1.1(a)) and is how the app should sell.");
+  console.error("Gate the surface behind IS_STORE_BUILD (src/storeBuild.js), or if it is a");
+  console.error("generated page, add its slug to MARKETING above so it is stripped.\n");
   for (const f of priceFindings.slice(0, 25)) console.error(`  ${f.file} — ${f.price}`);
   process.exit(1);
 }

@@ -102,6 +102,30 @@ function renderBlock(b) {
       `      <tbody>\n${tr}\n      </tbody>\n    </table>\n  </div>`
     );
   }
+  // PLAN BUTTONS. { plans: [{ name, price, per, note, href, primary }] }
+  //
+  // Added 2 Sep 2026 for /subscribe, which is the purchase page the iOS app links out to
+  // under Guideline 3.1.1(a). It needs real buttons, and every other block type here is
+  // prose — a link inside a paragraph is not a thing somebody taps to spend $14.99.
+  //
+  // Each href points at the APP with a ?subscribe= parameter, never at Stripe directly:
+  // checkout needs the signed-in user's token, and a static page has no idea who is
+  // reading it. The app reads the parameter and opens checkout once it has a session.
+  if (b.plans)
+    return (
+      `  <div class="plans">\n` +
+      b.plans
+        .map(
+          (pl) =>
+            `    <a class="plan${pl.primary ? " primary" : ""}" href="${esc(pl.href)}">\n` +
+            `      <span class="pname">${esc(pl.name)}</span>\n` +
+            `      <span class="pprice">${esc(pl.price)}<small>${esc(pl.per || "")}</small></span>\n` +
+            (pl.note ? `      <span class="pnote">${esc(pl.note)}</span>\n` : "") +
+            `    </a>`
+        )
+        .join("\n") +
+      `\n  </div>`
+    );
   // FAQ pair. Also harvested into FAQPage JSON-LD by page().
   if (b.faq)
     return (
@@ -286,6 +310,28 @@ ${JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, null, 2)
     text-align:center; color:#b3b3b3; padding:11px 12px;
     border-bottom:1px solid #1a1a1a; white-space:nowrap;
   }
+  /* PLAN BUTTONS (/subscribe). Stacked on a phone, side by side once there is room.
+     Each one is a whole tappable card rather than a text link with a button next to
+     it — this page exists to be tapped on a phone by somebody who just came out of
+     the app, and a 44px target beats a 14px one. */
+  .plans { display:grid; gap:10px; margin:0 0 28px; }
+  @media (min-width:620px) { .plans { grid-template-columns:repeat(3,1fr); } }
+  a.plan {
+    display:flex; flex-direction:column; gap:3px; text-decoration:none;
+    border:1px solid #262626; border-radius:12px; padding:16px 18px;
+    background:#0f0f0f; transition:border-color 150ms, transform 150ms;
+  }
+  a.plan:hover { border-color:#525252; transform:translateY(-1px); }
+  a.plan.primary { border-color:rgba(232,146,60,0.55); background:rgba(232,146,60,0.06); }
+  .pname {
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.12em;
+    color:#a3a3a3;
+  }
+  a.plan.primary .pname { color:var(--accent); }
+  .pprice { font-size:22px; font-weight:800; color:#fafafa; line-height:1.1; }
+  .pprice small { font-size:13px; font-weight:500; color:#737373; margin-left:3px; }
+  .pnote { font-size:12px; color:#8a8a8a; line-height:1.4; margin-top:2px; }
+
   /* The recommended column, tinted top to bottom so the eye lands on it. */
   th.hi, td.hi { background:rgba(232,146,60,0.07); }
   thead th.hi { color:var(--accent); }

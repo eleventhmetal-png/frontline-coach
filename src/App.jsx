@@ -14,6 +14,14 @@ import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout, star
 // Shared with netlify/functions/claude.mjs so the enforcement date and the tool list
 // cannot drift apart. See src/lib/plans.js.
 import { PREMIUM_TOOLS, enforcementActive, ENFORCE_FROM_LABEL } from "./lib/plans";
+import { openExternal } from "./lib/externalLink";
+
+// Where the store build sends people to pay. Hardcoded rather than read from apiBase:
+// this is a human-facing address that appears in copy ("Opens frontline-coach.com"), and
+// it must stay the production site even if someone points VITE_API_BASE at a branch
+// deploy for testing. A purchase link to a preview URL takes real money on a throwaway
+// domain.
+const WEB_ORIGIN = "https://frontline-coach.com";
 import {
   getOpenFollowUps, getOpenFollowUpCount, getOpenFollowUpsFor, markFollowUpDone,
   ageLabel, isStale,
@@ -4040,10 +4048,14 @@ function PremiumNotice({ session }) {
           Upgrade row that opens frontline-coach.com/?subscribe=premium in the system
           browser, which is the permitted shape. */}
       {IS_STORE_BUILD ? (
-        <p className="text-[11px] text-neutral-500 mt-2 leading-snug">
-          Premium is managed on the web at frontline-coach.com, with the same account you
-          use here.
-        </p>
+        // Link out, never charge in-app. Same 3.1.1 reasoning as the Paywall above.
+        <button
+          onClick={() => openExternal(`${WEB_ORIGIN}/subscribe`)}
+          className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 flex items-center justify-center gap-1.5"
+          style={{ backgroundColor: ACCENT }}
+        >
+          Upgrade on the web <ArrowRight size={14} />
+        </button>
       ) : msg ? (
         <p className="text-[12px] mt-2 font-semibold" style={{ color: ACCENT }}>{msg}</p>
       ) : (
@@ -4192,14 +4204,31 @@ function Paywall({ session }) {
           When paid access reaches iOS it goes through StoreKit / IAP, not by
           removing this gate. The web build is unchanged: Stripe there is fine. */}
       {IS_STORE_BUILD ? (
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+        // GUIDELINE 3.1.1(a), US STOREFRONT. This opens frontline-coach.com in the system
+        // browser via SFSafariViewController — a link out to our own checkout, which the
+        // US storefront permits with no entitlement. What it must never become is a
+        // purchase completed inside the app; that is still prohibited and is the whole
+        // reason this branch exists rather than reusing the buttons below.
+        //
+        // It replaces "There's nothing to buy here", which was true when the app could
+        // not sell anything and became a dead end the moment trials started expiring:
+        // seven good days, then a wall, then nothing.
+        <div className="rounded-xl border p-4"
+          style={{ borderColor: "rgba(232,146,60,0.35)", backgroundColor: "rgba(232,146,60,0.06)" }}>
           <p className="text-[13px] text-neutral-300 leading-relaxed">
-            There's nothing to buy here. Frontline Coach isn't selling subscriptions in the
-            app right now, and no purchase is required to have an account.
+            Subscribing happens on the web, with the same account you use here. Pick a plan
+            and everything you've written is waiting when you come back.
           </p>
-          <p className="text-[13px] text-neutral-400 leading-relaxed mt-3">
-            Nothing disappears in the meantime. Your conversations, your history and
-            everything the coach remembers about your people stay exactly where they are.
+          <button
+            onClick={() => openExternal(`${WEB_ORIGIN}/subscribe`)}
+            className="mt-3 w-full rounded-lg py-3 font-bold uppercase tracking-wide text-sm text-neutral-950 flex items-center justify-center gap-2"
+            style={{ backgroundColor: ACCENT }}
+          >
+            See plans on the web <ArrowRight size={16} />
+          </button>
+          <p className="text-[11px] text-neutral-500 mt-3 leading-snug">
+            Opens frontline-coach.com. Nothing has been charged — you never gave us a card,
+            so there's no renewal to cancel and no bill coming.
           </p>
         </div>
       ) : (

@@ -1557,6 +1557,98 @@ export const PAGES = [
   },
 
   // =====================================================
+  // SUBSCRIBE — the purchase page the iOS app links out to
+  // =====================================================
+  // Added 2 Sep 2026. This is the destination for the Upgrade button in the app, under
+  // Guideline 3.1.1(a): on the US storefront an app may link out to the developer's own
+  // checkout with no entitlement, but it may NOT take the payment in the app. So the app
+  // opens this page in the system browser and the transaction happens here.
+  //
+  // WHY A PAGE AND NOT A DIRECT STRIPE LINK: Stripe checkout has to be created against a
+  // signed-in user, because the webhook needs client_reference_id to know whose account
+  // to upgrade. A bare payment link would take money from somebody we cannot then match
+  // to an account — the worst possible outcome, since they have paid and got nothing.
+  // So every button here points at the app with ?subscribe=, and the app creates the
+  // session once it has a session token.
+  //
+  // NO BETA WORDING AND NOTHING TIME-LIMITED IN THE COPY: this page is linked from inside
+  // a shipped binary, so it outlives any campaign. Prices live here and nowhere else that
+  // the app can reach.
+  {
+    slug: "subscribe",
+    navLabel: "Subscribe",
+    related: ["pricing", "support", "operator"],
+    title: "Subscribe — Frontline Coach by Own The Shift",
+    description:
+      "Subscribe to Frontline Coach. $14.99 a month or $119 a year, and the first 100 subscribers keep $7.99 a month for as long as they stay subscribed.",
+    h1: "Subscribe",
+    schema: [
+      {
+        "@type": "WebPage",
+        "@id": `${SITE}/subscribe#page`,
+        url: `${SITE}/subscribe`,
+        name: "Subscribe — Frontline Coach",
+        about: { "@id": APP_ID },
+        isPartOf: { "@id": WEBSITE_ID },
+        inLanguage: "en-US",
+      },
+    ],
+    blocks: [
+      { em: "Pick a plan and you'll be asked to sign in, then taken to checkout. Same account you use in the app." },
+      {
+        plans: [
+          {
+            name: "Founding",
+            price: "$7.99",
+            per: "/mo",
+            note: "First 100 subscribers only. Locked for as long as you stay subscribed.",
+            href: "/?subscribe=founding",
+            primary: true,
+          },
+          {
+            name: "Standard",
+            price: "$14.99",
+            per: "/mo",
+            note: "Every coaching tool. Cancel any time.",
+            href: "/?subscribe=standard",
+          },
+          {
+            name: "Premium",
+            price: "$24.99",
+            per: "/mo",
+            note: "Adds 1:1 Prep, Follow-through and the practice voice.",
+            href: "/?subscribe=premium",
+          },
+        ],
+      },
+      {
+        p: "Prefer to pay yearly? Standard is $119 a year and Premium is $199 — sign in first and both appear at checkout.",
+      },
+
+      { h2: "What you're paying for" },
+      {
+        p: "Standard is every tool for the conversation in front of you: talk through a situation and get a plan, get the words when somebody pushes back, rehearse it against an AI employee, work out whether it's skill or will, and turn your notes into a clean record.",
+      },
+      {
+        p: "Premium adds the tools for running the same people over time — one-on-one prep built from your own history with someone, tracking on what you said you'd follow up, and the realistic practice voice instead of your device's robot one.",
+      },
+
+      { h2: "The founding rate" },
+      {
+        p: "The first 100 people to subscribe pay $7.99 a month and keep it for as long as they stay subscribed. Not a first-year discount. It locks the Standard price, so Premium tools stay on the Premium plan. Cancel and the rate goes with you — you'd rejoin at $14.99.",
+      },
+
+      { h2: "If you're already subscribed" },
+      {
+        p: "Changing your card, switching to yearly or cancelling is all in the Stripe portal linked from your receipt email. Nothing here will double-charge you: picking a plan while you already have one takes you to your account instead of a second checkout.",
+      },
+      {
+        p: "Questions before you pay are fair. support@otsowntheshift.com.",
+      },
+    ],
+  },
+
+  // =====================================================
   // SUPPORT — the URL App Store Connect points at
   // =====================================================
   // Added 2 Sep 2026. The App Store support URL was https://frontline-coach.com, which
