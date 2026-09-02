@@ -1,5 +1,8 @@
 import { corsPreflight, withCors } from "./_cors.mjs";
 import { createClient } from "@supabase/supabase-js";
+// Shared enforcement date — see src/lib/plans.js. Same cross-directory import as
+// claude.mjs uses for credits.js; netlify.toml pins esbuild so functions can follow it.
+import { enforcementActive } from "../../src/lib/plans.js";
 
 // =====================================================
 // TTS PROXY — OpenAI speech, key held server-side
@@ -146,8 +149,14 @@ const handler = async (req) => {
   // label-now/enforce-later approach as the Premium tools, and the same date. Metering
   // runs from today either way, so there is real data before anything gets refused.
   // Override with VOICE_ENFORCE_FROM to test enforcement early.
-  const ENFORCE_FROM = new Date(process.env.VOICE_ENFORCE_FROM || "2026-11-15T05:00:00Z");
-  const enforcing = Date.now() >= ENFORCE_FROM.getTime();
+  // Date moved from 15 November to 1 October on 2 Sep 2026, and now comes from
+  // src/lib/plans.js so the voice cutoff and the Premium tool gate cannot end up on
+  // different days. They push toward the same plan; two dates would mean two separate
+  // moments of taking something away.
+  // VOICE_ENFORCE_FROM still overrides, for testing this one in isolation.
+  const enforcing = process.env.VOICE_ENFORCE_FROM
+    ? Date.now() >= new Date(process.env.VOICE_ENFORCE_FROM).getTime()
+    : enforcementActive();
 
   // premium: 120 min/month, per the pricing on the $24.99 tier.
   // free: 20 minutes ONCE, ever. Not monthly — a repeating free allowance on a feature

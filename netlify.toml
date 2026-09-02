@@ -56,6 +56,14 @@
   to = "/.netlify/functions/create-checkout-session"
   status = 200
 
+# Route the in-place plan change to its function. Separate from checkout on purpose:
+# create-checkout-session is for somebody with no subscription, and pointing an existing
+# subscriber at it creates a SECOND subscription and bills them twice.
+[[redirects]]
+  from = "/api/upgrade-subscription"
+  to = "/.netlify/functions/upgrade-subscription"
+  status = 200
+
 # NOTE: there is deliberately NO "/* -> /index.html 200" SPA fallback here.
 #
 # The app has no client-side router (verified: nothing in src/ reads

@@ -81,6 +81,43 @@ export async function startCheckout(priceId) {
   }
 }
 
+// Moves an EXISTING subscriber to a Premium price in place, rather than opening a second
+// checkout — see netlify/functions/upgrade-subscription.mjs for why that distinction is
+// the whole point of a separate endpoint.
+//
+// Returns { ok } on success, { error } for anything the caller should show, and
+// { needsCheckout: true } when the server says there is no subscription to upgrade. That
+// last case is not an error: it is somebody on a free trial pressing an upgrade button,
+// and the right answer is to send them to normal checkout.
+export async function startUpgrade(priceId) {
+  try {
+    const { data } = (await supabase?.auth?.getSession?.()) ?? { data: null };
+    const token = data?.session?.access_token;
+    const res = await fetch(apiUrl("/api/upgrade-subscription"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ priceId }),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.status === 409 && body?.code === "NO_SUBSCRIPTION") {
+      return { needsCheckout: true };
+    }
+    if (!res.ok) return { error: body?.error || "Couldn't change your plan." };
+
+    // The webhook, not this response, is what flips app_metadata.plan — so the new tier
+    // is not in the local session yet. Refresh it so the UI unlocks without a reload.
+    // Stripe fires the event within a second or two, but it is not instant, so a failure
+    // here is not an error worth showing: the plan lands on the next refresh either way.
+    try { await supabase.auth.refreshSession(); } catch (e) { /* ignore */ }
+    return { ok: true, alreadyOnPlan: !!body?.alreadyOnPlan };
+  } catch (e) {
+    return { error: "Couldn't reach the server. Try again." };
+  }
+}
+
 // ── Usage summary: what you've DONE, not what you have left ─────────────────
 // The meter counts up rather than down, deliberately. A depleting allowance reads
 // as rationing — every action costs you something. An accumulating one reads as

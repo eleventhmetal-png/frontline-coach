@@ -10,7 +10,10 @@ import { logSession, reportProblem, getLastSessionTool, getLastFollowUp } from "
 import { getLatestMemory } from "./lib/memory";
 import { getCoachedEmployees, getEmployeeHistory, summarizeEmployeeHistory } from "./lib/employeeMemory";
 import { supabase } from "./lib/supabaseClient";
-import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout } from "./lib/usage";
+import { getUsageSummary, planFromSession, getTrialDaysLeft, startCheckout, startUpgrade } from "./lib/usage";
+// Shared with netlify/functions/claude.mjs so the enforcement date and the tool list
+// cannot drift apart. See src/lib/plans.js.
+import { PREMIUM_TOOLS, enforcementActive, ENFORCE_FROM_LABEL } from "./lib/plans";
 import {
   getOpenFollowUps, getOpenFollowUpCount, getOpenFollowUpsFor, markFollowUpDone,
   ageLabel, isStale,
@@ -110,7 +113,16 @@ async function handleAuthFailure() {
 // Model routing: Smart = reasoning-heavy tools; Fast = short, live tools (pushback, roleplay).
 const MODEL_SMART = "claude-sonnet-5";
 const MODEL_FAST = "claude-haiku-4-5-20251001";
-async function rawClaude(messages, { model, system, max_tokens, temperature } = {}) {
+// `tool` identifies which feature is calling, e.g. "prep" or "followups". The proxy
+// needs it to enforce the Premium gate from 1 October — until now every call looked
+// identical on the server, so it could not tell a 1:1 Prep request from a Coach one.
+//
+// WHAT THIS IS AND IS NOT. It is a restriction, never a grant: omitting it or sending a
+// wrong value can only ever get you the FREE behaviour, never Premium access. A
+// determined user could drop the field and reach a Premium tool, and that is accepted —
+// this is a paywall on a feature, not a security boundary, and the alternative is
+// fingerprinting system prompts, which breaks the moment a prompt is edited.
+async function rawClaude(messages, { model, system, max_tokens, temperature, tool } = {}) {
   // Guideline 5.1.2(i): nothing goes to a third-party model until the user has
   // been told which ones and said yes. Throws if they decline, and every tool's
   // existing catch already turns a thrown error carrying userMessage into a
@@ -124,6 +136,7 @@ async function rawClaude(messages, { model, system, max_tokens, temperature } = 
       max_tokens: max_tokens || 1000,
       ...(temperature != null ? { temperature } : {}),
       ...(system ? { system } : {}),
+      ...(tool ? { tool } : {}),
       messages,
     }),
   });
@@ -227,7 +240,7 @@ function extractPartialJson(text) {
   return obj;
 }
 // streaming core — reads Anthropic SSE via the proxy, calls onText(fullSoFar)
-async function streamClaude(messages, { model, system, max_tokens, temperature, onText } = {}) {
+async function streamClaude(messages, { model, system, max_tokens, temperature, onText, tool } = {}) {
   await requireAiConsent();   // see rawClaude
   const res = await fetch(apiUrl("/api/claude"), {
     method: "POST",
@@ -238,6 +251,7 @@ async function streamClaude(messages, { model, system, max_tokens, temperature, 
       max_tokens: max_tokens || 1000,
       ...(temperature != null ? { temperature } : {}),
       ...(system ? { system } : {}),
+      ...(tool ? { tool } : {}),   // see rawClaude
       messages,
     }),
   });
@@ -2021,7 +2035,8 @@ function OneOnOnePrep({ session, go }) {
         user,
         // The richer schema (agenda blocks + expectToHear pairs) genuinely needs the
         // room. Reserve is 35% of this, trued up against real usage after the call.
-        { onPartial: setResult, max_tokens: 1500 }
+        // tool: "prep" is what lets claude.mjs enforce the Premium gate from 1 October.
+        { onPartial: setResult, max_tokens: 1500, tool: "prep" }
       );
       setResult(r);
       setSessionId(await logSession({
@@ -3582,16 +3597,21 @@ function Roleplay({ session } = {}) {
 // =====================================================
 // MORE — tools menu
 // =====================================================
-// Tools that become Premium when the beta closes on 15 Nov 2026. Flagged here and
-// nowhere else, so the badge and the eventual gate read the same list.
+// MOVED to src/lib/plans.js on 2 Sep 2026, when the gate stopped being hypothetical.
 //
-// LABEL NOW, ENFORCE LATER — the same pattern as METERING_ENFORCE. Both tools stay
-// fully open through the beta because beta users are the test. What the badge buys
-// is that nobody is surprised in November: a feature marked Premium from the day it
-// shipped is a preview that ended, while an unmarked one that vanishes is a
-// takeaway. Same event, different feeling, and the difference is four months of
-// notice that costs nothing to give.
-export const PREMIUM_AFTER_BETA = new Set(["prep", "followups"]);
+// The old comment here said "LABEL NOW, ENFORCE LATER" and described the list as being
+// read by "the badge and the eventual gate". The eventual gate never existed — this Set
+// was used in exactly two places, both cosmetic, so the tools were open to everyone and
+// always had been. The gate now lives in netlify/functions/claude.mjs, and the list has
+// to be shared with it, so it moved to a module both the browser and the function import.
+//
+// The label-now/enforce-later reasoning still holds and is why the date is 1 October
+// rather than today: a feature marked Premium from the day it shipped is a preview that
+// ended, while an unmarked one that vanishes is a takeaway. Same event, different
+// feeling, and the notice costs nothing to give.
+//
+// Re-exported under the old name so anything still importing it keeps working.
+export const PREMIUM_AFTER_BETA = PREMIUM_TOOLS;
 
 // Guideline 5.1.1(v): an app that creates accounts must let the user delete the
 // account from inside the app. Not a support email, not "deactivate".
@@ -3751,13 +3771,7 @@ function MoreView({ go, session, signOut }) {
           </button>
         ))}
       </div>
-      {anyPremium && (
-        <p className="text-[11px] text-neutral-500 mt-3 leading-relaxed">
-          {IS_STORE_BUILD
-            ? "Premium tools are open to everyone right now. Use them as much as you like. They move to the Premium plan on 15 November."
-            : "Premium tools are free for everyone through the beta. Use them as much as you like — that's what the beta is for. They move to the Premium plan on 15 November."}
-        </p>
-      )}
+      {anyPremium && <PremiumNotice session={session} />}
       <div className="mt-6">
         <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500 mb-2">Settings</div>
         <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
@@ -3946,6 +3960,97 @@ function FollowUps({ session, go }) {
 // No card was ever taken, so nothing has been charged and nothing auto-renews.
 // Saying so plainly matters: a supervisor paying out of their own pocket needs to
 // know the wall is a choice, not a bill that already landed.
+// =====================================================
+// PREMIUM NOTICE — the line under the Tools list, and the upgrade path
+// =====================================================
+// Was a static sentence promising the tools "move to the Premium plan on 15 November".
+// Three things were wrong with that by 2 Sep 2026: the date moved to 1 October, the
+// sentence said beta on the web build, and — the expensive one — there was no way to act
+// on it. Somebody already paying $14.99 had no purchase surface anywhere in the app, so
+// on the enforcement date they would have lost three features with no route to keep them.
+//
+// Four states, because each needs a different sentence:
+//   premium            — nothing to sell, just confirm they have it
+//   paid, pre-date     — they will lose these; offer the upgrade now
+//   paid, post-date    — they have lost these; offer the upgrade
+//   free/trial         — the trial paywall is their purchase surface, not this
+//
+// The upgrade goes through /api/upgrade-subscription, which changes the price on their
+// existing subscription. Sending them to checkout instead would create a second
+// subscription and bill them twice.
+function PremiumNotice({ session }) {
+  const plan = planFromSession(session);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const active = enforcementActive();
+
+  if (plan === "premium") {
+    return (
+      <p className="text-[11px] text-neutral-500 mt-3 leading-relaxed">
+        You're on Premium, so 1:1 Prep, Follow-through and the practice voice are yours.
+      </p>
+    );
+  }
+
+  // Free and trial users buy through the trial paywall, which shows every tier. Putting a
+  // second purchase surface here would compete with it and split the decision in two.
+  if (plan !== "paid") {
+    return (
+      <p className="text-[11px] text-neutral-500 mt-3 leading-relaxed">
+        {active
+          ? "1:1 Prep and Follow-through are part of Premium."
+          : `Premium tools are open to everyone until ${ENFORCE_FROM_LABEL}. Use them as much as you like — after that they move to the Premium plan.`}
+      </p>
+    );
+  }
+
+  async function upgrade() {
+    setBusy(true); setErr(""); setMsg("");
+    const res = await startUpgrade(PRICE.premiumMonthly);
+    if (res.error) { setErr(res.error); setBusy(false); return; }
+    if (res.needsCheckout) {
+      // No subscription on file — they are not actually a Stripe customer, so this is a
+      // new purchase. Hand them to checkout rather than showing an error they can't act on.
+      const { error } = await startCheckout(PRICE.premiumMonthly);
+      if (error) { setErr(error); setBusy(false); }
+      return;
+    }
+    setMsg(res.alreadyOnPlan
+      ? "You're already on Premium."
+      : "Done — Premium is on. Stripe has credited the unused part of this month.");
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border p-3"
+      style={{ borderColor: "rgba(232,146,60,0.3)", backgroundColor: "rgba(232,146,60,0.05)" }}>
+      <p className="text-[12px] text-neutral-300 leading-snug">
+        {active
+          ? "1:1 Prep, Follow-through and the practice voice are Premium. Your plan is Standard."
+          : `You have these until ${ENFORCE_FROM_LABEL}. After that they move to Premium and Standard won't include them.`}
+      </p>
+      {msg ? (
+        <p className="text-[12px] mt-2 font-semibold" style={{ color: ACCENT }}>{msg}</p>
+      ) : (
+        <button
+          onClick={upgrade}
+          disabled={busy}
+          className="mt-2.5 w-full rounded-lg py-2.5 text-[13px] font-bold text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{ backgroundColor: ACCENT }}
+        >
+          {busy && <Loader2 size={14} className="animate-spin" />}
+          Upgrade to Premium — $24.99/mo
+        </button>
+      )}
+      {err && <p className="text-[11px] text-red-400 mt-2">{err}</p>}
+      <p className="text-[10px] text-neutral-600 mt-2 leading-snug">
+        Charged the difference now, prorated. Your renewal date doesn't change.
+      </p>
+    </div>
+  );
+}
+
 // PRICE IDS, mirrored from the catalogue in netlify/functions/create-checkout-session.mjs.
 // Duplicated on purpose rather than fetched: these are public identifiers, not secrets,
 // and the endpoint validates every one against its own allowlist — a wrong or tampered id
@@ -4137,6 +4242,24 @@ function Paywall({ session }) {
           >
             $119 a year — two months free
           </button>
+
+          {/* PREMIUM. Worth buying from 1 October, when 1:1 Prep, Follow-through and the
+              practice voice become Premium-only (src/lib/plans.js). Shown before that date
+              too, but honestly labelled — selling a tier whose features everyone already
+              has, without saying so, is the kind of thing that earns a refund request. */}
+          <button
+            onClick={() => go(PRICE.premiumMonthly)}
+            disabled={busy}
+            className="w-full rounded-lg py-2.5 mt-2 text-[13px] font-semibold text-neutral-400 border border-neutral-800 hover:bg-neutral-900 hover:text-neutral-200 disabled:opacity-50"
+          >
+            Premium — $24.99/mo
+          </button>
+          <p className="text-[11px] text-neutral-600 text-center mt-2 leading-snug">
+            Premium adds 1:1 Prep, Follow-through and the practice voice.{" "}
+            {enforcementActive()
+              ? "Standard doesn't include them."
+              : `Everyone has them until ${ENFORCE_FROM_LABEL}, so Standard is the one to pick today.`}
+          </p>
 
           <p className="text-[12px] text-neutral-500 text-center mt-3">
             Cancel any time. {founding?.alreadyUsed ? "Your account has already used its founding rate." : ""}

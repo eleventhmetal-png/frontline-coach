@@ -1,6 +1,10 @@
 import { corsPreflight, withCors } from "./_cors.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { reservePointsFor, actualPointsFor, PLAN_LIMITS } from "../../src/lib/credits.js";
+// Same cross-directory import as credits.js above — netlify.toml pins the esbuild
+// bundler so functions can follow these. The date and the tool list have to be shared
+// with the client or they drift, and a drifted paywall date fails silently.
+import { PREMIUM_TOOLS, canUsePremiumTools } from "../../src/lib/plans.js";
 
 // Per-plan output ceiling. Free covers the heaviest real tool call (Coach ~2500);
 // paid leaves headroom for longer outputs later. A caller can't exceed their tier
@@ -138,8 +142,37 @@ const handler = async (req) => {
   }
 
   try {
-    const { messages, max_tokens, model, system, temperature, stream } = payload || {};
+    const { messages, max_tokens, model, system, temperature, stream, tool } = payload || {};
     if (!Array.isArray(messages)) return json({ error: "messages is required" }, 400);
+
+    // --- Premium tool gate ---------------------------------------------------
+    // From 1 October 2026 (src/lib/plans.js) 1:1 Prep is Premium-only. Checked here
+    // rather than in the client for the same reason the trial gate is: a React check is
+    // a suggestion, this is the wall.
+    //
+    // BEFORE the credit spend on purpose. A refused call must not cost the user points
+    // for a response they never got.
+    //
+    // HONEST LIMITS OF THIS GATE, so nobody later mistakes it for airtight:
+    //   * `tool` comes from the client, so someone who strips the field reaches Prep
+    //     anyway. It restricts, it never grants — a missing or wrong value can only ever
+    //     produce free-tier behaviour. Fingerprinting the system prompt instead would be
+    //     tighter and would break the first time a prompt is edited.
+    //   * Follow-through cannot be gated here at all: it makes no AI calls, it reads the
+    //     user's own rows through Supabase with RLS. Its gate is the UI, and the worst a
+    //     bypass achieves is showing someone their own data.
+    // Both are acceptable for a feature paywall. Neither would be acceptable for
+    // anything protecting other people's data.
+    if (tool && PREMIUM_TOOLS.has(tool) && !canUsePremiumTools(plan)) {
+      return json(
+        {
+          error: "That tool is part of Premium.",
+          code: "PREMIUM_REQUIRED",
+          tool,
+        },
+        402
+      );
+    }
 
     const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL;
     const cap = TIER_MAX_TOKENS[plan] || TIER_MAX_TOKENS.free;
@@ -166,8 +199,11 @@ const handler = async (req) => {
       admin = createClient(supabaseUrl, serviceRoleKey);
 
       // --- Trial gate ---------------------------------------------------------
-      // Unpaid accounts get access until profiles.trial_ends_at. During the beta
-      // that's 15 Nov 2026 for everybody; afterwards it's signup + 7 days.
+      // Unpaid accounts get access until profiles.trial_ends_at, which is signup + 7 days
+      // for everyone created from 1 Sep 2026. (It used to be clamped to 15 Nov for all,
+      // which would have expired every account on the same day — see
+      // supabase/migrations/20260901000000_open_signups_rolling_trial.sql. Seven accounts
+      // created before that still carry the old shared date.)
       //
       // Checked HERE rather than in the client because the client is the thing
       // being gated. A React check is a suggestion; this is the wall.

@@ -1298,7 +1298,10 @@ export const PAGES = [
         ],
       },
       {
-        p: "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — is Premium, at $24.99 a month or $199 a year. Both tools are open to everyone until 15 November. Saying so now rather than surprising anyone in November.",
+        // Date moved from 15 November to 1 October on 2 Sep 2026. The enforcing code reads
+        // it from src/lib/plans.js; this sentence is the promise the code has to keep, so
+        // if that constant moves again, this moves with it.
+        p: "A second plan for running a team over time — one-on-one prep built from your own history with someone, and tracking on what you said you'd follow up — is Premium, at $24.99 a month or $199 a year. Both tools, and the practice voice, are open to everyone until 1 October. Saying so now rather than surprising anyone later.",
       },
       {
         p: "Fair use applies rather than a hard ceiling: role play runs on a heavier model that stays in character properly, so it costs real money to serve. Use it like a supervisor and you'll never notice a limit.",
