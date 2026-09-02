@@ -140,6 +140,12 @@ const MARKETING = [
   "standard-slipping",
   "manager-roleplay",
   "manager-documentation",
+  // The support page is a WEB destination — it is what App Store Connect's support URL
+  // points at, shown on the product page, not something the binary needs. Nothing in the
+  // app links to it, and a static page inside the app would navigate the webview away
+  // with no chrome to come back with (the same trap the legal links fell into; see
+  // src/LegalModal.jsx). In-app help is the email address and the Report a problem link.
+  "support",
 ];
 let removed = 0;
 for (const slug of MARKETING) {

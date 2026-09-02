@@ -29,6 +29,15 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- ENCRYPTION DECLARATION. false because the app uses only Apple's own HTTPS/TLS
+	     through WKWebView and URLSession, which is exempt under the standard
+	     exemption for using the encryption built into the operating system. It
+	     implements no cryptography of its own and bundles no crypto library.
+	     Without this key, every upload asks whether the app uses non-exempt
+	     encryption and export-compliance sits unanswered until someone clicks
+	     through it in App Store Connect. Declaring it here answers it once. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>

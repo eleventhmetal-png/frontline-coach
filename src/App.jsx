@@ -3946,11 +3946,59 @@ function FollowUps({ session, go }) {
 // No card was ever taken, so nothing has been charged and nothing auto-renews.
 // Saying so plainly matters: a supervisor paying out of their own pocket needs to
 // know the wall is a choice, not a bill that already landed.
+// PRICE IDS, mirrored from the catalogue in netlify/functions/create-checkout-session.mjs.
+// Duplicated on purpose rather than fetched: these are public identifiers, not secrets,
+// and the endpoint validates every one against its own allowlist — a wrong or tampered id
+// here gets a 400, it does not sell anything. Fetching them would add a round trip to the
+// one screen where hesitation costs money.
+// If you change a price in Stripe, change it in BOTH places. grep price_1T to find them.
+const PRICE = {
+  standardMonthly: "price_1TwvxRD4QXJZIZVeBajf5GLc", // $14.99/mo
+  standardAnnual: "price_1Tww1DD4QXJZIZVewzWwwlaT", // $119/yr
+  founding: "price_1TwvyTD4QXJZIZVeyDEHr5Io", // $7.99/mo, first 100 to subscribe
+  premiumMonthly: "price_1Ty1whD4QXJZIZVePbkwyUC8", // $24.99/mo
+};
+
 function Paywall({ session }) {
   const [sum, setSum] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const uid = session?.user?.id;
+
+  // FOUNDING AVAILABILITY. Two facts, both from the server: are there slots left, and
+  // has this account already spent one. founding_status() is an anon-callable aggregate
+  // so it exposes only a count, and the claim lives on the user's own profile row under
+  // RLS. The endpoint re-checks both before it will sell the price — this is only what
+  // decides whether to SHOW it.
+  //
+  // Until this loads, nothing founding renders. Advertising $7.99 and then failing the
+  // checkout is worse than never mentioning it.
+  const [founding, setFounding] = useState(null); // null = unknown, {open, alreadyUsed, remaining}
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [{ data: status }, { data: prof }] = await Promise.all([
+          supabase.rpc("founding_status"),
+          uid
+            ? supabase.from("profiles").select("founding_slot_claimed_at").eq("id", uid).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+        const row = Array.isArray(status) ? status[0] : status;
+        if (!alive) return;
+        setFounding({
+          open: !!row?.is_open,
+          remaining: row?.remaining ?? 0,
+          alreadyUsed: !!prof?.founding_slot_claimed_at,
+        });
+      } catch (e) {
+        if (alive) setFounding({ open: false, remaining: 0, alreadyUsed: false });
+      }
+    })();
+    return () => { alive = false; };
+  }, [uid]);
+
+  const showFounding = !!founding?.open && !founding?.alreadyUsed;
 
   useEffect(() => {
     let alive = true;
@@ -4035,18 +4083,63 @@ function Paywall({ session }) {
         </div>
       ) : (
         <>
+          {/* FOUNDING FIRST, when it's available. The pricing page has promised the
+              first 100 subscribers $7.99 for life since July and nothing in the product
+              could sell it — the button called go() with no price and the endpoint
+              answered 400. This is where that promise gets kept.
+              Hidden until founding_status() answers, because offering a rate the
+              checkout would refuse is worse than not mentioning it. */}
+          {showFounding && (
+            <>
+              <button
+                onClick={() => go(PRICE.founding)}
+                disabled={busy}
+                className="w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                style={{ backgroundColor: ACCENT }}
+              >
+                {busy && <Loader2 size={16} className="animate-spin" />}
+                Founding rate — $7.99/mo
+              </button>
+              <p className="text-[12px] text-neutral-400 text-center mt-2 leading-snug">
+                {founding.remaining <= 25
+                  ? `${founding.remaining} founding ${founding.remaining === 1 ? "spot" : "spots"} left.`
+                  : "One of the first 100."}{" "}
+                Locked for as long as you stay subscribed — not a first-year discount.
+              </p>
+              <div className="flex items-center gap-3 my-4">
+                <div className="h-px bg-neutral-800 flex-1" />
+                <span className="text-[10px] uppercase tracking-widest text-neutral-600">or</span>
+                <div className="h-px bg-neutral-800 flex-1" />
+              </div>
+            </>
+          )}
+
           <button
-            onClick={() => go()}
+            onClick={() => go(PRICE.standardMonthly)}
             disabled={busy}
-            className="w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-            style={{ backgroundColor: ACCENT }}
+            className={
+              showFounding
+                ? "w-full rounded-lg py-3 font-semibold text-sm text-neutral-200 border border-neutral-700 hover:bg-neutral-900 disabled:opacity-50 flex items-center justify-center gap-2"
+                : "w-full rounded-lg py-3.5 font-bold uppercase tracking-wide text-sm text-neutral-950 disabled:opacity-50 flex items-center justify-center gap-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            }
+            style={showFounding ? undefined : { backgroundColor: ACCENT }}
           >
             {busy && <Loader2 size={16} className="animate-spin" />}
-            Keep going — $14.99/mo
+            {showFounding ? "Standard — $14.99/mo" : "Keep going — $14.99/mo"}
+          </button>
+
+          {/* Annual was mentioned in copy but never purchasable. $119 is 34% off twelve
+              months, so it deserves to be a button rather than a footnote. */}
+          <button
+            onClick={() => go(PRICE.standardAnnual)}
+            disabled={busy}
+            className="w-full rounded-lg py-2.5 mt-2 text-[13px] font-semibold text-neutral-400 border border-neutral-800 hover:bg-neutral-900 hover:text-neutral-200 disabled:opacity-50"
+          >
+            $119 a year — two months free
           </button>
 
           <p className="text-[12px] text-neutral-500 text-center mt-3">
-            Or $119 a year. Cancel any time.
+            Cancel any time. {founding?.alreadyUsed ? "Your account has already used its founding rate." : ""}
           </p>
 
           {err && <p className="text-[12px] text-red-400 text-center mt-3">{err}</p>}

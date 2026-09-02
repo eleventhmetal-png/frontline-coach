@@ -74,4 +74,14 @@
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
+  <!-- Added 2 Sep 2026. This is the URL App Store Connect points at for support, so it
+       has to stay reachable for as long as the app is listed. Per the note at the top of
+       this file: it is listed here because it exists and returns 200 — do not add a URL
+       before it ships. -->
+  <url>
+    <loc>https://frontline-coach.com/support</loc>
+    <lastmod>2026-09-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
 </urlset>
